@@ -1,0 +1,28 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    needs: []  # add "build" job dependency once CI is green
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 204.168.159.7
+          username: nam
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/nam-website
+            git pull origin main
+            export PNPM_HOME="$HOME/.local/share/pnpm"
+            export PATH="$PNPM_HOME:$PATH"
+            cd frontend
+            pnpm install --frozen-lockfile
+            pnpm exec next build
+            # Restart the Next.js process in the zellij session
+            pkill -f "next start" || true
+            nohup pnpm exec next start -p 3000 > /tmp/nextjs.log 2>&1 &
