@@ -12,15 +12,23 @@ export default function Home() {
   const [active, setActive] = useState(0);
 
   return (
-    <main style={{
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      minHeight: "100vh",
-      padding: "1rem",
-    }}>
-      <h1 style={{ fontSize: "clamp(1.5rem, 5vw, 2rem)", fontWeight: "bold", marginBottom: "1.5rem" }}>
+    <main
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100vh",
+        padding: "1rem",
+      }}
+    >
+      <h1
+        style={{
+          fontSize: "clamp(1.5rem, 5vw, 2rem)",
+          fontWeight: "bold",
+          marginBottom: "1.5rem",
+        }}
+      >
         Nam Le
       </h1>
 
@@ -45,13 +53,15 @@ export default function Home() {
         ))}
       </div>
 
-      <div style={{
-        borderRadius: "0.75rem",
-        overflow: "hidden",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-        width: "100%",
-        maxWidth: "600px",
-      }}>
+      <div
+        style={{
+          borderRadius: "0.75rem",
+          overflow: "hidden",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          width: "100%",
+          maxWidth: "600px",
+        }}
+      >
         <Image
           src={tabs[active].src}
           alt={tabs[active].label}
