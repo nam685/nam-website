@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Nam Le",
   description: "Personal website",
+  viewport: "width=device-width, initial-scale=1",
 };
 
 export default function RootLayout({
@@ -13,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
