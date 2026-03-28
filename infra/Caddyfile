@@ -1,0 +1,11 @@
+nam685.de {
+    # Django API
+    handle /api/* {
+        reverse_proxy localhost:8000
+    }
+
+    # Next.js frontend
+    handle {
+        reverse_proxy localhost:3000
+    }
+}
