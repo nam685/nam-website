@@ -44,7 +44,7 @@ docker compose down    # Stop services
 
 ## Workflow
 
-- Use a **worktree** for each new feature/fix (keeps main clean, isolates work)
+- **Always use a git worktree** for each new feature/fix — multiple Claude instances may run concurrently, and branch-switching in a shared checkout causes lost work. Use `git worktree add` or the Agent `isolation: "worktree"` mode.
 - No local debugging — testing happens on prod after deploy
 
 ## Auth System
