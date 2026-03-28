@@ -185,7 +185,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
           border: open
             ? "1px solid color-mix(in srgb, var(--accent) 40%, #2a2a2a)"
             : "1px solid transparent",
-          borderRadius: "2px",
+          borderRadius: open ? "1rem" : "50%",
         }}
       >
         {open ? (
@@ -226,7 +226,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
               height: "2rem",
               background: "#1a1a1a",
               border: `1px solid ${text ? "color-mix(in srgb, var(--accent) 50%, #2a2a2a)" : "#2a2a2a"}`,
-              borderRadius: "2px",
+              borderRadius: "50%",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
