@@ -72,13 +72,31 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     return Date.now() - Number(last) < COOLDOWN_MS;
   }
 
-  function getToken(): string | null {
-    let token = store("thoughtToken");
-    if (!token) {
-      token = prompt("Enter thought token:");
-      if (token) store("thoughtToken", token);
+  async function getToken(): Promise<string | null> {
+    let token = store("adminToken");
+    if (token) {
+      const res = await fetch(`${API}/api/auth/check/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.authenticated) return token;
+      storeDel("adminToken");
     }
-    return token;
+    const secret = prompt("Enter admin secret:");
+    if (!secret) return null;
+    try {
+      const res = await fetch(`${API}/api/auth/login/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      store("adminToken", data.token);
+      return data.token;
+    } catch {
+      return null;
+    }
   }
 
   function handleOpen() {
@@ -104,7 +122,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     const content = text.trim();
     if (!content || posting) return;
 
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
 
     setPosting(true);
@@ -119,7 +137,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
         body: JSON.stringify({ content }),
       });
       if (res.status === 401) {
-        storeDel("thoughtToken");
+        storeDel("adminToken");
         setError("Bad token — cleared, try again");
         return;
       }
@@ -369,7 +387,7 @@ export default function ThinksPage() {
 
   return (
     <>
-      <title>Thinks | Nam Le</title>
+      <title>Nam thinks</title>
       <div
         ref={topRef}
         style={{

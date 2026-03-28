@@ -1,7 +1,18 @@
 nam685.de {
+    # Django admin
+    handle /admin/* {
+        reverse_proxy localhost:8000
+    }
+
     # Django API
     handle /api/* {
         reverse_proxy localhost:8000
+    }
+
+    # Uploaded media files
+    handle /media/* {
+        root * /home/nam/nam-website-deploy
+        file_server
     }
 
     # Next.js frontend

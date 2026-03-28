@@ -18,7 +18,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: {
     default: "Nam Le",
-    template: "%s | Nam Le",
+    template: "Nam %s",
   },
   description: "Personal website",
   icons: { icon: "/favicon.svg" },

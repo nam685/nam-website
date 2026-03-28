@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Reads" };
+export const metadata: Metadata = { title: "reads" };
 
 export default function ReadsPage() {
   return (
