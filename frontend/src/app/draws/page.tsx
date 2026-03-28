@@ -23,40 +23,14 @@ function store(key: string, val?: string): string | null {
   return localStorage.getItem(key);
 }
 
-function storeDel(key: string) {
-  if (typeof window !== "undefined") localStorage.removeItem(key);
-}
-
-/* ── Auth helper (shared with thinks) ───────────────── */
-async function getAdminToken(): Promise<string | null> {
-  let token = store("adminToken");
-  if (token) {
-    try {
-      const res = await fetch(`${API}/api/auth/check/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.authenticated) return token;
-    } catch {
-      /* fall through */
-    }
-    storeDel("adminToken");
+/* ── Auth helper ─────────────────────────────────────── */
+function getAdminToken(): string | null {
+  const token = store("adminToken");
+  if (token) return token;
+  if (typeof window !== "undefined") {
+    window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
   }
-  const secret = prompt("Enter admin secret:");
-  if (!secret) return null;
-  try {
-    const res = await fetch(`${API}/api/auth/login/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    store("adminToken", data.token);
-    return data.token;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /* ── Upload button ──────────────────────────────────── */
@@ -74,7 +48,7 @@ function UploadButton({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const token = await getAdminToken();
+    const token = getAdminToken();
     if (!token) return;
 
     setUploading(true);

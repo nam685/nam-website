@@ -72,31 +72,11 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     return Date.now() - Number(last) < COOLDOWN_MS;
   }
 
-  async function getToken(): Promise<string | null> {
-    let token = store("adminToken");
-    if (token) {
-      const res = await fetch(`${API}/api/auth/check/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (data.authenticated) return token;
-      storeDel("adminToken");
-    }
-    const secret = prompt("Enter admin secret:");
-    if (!secret) return null;
-    try {
-      const res = await fetch(`${API}/api/auth/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      store("adminToken", data.token);
-      return data.token;
-    } catch {
-      return null;
-    }
+  function getToken(): string | null {
+    const token = store("adminToken");
+    if (token) return token;
+    window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
+    return null;
   }
 
   function handleOpen() {
@@ -122,7 +102,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     const content = text.trim();
     if (!content || posting) return;
 
-    const token = await getToken();
+    const token = getToken();
     if (!token) return;
 
     setPosting(true);

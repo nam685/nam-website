@@ -254,6 +254,35 @@ export default function Navbar() {
       >
         ›
       </button>
+
+      <div
+        style={{
+          width: 1,
+          height: "1.25rem",
+          background: "#2a2a2a",
+          flexShrink: 0,
+        }}
+      />
+
+      <Link
+        href={`/sudo?from=${encodeURIComponent(pathname)}`}
+        style={{
+          fontFamily: "var(--font-headline)",
+          fontWeight: 900,
+          fontSize: "1rem",
+          color: "var(--accent)",
+          textShadow:
+            "0 0 8px color-mix(in srgb, var(--accent) 50%, transparent)",
+          letterSpacing: "-0.01em",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          userSelect: "none",
+          transition: "color 0.4s, text-shadow 0.4s",
+          padding: "0 0.25rem",
+        }}
+      >
+        [sudo]
+      </Link>
     </nav>
   );
 }
