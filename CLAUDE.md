@@ -42,6 +42,11 @@ docker compose up -d   # Start PostgreSQL + Redis
 docker compose down    # Stop services
 ```
 
+## Workflow
+
+- Use a **worktree** for each new feature/fix (keeps main clean, isolates work)
+- No local debugging — testing happens on prod after deploy
+
 ## Conventions
 
 - Python: Ruff for linting/formatting (line-length=120)
