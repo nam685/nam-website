@@ -24,6 +24,13 @@ jobs:
             cd ~/nam-website-deploy
             git fetch origin main
             git reset --hard origin/main
+
+            # Backend
+            uv sync
+            uv run python manage.py migrate --noinput
+            sudo systemctl restart django
+
+            # Frontend
             export NVM_DIR="$HOME/.nvm"
             source "$NVM_DIR/nvm.sh"
             export PNPM_HOME="$HOME/.local/share/pnpm"
