@@ -9,17 +9,22 @@ const ITEMS = [
   { label: "draws", href: "/gallery", color: "#a855f7" },
   { label: "vibecodes", href: "/projects", color: "#22c55e" },
   { label: "grinds", href: "/cv", color: "#f59e0b" },
-  { label: "now", href: "/now", color: "#6b7280" },
-  { label: "uses", href: "/uses", color: "#6b7280" },
-  { label: "changelog", href: "/changelog", color: "#6b7280" },
-  { label: "todo", href: "/todo", color: "#6b7280" },
 ];
 
 // Wheel physics: items are on a virtual circle viewed from the side.
 // At angle θ from center:   x = R·sin(θ)   scale = cos(θ)   opacity = cos²(θ)
 // This compresses spacing and shrinks items as they rotate away — wheel illusion.
-const DEG = 20; // degrees between consecutive items
-const R = 220; // px — virtual wheel radius
+const DEG = 14; // degrees between consecutive items — lower = slower size falloff, wider wheel
+const R = 310; // px — virtual wheel radius — larger = more generous spacing
+const N = ITEMS.length;
+
+// Shortest circular distance — so end wraps back to start seamlessly
+function circularD(i: number, center: number) {
+  let d = i - center;
+  if (d > N / 2) d -= N;
+  if (d < -N / 2) d += N;
+  return d;
+}
 
 function wheelTransform(d: number) {
   const θ = d * DEG * (Math.PI / 180);
@@ -44,7 +49,7 @@ export default function Navbar() {
   }, [pathname]);
 
   function shift(dir: -1 | 1) {
-    setCenter((c) => Math.max(0, Math.min(ITEMS.length - 1, c + dir)));
+    setCenter((c) => (c + dir + N) % N);
   }
 
   return (
@@ -93,13 +98,12 @@ export default function Navbar() {
       {/* Left chevron */}
       <button
         onClick={() => shift(-1)}
-        disabled={center === 0}
         aria-label="Previous"
         style={{
           background: "none",
           border: "none",
-          cursor: center > 0 ? "pointer" : "default",
-          color: center > 0 ? "#FF1744" : "#222",
+          cursor: "pointer",
+          color: "#FF1744",
           fontSize: "1.25rem",
           lineHeight: 1,
           padding: "0 0.15rem",
@@ -130,7 +134,7 @@ export default function Navbar() {
         }}
       >
         {ITEMS.map((item, i) => {
-          const d = i - center;
+          const d = circularD(i, center);
           const { x, scale, opacity } = wheelTransform(d);
           if (opacity < 0.03) return null;
 
@@ -170,13 +174,12 @@ export default function Navbar() {
       {/* Right chevron */}
       <button
         onClick={() => shift(1)}
-        disabled={center === ITEMS.length - 1}
         aria-label="Next"
         style={{
           background: "none",
           border: "none",
-          cursor: center < ITEMS.length - 1 ? "pointer" : "default",
-          color: center < ITEMS.length - 1 ? "#FF1744" : "#222",
+          cursor: "pointer",
+          color: "#FF1744",
           fontSize: "1.25rem",
           lineHeight: 1,
           padding: "0 0.15rem",
