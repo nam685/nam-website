@@ -3,8 +3,8 @@ import Link from "next/link";
 const cards = [
   {
     sector: "SECTOR_01",
-    href: "/blog",
-    title: "Blog",
+    href: "/thinks",
+    title: "Thinks",
     desc: "Thoughts, diary entries, and random text",
     icon: "▤",
   },
