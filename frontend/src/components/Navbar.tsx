@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   SPRING_THRESHOLD,
@@ -12,16 +12,15 @@ import {
 } from "@/lib/navWheel";
 
 const ITEMS = [
-  { label: "writes", href: "/blog", accent: "#FF1744" },
+  { label: "thinks", href: "/blog", accent: "#FF1744" },
   { label: "draws", href: "/gallery", accent: "#a855f7" },
-  { label: "vibecodes", href: "/projects", accent: "#22c55e" },
+  { label: "codes", href: "/projects", accent: "#22c55e" },
   { label: "grinds", href: "/cv", accent: "#f59e0b" },
-  // Future items — uncomment when content is ready:
-  // { label: "listens", href: "/listens", accent: "#06b6d4" },
-  // { label: "reads", href: "/reads", accent: "#84cc16" },
-  // { label: "plays", href: "/plays", accent: "#f97316" },
-  // { label: "watches", href: "/watches", accent: "#ec4899" },
-  // { label: "bets", href: "/bets", accent: "#eab308" },
+  { label: "listens", href: "/listens", accent: "#f97316" },
+  { label: "reads", href: "/reads", accent: "#94a3b8" },
+  { label: "plays", href: "/plays", accent: "#06b6d4" },
+  { label: "watches", href: "/watches", accent: "#1e40af" },
+  { label: "bets", href: "/bets", accent: "#db2777" },
 ];
 
 const N = ITEMS.length;
@@ -32,8 +31,8 @@ function applyAccent(accent: string) {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Integer target center — what the user selected
   const [center, setCenter] = useState(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
@@ -41,15 +40,23 @@ export default function Navbar() {
     return idx !== -1 ? idx : 0;
   });
 
-  // Float visual center — spring-animated toward `center`.
-  // Driving positions via JS (not CSS transition) means the circular shortest-path
-  // is always taken, so items never jump across the wheel; they fade out one side
-  // while a neighbour fades in from the other.
   const visualCenter = useRef<number>(center);
   const [, rerender] = useState(0);
   const rafRef = useRef<number | null>(null);
-
   const touchStartX = useRef<number | null>(null);
+  const wheelRef = useRef<HTMLDivElement>(null);
+  const [radius, setRadius] = useState(310);
+
+  // Measure wheel container width → derive radius
+  useEffect(() => {
+    const el = wheelRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setRadius(Math.min(Math.max(entry.contentRect.width * 0.35, 80), 450));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Spring: animate visualCenter toward center along the shortest circular arc
   useEffect(() => {
@@ -57,7 +64,6 @@ export default function Navbar() {
 
     const tick = () => {
       const vc = visualCenter.current;
-      // circularD gives shortest-arc distance; settle when close enough
       const d = circularD(center, vc, N);
       if (Math.abs(d) < SPRING_THRESHOLD) {
         visualCenter.current = center;
@@ -76,7 +82,6 @@ export default function Navbar() {
   }, [center]);
 
   // Sync wheel position and accent to current route.
-  // Use a ref for center so this effect never captures a stale value.
   const centerRef = useRef(center);
   centerRef.current = center;
 
@@ -88,8 +93,6 @@ export default function Navbar() {
       setCenter(idx);
       applyAccent(ITEMS[idx].accent);
     } else {
-      // Unmatched route (home, /now, /changelog, etc.) — keep whatever accent
-      // was last set rather than snapping back to ITEMS[0] (red).
       applyAccent(ITEMS[centerRef.current].accent);
     }
   }, [pathname]);
@@ -98,6 +101,7 @@ export default function Navbar() {
     const next = shiftCenter(center, dir, N);
     setCenter(next);
     applyAccent(ITEMS[next].accent);
+    router.push(ITEMS[next].href);
   }
 
   const vc = visualCenter.current;
@@ -120,7 +124,6 @@ export default function Navbar() {
         transition: "border-color 0.4s, box-shadow 0.4s",
       }}
     >
-      {/* Logo */}
       <Link
         href="/"
         style={{
@@ -150,7 +153,6 @@ export default function Navbar() {
         }}
       />
 
-      {/* Left chevron — min 44px touch target */}
       <button
         onClick={() => shift(-1)}
         aria-label="Previous"
@@ -174,8 +176,8 @@ export default function Navbar() {
         ‹
       </button>
 
-      {/* Wheel viewport — positions driven by JS spring, no CSS transition on transform */}
       <div
+        ref={wheelRef}
         style={{
           position: "relative",
           flex: 1,
@@ -193,13 +195,9 @@ export default function Navbar() {
         }}
       >
         {ITEMS.map((item, i) => {
-          // Use float visual center so positions update smoothly each RAF frame
           const d = circularD(i, vc, N);
-          const { x, scale, opacity } = wheelTransform(d);
-          if (opacity < 0.03) return null;
+          const { x, scale, opacity } = wheelTransform(d, radius);
 
-          // Color follows the integer target center (not route) so clicking arrow
-          // immediately grays out the old item and highlights the new one
           const isCentered = i === center;
 
           return (
@@ -214,7 +212,6 @@ export default function Navbar() {
                 position: "absolute",
                 left: "50%",
                 top: "50%",
-                // No CSS transition on transform/opacity — spring drives these
                 transform: `translate(calc(-50% + ${x}px), -50%) scale(${scale})`,
                 transition: "color 0.3s",
                 opacity,
@@ -235,7 +232,6 @@ export default function Navbar() {
         })}
       </div>
 
-      {/* Right chevron — min 44px touch target */}
       <button
         onClick={() => shift(1)}
         aria-label="Next"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  NAV_DEG,
   SPRING_THRESHOLD,
   circularD,
   shiftCenter,
@@ -7,56 +8,73 @@ import {
   wheelTransform,
 } from "../navWheel";
 
-const N = 4; // matches production ITEMS.length
+const N = 9; // matches production ITEMS.length
 
 describe("circularD", () => {
   it("returns 0 for same position", () => {
     expect(circularD(0, 0, N)).toBe(0);
-    expect(circularD(2, 2, N)).toBe(0);
+    expect(circularD(4, 4, N)).toBe(0);
   });
 
   it("returns positive distance for forward neighbor", () => {
     expect(circularD(1, 0, N)).toBe(1);
-    expect(circularD(2, 1, N)).toBe(1);
+    expect(circularD(3, 2, N)).toBe(1);
   });
 
-  it("wraps: item at far edge takes short arc backward (d = -1, not +3)", () => {
-    expect(circularD(3, 0, N)).toBe(-1);
+  it("wraps: takes short arc backward (d=-1 not +8)", () => {
+    expect(circularD(8, 0, N)).toBe(-1);
   });
 
-  it("wraps: item at other edge takes short arc forward (d = +1, not -3)", () => {
-    expect(circularD(0, 3, N)).toBe(1);
+  it("wraps: takes short arc forward (d=+1 not -8)", () => {
+    expect(circularD(0, 8, N)).toBe(1);
+  });
+
+  it("handles halfway point", () => {
+    // N=9, half = 4.5, so d=4 is forward, d=5 wraps to -4
+    expect(circularD(4, 0, N)).toBe(4);
+    expect(circularD(5, 0, N)).toBe(-4);
   });
 
   it("works with float center (spring mid-animation)", () => {
-    // visualCenter at 0.5 — item 3 should be -1.5, not +2.5
-    expect(circularD(3, 0.5, N)).toBeCloseTo(-1.5);
-    // item 2 is equally far either way at exactly N/2
-    expect(Math.abs(circularD(2, 0, N))).toBe(2);
+    expect(circularD(8, 0.5, N)).toBeCloseTo(-1.5);
   });
 });
 
 describe("wheelTransform", () => {
+  const R = 300;
+
   it("center item has x=0, scale=1, opacity=1", () => {
-    const t = wheelTransform(0);
+    const t = wheelTransform(0, R);
     expect(t.x).toBeCloseTo(0);
     expect(t.scale).toBeCloseTo(1);
     expect(t.opacity).toBeCloseTo(1);
   });
 
-  it("off-center item has reduced opacity", () => {
-    const t = wheelTransform(1);
+  it("shows 5 items: d=±2 clearly visible (opacity ≥ 0.4)", () => {
+    const t = wheelTransform(2, R);
+    expect(t.opacity).toBeGreaterThanOrEqual(0.4);
     expect(t.opacity).toBeLessThan(1);
-    expect(t.opacity).toBeGreaterThan(0);
+  });
+
+  it("d=±3 invisible (opacity = 0) with DEG=30", () => {
+    const t = wheelTransform(3, R);
+    expect(t.opacity).toBeCloseTo(0, 5);
+  });
+
+  it("items beyond d=3 stay at 0 opacity (not negative)", () => {
+    const t = wheelTransform(4, R);
+    expect(t.opacity).toBe(0);
   });
 
   it("scale never drops below 0.05 floor", () => {
-    const t = wheelTransform(10); // far off-center
-    expect(t.scale).toBeGreaterThanOrEqual(0.05);
+    expect(wheelTransform(10, R).scale).toBeGreaterThanOrEqual(0.05);
   });
 
-  it("opacity never goes negative", () => {
-    expect(wheelTransform(10).opacity).toBeGreaterThanOrEqual(0);
+  it("x scales with radius", () => {
+    const small = wheelTransform(1, 100);
+    const large = wheelTransform(1, 400);
+    expect(large.x).toBeGreaterThan(small.x);
+    expect(large.x / small.x).toBeCloseTo(4);
   });
 });
 
@@ -67,12 +85,11 @@ describe("springStep", () => {
     expect(vc).toBeLessThan(1);
   });
 
-  it("takes the short arc when wrapping (0 → 3 goes backward, not forward)", () => {
-    // Going from 0 toward 3 should decrease (wrap backward), not go 0→1→2→3
-    const vc = springStep(0, 3, N);
-    // Short arc: delta = -1 → vc decreases (wraps to ~3.82)
-    expect(vc).toBeGreaterThan(3);
-    expect(vc).toBeLessThan(4);
+  it("takes the short arc when wrapping (0 → 8 goes backward)", () => {
+    const vc = springStep(0, 8, N);
+    // Short arc: delta = -1 → vc wraps to ~8.82
+    expect(vc).toBeGreaterThan(8);
+    expect(vc).toBeLessThan(9);
   });
 
   it("stays within [0, N)", () => {
@@ -87,30 +104,30 @@ describe("springStep", () => {
 
   it("converges to target after many steps", () => {
     let vc = 0;
-    const target = 2;
-    for (let i = 0; i < 200; i++) {
+    const target = 5;
+    for (let i = 0; i < 300; i++) {
       vc = springStep(vc, target, N);
     }
     expect(Math.abs(vc - target)).toBeLessThan(SPRING_THRESHOLD);
   });
 
-  it("converges via short arc (0 → 3 ends at 3, not stuck at 0)", () => {
+  it("converges via short arc (0 → 8 ends at 8)", () => {
     let vc = 0;
-    for (let i = 0; i < 200; i++) {
-      vc = springStep(vc, 3, N);
+    for (let i = 0; i < 300; i++) {
+      vc = springStep(vc, 8, N);
     }
-    expect(vc).toBeCloseTo(3);
+    expect(vc).toBeCloseTo(8);
   });
 });
 
 describe("shiftCenter", () => {
   it("increments with wrap", () => {
-    expect(shiftCenter(3, 1, N)).toBe(0);
-    expect(shiftCenter(2, 1, N)).toBe(3);
+    expect(shiftCenter(8, 1, N)).toBe(0);
+    expect(shiftCenter(4, 1, N)).toBe(5);
   });
 
   it("decrements with wrap", () => {
-    expect(shiftCenter(0, -1, N)).toBe(3);
-    expect(shiftCenter(1, -1, N)).toBe(0);
+    expect(shiftCenter(0, -1, N)).toBe(8);
+    expect(shiftCenter(3, -1, N)).toBe(2);
   });
 });
