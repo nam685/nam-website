@@ -5,20 +5,24 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 
 const ITEMS = [
-  { label: "writes", href: "/blog", color: "#FF1744" },
-  { label: "draws", href: "/gallery", color: "#a855f7" },
-  { label: "vibecodes", href: "/projects", color: "#22c55e" },
-  { label: "grinds", href: "/cv", color: "#f59e0b" },
+  { label: "writes", href: "/blog", accent: "#FF1744" },
+  { label: "draws", href: "/gallery", accent: "#a855f7" },
+  { label: "vibecodes", href: "/projects", accent: "#22c55e" },
+  { label: "grinds", href: "/cv", accent: "#f59e0b" },
+  // Future items — uncomment when content is ready:
+  // { label: "listens", href: "/listens", accent: "#06b6d4" },
+  // { label: "reads", href: "/reads", accent: "#84cc16" },
+  // { label: "plays", href: "/plays", accent: "#f97316" },
+  // { label: "watches", href: "/watches", accent: "#ec4899" },
+  // { label: "bets", href: "/bets", accent: "#eab308" },
 ];
 
-// Wheel physics: items are on a virtual circle viewed from the side.
-// At angle θ from center:   x = R·sin(θ)   scale = cos(θ)   opacity = cos²(θ)
-// This compresses spacing and shrinks items as they rotate away — wheel illusion.
-const DEG = 14; // degrees between consecutive items — lower = slower size falloff, wider wheel
-const R = 310; // px — virtual wheel radius — larger = more generous spacing
+// Wheel physics: items on a virtual circle viewed from the side.
+// x = R·sin(θ)   scale = cos(θ)   opacity = cos²(θ)
+const DEG = 14;
+const R = 310;
 const N = ITEMS.length;
 
-// Shortest circular distance — so end wraps back to start seamlessly
 function circularD(i: number, center: number) {
   let d = i - center;
   if (d > N / 2) d -= N;
@@ -35,22 +39,40 @@ function wheelTransform(d: number) {
   };
 }
 
+function applyAccent(accent: string) {
+  document.documentElement.style.setProperty("--accent", accent);
+}
+
 export default function Navbar() {
   const pathname = usePathname();
-  const [center, setCenter] = useState(0);
+  const [center, setCenter] = useState(() => {
+    const idx = ITEMS.findIndex(
+      (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
+    );
+    return idx !== -1 ? idx : 0;
+  });
   const touchStartX = useRef<number | null>(null);
 
-  // Auto-sync wheel to current page
+  // Sync wheel position and page accent to current route
   useEffect(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
     );
-    if (idx !== -1) setCenter(idx);
-  }, [pathname]);
+    if (idx !== -1) {
+      setCenter(idx);
+      applyAccent(ITEMS[idx].accent);
+    } else {
+      applyAccent(ITEMS[center].accent);
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function shift(dir: -1 | 1) {
-    setCenter((c) => (c + dir + N) % N);
+    const next = (center + dir + N) % N;
+    setCenter(next);
+    applyAccent(ITEMS[next].accent);
   }
+
+  const accentOf = (i: number) => ITEMS[i].accent;
 
   return (
     <nav
@@ -60,12 +82,14 @@ export default function Navbar() {
         zIndex: 100,
         height: "3.5rem",
         background: "#0e0e0e",
-        borderBottom: "2px solid #FF1744",
-        boxShadow: "0 2px 16px rgba(255,23,68,0.1)",
+        borderBottom: "2px solid var(--accent)",
+        boxShadow:
+          "0 2px 20px color-mix(in srgb, var(--accent) 18%, transparent)",
         display: "flex",
         alignItems: "center",
-        gap: "0.5rem",
-        padding: "0 1rem",
+        gap: "0.25rem",
+        padding: "0 0.75rem",
+        transition: "border-color 0.4s, box-shadow 0.4s",
       }}
     >
       {/* Logo */}
@@ -75,12 +99,15 @@ export default function Navbar() {
           fontFamily: "var(--font-headline)",
           fontWeight: 900,
           fontSize: "1rem",
-          color: "#FF1744",
-          textShadow: "0 0 8px rgba(255,23,68,0.4)",
+          color: "var(--accent)",
+          textShadow:
+            "0 0 8px color-mix(in srgb, var(--accent) 50%, transparent)",
           letterSpacing: "-0.01em",
           whiteSpace: "nowrap",
           flexShrink: 0,
           userSelect: "none",
+          transition: "color 0.4s, text-shadow 0.4s",
+          padding: "0 0.25rem",
         }}
       >
         [Nam]
@@ -95,7 +122,7 @@ export default function Navbar() {
         }}
       />
 
-      {/* Left chevron */}
+      {/* Left chevron — min 44px touch target */}
       <button
         onClick={() => shift(-1)}
         aria-label="Previous"
@@ -103,13 +130,17 @@ export default function Navbar() {
           background: "none",
           border: "none",
           cursor: "pointer",
-          color: "#FF1744",
-          fontSize: "1.25rem",
+          color: "var(--accent)",
+          fontSize: "1.4rem",
           lineHeight: 1,
-          padding: "0 0.15rem",
           flexShrink: 0,
-          transition: "color 0.15s",
+          transition: "color 0.4s",
           userSelect: "none",
+          minWidth: "2.75rem",
+          height: "3.5rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         ‹
@@ -140,21 +171,25 @@ export default function Navbar() {
 
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
+          const isCentered = i === center;
 
           return (
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setCenter(i)}
+              onClick={() => {
+                setCenter(i);
+                applyAccent(item.accent);
+              }}
               style={{
                 position: "absolute",
                 left: "50%",
                 top: "50%",
                 transform: `translate(calc(-50% + ${x}px), -50%) scale(${scale})`,
                 transition:
-                  "transform 0.4s cubic-bezier(0.23,1,0.32,1), opacity 0.4s cubic-bezier(0.23,1,0.32,1)",
+                  "transform 0.4s cubic-bezier(0.23,1,0.32,1), opacity 0.4s cubic-bezier(0.23,1,0.32,1), color 0.3s",
                 opacity,
-                color: isActive ? item.color : "#9ca3af",
+                color: isActive || isCentered ? accentOf(i) : "#9ca3af",
                 fontFamily: "var(--font-headline)",
                 fontWeight: 700,
                 fontSize: "0.75rem",
@@ -171,7 +206,7 @@ export default function Navbar() {
         })}
       </div>
 
-      {/* Right chevron */}
+      {/* Right chevron — min 44px touch target */}
       <button
         onClick={() => shift(1)}
         aria-label="Next"
@@ -179,13 +214,17 @@ export default function Navbar() {
           background: "none",
           border: "none",
           cursor: "pointer",
-          color: "#FF1744",
-          fontSize: "1.25rem",
+          color: "var(--accent)",
+          fontSize: "1.4rem",
           lineHeight: 1,
-          padding: "0 0.15rem",
           flexShrink: 0,
-          transition: "color 0.15s",
+          transition: "color 0.4s",
           userSelect: "none",
+          minWidth: "2.75rem",
+          height: "3.5rem",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         ›

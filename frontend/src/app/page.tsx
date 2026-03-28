@@ -40,16 +40,26 @@ export default function Home() {
         <div
           className="absolute top-0 right-0 w-64 h-64 md:w-96 md:h-96 opacity-5 pointer-events-none"
           style={{
-            background: "linear-gradient(135deg, #FF1744 0%, transparent 70%)",
+            background:
+              "linear-gradient(135deg, var(--accent) 0%, transparent 70%)",
             clipPath: "polygon(100% 0, 100% 100%, 0 0)",
           }}
         />
 
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 border-l-4 border-[#FF1744] bg-[#FF1744]/5 mb-6">
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1 mb-6"
+            style={{
+              borderLeft: "4px solid var(--accent)",
+              background: "color-mix(in srgb, var(--accent) 5%, transparent)",
+            }}
+          >
             <span
-              className="text-[#FF1744] text-xs tracking-[0.3em] uppercase font-bold"
-              style={{ fontFamily: "var(--font-headline)" }}
+              className="text-xs tracking-[0.3em] uppercase font-bold"
+              style={{
+                fontFamily: "var(--font-headline)",
+                color: "var(--accent)",
+              }}
             >
               Identity Verified // Access Granted
             </span>
@@ -59,10 +69,14 @@ export default function Home() {
             className="text-6xl md:text-8xl lg:text-9xl font-black uppercase tracking-tighter text-white mb-6"
             style={{
               fontFamily: "var(--font-headline)",
-              textShadow: "0 0 40px rgba(255,23,68,0.25)",
+              textShadow:
+                "0 0 40px color-mix(in srgb, var(--accent) 25%, transparent)",
             }}
           >
-            Hi, I&apos;m <span style={{ color: "#FF1744" }}>Nam</span>
+            Hi, I&apos;m{" "}
+            <span style={{ color: "var(--accent)", transition: "color 0.4s" }}>
+              Nam
+            </span>
           </h1>
 
           <p className="max-w-xl text-lg md:text-xl text-[#888] leading-relaxed">
@@ -79,16 +93,29 @@ export default function Home() {
             <Link key={card.href} href={card.href}>
               <div
                 className="group relative h-40 sm:h-52 md:h-64 flex flex-col justify-between p-5 md:p-8 transition-colors bg-[#1a1a1a] hover:bg-[#2a2a2a]"
-                style={{ borderLeft: "3px solid #FF1744" }}
+                style={{
+                  borderLeft: "3px solid var(--accent)",
+                  transition: "background 0.15s, border-color 0.4s",
+                }}
               >
                 <div className="flex justify-between items-start">
                   <span
-                    className="text-[#FF1744] text-xs tracking-widest"
-                    style={{ fontFamily: "var(--font-headline)" }}
+                    className="text-xs tracking-widest"
+                    style={{
+                      fontFamily: "var(--font-headline)",
+                      color: "var(--accent)",
+                      transition: "color 0.4s",
+                    }}
                   >
                     [ {card.sector} ]
                   </span>
-                  <span className="text-[#FF1744] text-lg opacity-60 group-hover:opacity-100 transition-opacity">
+                  <span
+                    className="text-lg opacity-60 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      color: "var(--accent)",
+                      transition: "color 0.4s, opacity 0.15s",
+                    }}
+                  >
                     ↗
                   </span>
                 </div>
