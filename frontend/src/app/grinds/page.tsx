@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "CV" };
+export const metadata: Metadata = { title: "grinds" };
 
 export default function CVPage() {
   return (

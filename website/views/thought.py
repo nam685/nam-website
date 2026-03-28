@@ -1,12 +1,12 @@
 import json
 from datetime import timedelta
 
-from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from ..auth import require_admin
 from ..models import Thought
 
 COOLDOWN = timedelta(hours=18)
@@ -33,17 +33,10 @@ def thought_list(request):
 
 
 @csrf_exempt
+@require_admin
 def thought_create(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
-
-    # Auth: Bearer token must match THOUGHT_SECRET env var
-    secret = getattr(settings, "THOUGHT_SECRET", None)
-    if not secret:
-        return JsonResponse({"error": "Not configured"}, status=503)
-    auth = request.headers.get("Authorization", "")
-    if auth != f"Bearer {secret}":
-        return JsonResponse({"error": "Unauthorized"}, status=401)
 
     # Cooldown: 18h since last thought
     latest = Thought.objects.filter(is_published=True).first()

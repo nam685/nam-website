@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Projects" };
+export const metadata: Metadata = { title: "codes" };
 
 interface ExtraLink {
   label: string;

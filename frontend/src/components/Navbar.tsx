@@ -13,9 +13,9 @@ import {
 
 const ITEMS = [
   { label: "thinks", href: "/thinks", accent: "#FF1744" },
-  { label: "draws", href: "/gallery", accent: "#a855f7" },
-  { label: "codes", href: "/projects", accent: "#22c55e" },
-  { label: "grinds", href: "/cv", accent: "#f59e0b" },
+  { label: "draws", href: "/draws", accent: "#a855f7" },
+  { label: "codes", href: "/codes", accent: "#22c55e" },
+  { label: "grinds", href: "/grinds", accent: "#f59e0b" },
   { label: "listens", href: "/listens", accent: "#f97316" },
   { label: "reads", href: "/reads", accent: "#94a3b8" },
   { label: "plays", href: "/plays", accent: "#06b6d4" },

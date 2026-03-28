@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Plays" };
+export const metadata: Metadata = { title: "plays" };
 
 export default function PlaysPage() {
   return (
