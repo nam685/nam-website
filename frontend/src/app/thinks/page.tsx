@@ -8,7 +8,7 @@ interface Thought {
   created_at: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 const COOLDOWN_MS = 18 * 60 * 60 * 1000; // 18h
 
 const FALLBACK: Thought[] = [
