@@ -21,10 +21,13 @@ export function circularD(i: number, center: number, n: number): number {
 export function wheelTransform(d: number, r: number) {
   const θ = d * NAV_DEG * (Math.PI / 180);
   const cosθ = Math.cos(θ);
+  // Scale uses sqrt(cos) so edge items (d=±2) are ~0.84x, not 0.5x.
+  // This keeps edge labels readable — only slightly smaller than center.
+  const clampedCos = Math.max(0, cosθ);
   return {
     x: r * Math.sin(θ),
-    scale: Math.max(0.05, cosθ),
-    opacity: Math.max(0, cosθ),
+    scale: Math.max(0.05, Math.sqrt(clampedCos)),
+    opacity: clampedCos,
   };
 }
 
