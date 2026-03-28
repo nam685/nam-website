@@ -28,6 +28,20 @@ const TRUNK = "1.25rem";
 const NODE_SIZE = 10;
 const HALF_NODE = NODE_SIZE / 2;
 
+/* ── localStorage helpers (SSR-safe) ────────────────── */
+function store(key: string, val?: string): string | null {
+  if (typeof window === "undefined") return null;
+  if (val !== undefined) {
+    localStorage.setItem(key, val);
+    return val;
+  }
+  return localStorage.getItem(key);
+}
+
+function storeDel(key: string) {
+  if (typeof window !== "undefined") localStorage.removeItem(key);
+}
+
 /* ── Compose sprite ─────────────────────────────────── */
 function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
   const [open, setOpen] = useState(false);
@@ -35,21 +49,23 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
-  function store(key: string, val?: string): string | null {
-    if (typeof window === "undefined") return null;
-    if (val !== undefined) {
-      localStorage.setItem(key, val);
-      return val;
+  // Close on click-outside — keep text cached
+  useEffect(() => {
+    if (!open) return;
+    function onClickOutside(e: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false); // text stays cached
+      }
     }
-    return localStorage.getItem(key);
-  }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [open]);
 
-  function storeDel(key: string) {
-    if (typeof window !== "undefined") localStorage.removeItem(key);
-  }
-
-  // Check cooldown from localStorage
   function isCoolingDown() {
     const last = store("lastThoughtTime");
     if (!last) return false;
@@ -65,7 +81,6 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     return `${h}h ${m}m`;
   }
 
-  // Get or prompt for auth token
   function getToken(): string | null {
     let token = store("thoughtToken");
     if (!token) {
@@ -131,20 +146,17 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
       handleSubmit();
     }
     if (e.key === "Escape") {
-      setOpen(false);
-      setText("");
-      setError("");
+      setOpen(false); // text stays cached
     }
   }
 
   return (
     <div
+      ref={wrapperRef}
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "flex-end",
         gap: "0.5rem",
-        position: "relative",
       }}
     >
       {error && (
@@ -199,20 +211,21 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
             }}
           />
         ) : (
-          /* Sprite: typing indicator dots */
           <button
             onClick={handleOpen}
             aria-label="New thought"
             title={
               isCoolingDown()
                 ? `Cooldown: ${cooldownRemaining()}`
-                : "New thought"
+                : text
+                  ? "Continue editing..."
+                  : "New thought"
             }
             style={{
               width: "2rem",
               height: "2rem",
               background: "#1a1a1a",
-              border: "1px solid #2a2a2a",
+              border: `1px solid ${text ? "color-mix(in srgb, var(--accent) 50%, #2a2a2a)" : "#2a2a2a"}`,
               borderRadius: "2px",
               cursor: "pointer",
               display: "flex",
@@ -228,11 +241,12 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
                 "0 0 8px color-mix(in srgb, var(--accent) 30%, transparent)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "#2a2a2a";
+              e.currentTarget.style.borderColor = text
+                ? "color-mix(in srgb, var(--accent) 50%, #2a2a2a)"
+                : "#2a2a2a";
               e.currentTarget.style.boxShadow = "none";
             }}
           >
-            {/* Three typing dots */}
             {[0, 1, 2].map((i) => (
               <span
                 key={i}
@@ -241,8 +255,10 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
                   height: "3px",
                   borderRadius: "50%",
                   background: "var(--accent)",
-                  opacity: 0.7,
-                  animation: `pulse 1.4s ${i * 0.2}s ease-in-out infinite`,
+                  opacity: text ? 1 : 0.7,
+                  animation: text
+                    ? "none"
+                    : `pulse 1.4s ${i * 0.2}s ease-in-out infinite`,
                 }}
               />
             ))}
@@ -273,7 +289,6 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
         )}
       </div>
 
-      {/* Keyframe for typing dots pulse */}
       <style>{`
         @keyframes pulse {
           0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
@@ -332,7 +347,6 @@ export default function ThinksPage() {
   function handleNewThought(thought: Thought) {
     setNewestId(thought.id);
     setThoughts((prev) => [thought, ...prev]);
-    // Clear animation class after it plays
     setTimeout(() => setNewestId(null), 500);
   }
 
@@ -357,30 +371,7 @@ export default function ThinksPage() {
           minHeight: "100vh",
         }}
       >
-        {/* Header row: tagline left-ish, compose sprite right */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "3rem",
-            paddingRight: "0.5rem",
-          }}
-        >
-          <span
-            style={{
-              fontStyle: "italic",
-              color: "#555",
-              fontSize: "0.85rem",
-              letterSpacing: "0.02em",
-            }}
-          >
-            sometimes, some of my neurons fire
-          </span>
-          <ComposeSprite onPost={handleNewThought} />
-        </div>
-
-        {/* Timeline container */}
+        {/* Timeline container — trunk starts at very top */}
         <div
           style={{
             position: "relative",
@@ -401,6 +392,53 @@ export default function ThinksPage() {
                 "0 0 8px color-mix(in srgb, var(--accent) 20%, transparent)",
             }}
           />
+
+          {/* Compose area — sits at the top of the trunk like first entry */}
+          <div
+            style={{
+              position: "relative",
+              marginBottom: "3rem",
+            }}
+          >
+            {/* Fork joint for compose */}
+            <div
+              style={{
+                position: "absolute",
+                left: `calc(-3rem + ${TRUNK} - ${HALF_NODE}px)`,
+                top: "0.65rem",
+                width: `${NODE_SIZE}px`,
+                height: `${NODE_SIZE}px`,
+                borderRadius: "50%",
+                background: "#2a2a2a",
+                border: "1.5px solid var(--accent)",
+                zIndex: 2,
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+              }}
+            >
+              <ComposeSprite onPost={handleNewThought} />
+            </div>
+            {/* Branch line under compose */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                marginTop: "0.35rem",
+              }}
+            >
+              <div
+                style={{ flexGrow: 1, height: "1px", background: "#2a2a2a" }}
+              />
+              <div
+                style={{ width: "1px", height: "8px", background: "#2a2a2a" }}
+              />
+            </div>
+          </div>
 
           {/* Sticky scroll-to-top on trunk */}
           <div
@@ -463,7 +501,7 @@ export default function ThinksPage() {
                 marginBottom: "3rem",
               }}
             >
-              {/* Fork joint — centered on trunk */}
+              {/* Fork joint */}
               <div
                 style={{
                   position: "absolute",
@@ -570,6 +608,26 @@ export default function ThinksPage() {
               ))}
             </button>
           )}
+        </div>
+
+        {/* Tagline — bottom right */}
+        <div
+          style={{
+            textAlign: "right",
+            marginTop: "4rem",
+            paddingRight: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontStyle: "italic",
+              color: "#555",
+              fontSize: "0.85rem",
+              letterSpacing: "0.02em",
+            }}
+          >
+            sometimes, some of my neurons fire
+          </span>
         </div>
       </div>
     </>
