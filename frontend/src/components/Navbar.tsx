@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ITEMS = [
   { label: "writes", href: "/blog", accent: "#FF1744" },
@@ -23,6 +23,7 @@ const DEG = 14;
 const R = 310;
 const N = ITEMS.length;
 
+// Circular shortest-path distance — works with float center for spring animation
 function circularD(i: number, center: number) {
   let d = i - center;
   if (d > N / 2) d -= N;
@@ -45,15 +46,55 @@ function applyAccent(accent: string) {
 
 export default function Navbar() {
   const pathname = usePathname();
+
+  // Integer target center — what the user selected
   const [center, setCenter] = useState(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
     );
     return idx !== -1 ? idx : 0;
   });
+
+  // Float visual center — spring-animated toward `center`.
+  // Driving positions via JS (not CSS transition) means the circular shortest-path
+  // is always taken, so items never jump across the wheel; they fade out one side
+  // while a neighbour fades in from the other.
+  const visualCenter = useRef<number>(center);
+  const [, rerender] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
   const touchStartX = useRef<number | null>(null);
 
-  // Sync wheel position and page accent to current route
+  // Spring: animate visualCenter toward center along the shortest circular arc
+  useEffect(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+
+    const tick = () => {
+      const vc = visualCenter.current;
+      // Shortest circular delta
+      let delta = center - vc;
+      if (delta > N / 2) delta -= N;
+      if (delta < -N / 2) delta += N;
+
+      if (Math.abs(delta) < 0.005) {
+        visualCenter.current = center;
+        rerender((n) => n + 1);
+        return;
+      }
+
+      // Spring step, keep in [0, N)
+      visualCenter.current = (((vc + delta * 0.18) % N) + N) % N;
+      rerender((n) => n + 1);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [center]);
+
+  // Sync wheel position and accent to current route
   useEffect(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
@@ -72,7 +113,7 @@ export default function Navbar() {
     applyAccent(ITEMS[next].accent);
   }
 
-  const accentOf = (i: number) => ITEMS[i].accent;
+  const vc = visualCenter.current;
 
   return (
     <nav
@@ -146,7 +187,7 @@ export default function Navbar() {
         ‹
       </button>
 
-      {/* Wheel viewport */}
+      {/* Wheel viewport — positions driven by JS spring, no CSS transition on transform */}
       <div
         style={{
           position: "relative",
@@ -165,12 +206,13 @@ export default function Navbar() {
         }}
       >
         {ITEMS.map((item, i) => {
-          const d = circularD(i, center);
+          // Use float visual center so positions update smoothly each RAF frame
+          const d = circularD(i, vc);
           const { x, scale, opacity } = wheelTransform(d);
           if (opacity < 0.03) return null;
 
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+          // Color follows the integer target center (not route) so clicking arrow
+          // immediately grays out the old item and highlights the new one
           const isCentered = i === center;
 
           return (
@@ -185,11 +227,11 @@ export default function Navbar() {
                 position: "absolute",
                 left: "50%",
                 top: "50%",
+                // No CSS transition on transform/opacity — spring drives these
                 transform: `translate(calc(-50% + ${x}px), -50%) scale(${scale})`,
-                transition:
-                  "transform 0.4s cubic-bezier(0.23,1,0.32,1), opacity 0.4s cubic-bezier(0.23,1,0.32,1), color 0.3s",
+                transition: "color 0.3s",
                 opacity,
-                color: isActive || isCentered ? accentOf(i) : "#9ca3af",
+                color: isCentered ? item.accent : "#9ca3af",
                 fontFamily: "var(--font-headline)",
                 fontWeight: 700,
                 fontSize: "0.75rem",
