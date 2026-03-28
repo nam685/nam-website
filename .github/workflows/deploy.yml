@@ -24,10 +24,11 @@ jobs:
             cd ~/nam-website-deploy
             git fetch origin main
             git reset --hard origin/main
+            export NVM_DIR="$HOME/.nvm"
+            source "$NVM_DIR/nvm.sh"
             export PNPM_HOME="$HOME/.local/share/pnpm"
             export PATH="$PNPM_HOME:$PATH"
             cd frontend
             pnpm install --frozen-lockfile
             pnpm exec next build
-            pkill -f "next start" || true
-            setsid nohup pnpm exec next start -p 3000 > /tmp/nextjs.log 2>&1 &
+            sudo systemctl restart nextjs
