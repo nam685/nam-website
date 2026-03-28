@@ -48,9 +48,7 @@ def thought_create(request):
     # Cooldown: 18h since last thought
     latest = Thought.objects.filter(is_published=True).first()
     if latest and timezone.now() - latest.created_at < COOLDOWN:
-        remaining = COOLDOWN - (timezone.now() - latest.created_at)
-        hours = remaining.total_seconds() / 3600
-        return JsonResponse({"error": f"Cooldown: {hours:.1f}h remaining"}, status=429)
+        return JsonResponse({"error": "Chill. Too much thinking for today."}, status=429)
 
     try:
         body = json.loads(request.body)

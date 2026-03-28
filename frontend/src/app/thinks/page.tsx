@@ -72,15 +72,6 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     return Date.now() - Number(last) < COOLDOWN_MS;
   }
 
-  function cooldownRemaining(): string {
-    const last = Number(store("lastThoughtTime") || 0);
-    const remaining = COOLDOWN_MS - (Date.now() - last);
-    if (remaining <= 0) return "";
-    const h = Math.floor(remaining / 3600000);
-    const m = Math.floor((remaining % 3600000) / 60000);
-    return `${h}h ${m}m`;
-  }
-
   function getToken(): string | null {
     let token = store("thoughtToken");
     if (!token) {
@@ -92,7 +83,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
 
   function handleOpen() {
     if (isCoolingDown()) {
-      setError(`Cooldown: ${cooldownRemaining()}`);
+      setError("Chill. Too much thinking for today.");
       setTimeout(() => setError(""), 3000);
       return;
     }
@@ -234,7 +225,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
             aria-label="New thought"
             title={
               isCoolingDown()
-                ? `Cooldown: ${cooldownRemaining()}`
+                ? "Chill. Too much thinking for today."
                 : text
                   ? "Continue editing..."
                   : "New thought"
