@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  SPRING_THRESHOLD,
+  circularD,
+  shiftCenter,
+  springStep,
+  wheelTransform,
+} from "@/lib/navWheel";
 
 const ITEMS = [
   { label: "writes", href: "/blog", accent: "#FF1744" },
@@ -17,28 +24,7 @@ const ITEMS = [
   // { label: "bets", href: "/bets", accent: "#eab308" },
 ];
 
-// Wheel physics: items on a virtual circle viewed from the side.
-// x = R·sin(θ)   scale = cos(θ)   opacity = cos²(θ)
-const DEG = 14;
-const R = 310;
 const N = ITEMS.length;
-
-// Circular shortest-path distance — works with float center for spring animation
-function circularD(i: number, center: number) {
-  let d = i - center;
-  if (d > N / 2) d -= N;
-  if (d < -N / 2) d += N;
-  return d;
-}
-
-function wheelTransform(d: number) {
-  const θ = d * DEG * (Math.PI / 180);
-  return {
-    x: R * Math.sin(θ),
-    scale: Math.max(0.05, Math.cos(θ)),
-    opacity: Math.max(0, Math.cos(θ) ** 2),
-  };
-}
 
 function applyAccent(accent: string) {
   document.documentElement.style.setProperty("--accent", accent);
@@ -71,19 +57,14 @@ export default function Navbar() {
 
     const tick = () => {
       const vc = visualCenter.current;
-      // Shortest circular delta
-      let delta = center - vc;
-      if (delta > N / 2) delta -= N;
-      if (delta < -N / 2) delta += N;
-
-      if (Math.abs(delta) < 0.005) {
+      // circularD gives shortest-arc distance; settle when close enough
+      const d = circularD(center, vc, N);
+      if (Math.abs(d) < SPRING_THRESHOLD) {
         visualCenter.current = center;
         rerender((n) => n + 1);
         return;
       }
-
-      // Spring step, keep in [0, N)
-      visualCenter.current = (((vc + delta * 0.18) % N) + N) % N;
+      visualCenter.current = springStep(vc, center, N);
       rerender((n) => n + 1);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -94,7 +75,11 @@ export default function Navbar() {
     };
   }, [center]);
 
-  // Sync wheel position and accent to current route
+  // Sync wheel position and accent to current route.
+  // Use a ref for center so this effect never captures a stale value.
+  const centerRef = useRef(center);
+  centerRef.current = center;
+
   useEffect(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
@@ -103,12 +88,14 @@ export default function Navbar() {
       setCenter(idx);
       applyAccent(ITEMS[idx].accent);
     } else {
-      applyAccent(ITEMS[center].accent);
+      // Unmatched route (home, /now, /changelog, etc.) — keep whatever accent
+      // was last set rather than snapping back to ITEMS[0] (red).
+      applyAccent(ITEMS[centerRef.current].accent);
     }
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   function shift(dir: -1 | 1) {
-    const next = (center + dir + N) % N;
+    const next = shiftCenter(center, dir, N);
     setCenter(next);
     applyAccent(ITEMS[next].accent);
   }
@@ -207,7 +194,7 @@ export default function Navbar() {
       >
         {ITEMS.map((item, i) => {
           // Use float visual center so positions update smoothly each RAF frame
-          const d = circularD(i, vc);
+          const d = circularD(i, vc, N);
           const { x, scale, opacity } = wheelTransform(d);
           if (opacity < 0.03) return null;
 
