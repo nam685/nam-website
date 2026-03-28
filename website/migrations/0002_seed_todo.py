@@ -75,8 +75,8 @@ SECTIONS = [
     {
         "title": "Design",
         "items": [
-            ("Discover Stitch (Figma killer) — explore for UI/UX design without being a pro designer", False),
-            ("Define color palette and design system", False),
+            ("Discover Stitch (Figma killer) — explore for UI/UX design without being a pro designer", True),
+            ("Define color palette and design system", True),
             ("Typography choices", False),
             ("Consistent spacing/sizing tokens", False),
             ("Light/dark mode (auto, follows system preference)", True),

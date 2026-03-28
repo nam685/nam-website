@@ -23,7 +23,7 @@ export default function Navbar() {
     <>
       <nav className="nav">
         <Link href="/" className="nav-logo">
-          Nam Le
+          [NAM LE]
         </Link>
         <ul className="nav-links">
           {links.map((link) => (
@@ -42,7 +42,7 @@ export default function Navbar() {
           onClick={() => setOpen(!open)}
           aria-label="Toggle menu"
         >
-          {open ? "\u2715" : "\u2630"}
+          {open ? "✕" : "☰"}
         </button>
       </nav>
       {open && (
