@@ -20,7 +20,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "^15.4",
+    "eslint-config-next": "^16.2",
     "postcss": "^8",
     "prettier": "^3",
     "tailwindcss": "^4.1",
