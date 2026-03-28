@@ -43,3 +43,13 @@
 - All dependabot PRs merged: Next.js 15→16, ESLint, @types/node, GitHub Actions deps
 - Dependabot auto-merge workflow: `.github/workflows/dependabot-automerge.yml`
   - Auto-enables merge on dependabot PRs; triggers `@dependabot rebase` on main push
+
+### Django Backend + PostgreSQL
+- Installed Docker, started PostgreSQL 16 + Redis 7 via Docker Compose
+- `TodoSection` + `TodoItem` models, data migration seeds all todo items
+- `GET /api/todo/` endpoint; `/todo` page now fetches from Django server-side
+- `website/models/` and `website/views/` restructured as packages
+- Django served by gunicorn via systemd (`/etc/systemd/system/django.service`)
+- Caddy updated: `/api/*` → Django :8000, everything else → Next.js :3000
+- `ALLOWED_HOSTS` includes `nam685.de` in server `.env`
+- Pyright LSP plugin installed in Claude Code for Python intelligence

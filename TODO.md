@@ -1,7 +1,7 @@
 # TODO
 
 ## High Priority
-- [ ] To-do list feature on the site itself
+- [x] To-do list feature on the site itself
 - [ ] Rework UI/UX layout and styling (careful, intentional design)
 - [ ] RPG/Terraria-style townhall map as main landing page — pixel art buildings representing each section (blog = library, gallery = museum, projects = workshop, etc.)
 - [x] Website favicon/logo for browser tab (cat head)
@@ -82,8 +82,8 @@
 
 ## Infrastructure
 - [ ] Set up GitHub Actions deploy SSH key secret
-- [ ] Start PostgreSQL + Redis via Docker Compose
-- [ ] Deploy Django backend
-- [ ] Upgrade Node.js to 20+ (fixes Tailwind v4 ARM64 support)
+- [x] Start PostgreSQL + Redis via Docker Compose
+- [x] Deploy Django backend
+- [x] Upgrade Node.js to 20+ (fixes Tailwind v4 ARM64 support)
 - [x] Dependabot for auto dependency updates
 - [ ] Uptime monitoring / health check cron
