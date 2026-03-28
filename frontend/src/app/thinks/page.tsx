@@ -180,7 +180,8 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
           overflow: "hidden",
           transition: "width 0.35s cubic-bezier(0.4,0,0.2,1)",
           width: open ? "min(28rem, calc(100vw - 8rem))" : "2rem",
-          height: "2rem",
+          minHeight: "2rem",
+          maxHeight: open ? "8rem" : "2rem",
           background: open ? "#1a1a1a" : "none",
           border: open
             ? "1px solid color-mix(in srgb, var(--accent) 40%, #2a2a2a)"
@@ -192,7 +193,13 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
           <textarea
             ref={inputRef}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              // Auto-grow
+              const el = e.target;
+              el.style.height = "auto";
+              el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+            }}
             onKeyDown={handleKeyDown}
             placeholder="what's on your mind..."
             rows={1}
@@ -208,6 +215,8 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
               padding: "0.35rem 0.5rem",
               resize: "none",
               lineHeight: 1.4,
+              maxHeight: "6rem",
+              overflowY: "auto",
             }}
           />
         ) : (
