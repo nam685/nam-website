@@ -30,4 +30,4 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm exec next build
             pkill -f "next start" || true
-            nohup pnpm exec next start -p 3000 > /tmp/nextjs.log 2>&1 &
+            setsid nohup pnpm exec next start -p 3000 > /tmp/nextjs.log 2>&1 &
