@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { API_INTERNAL } from "@/lib/api";
+
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Todo" };
 
@@ -7,7 +9,7 @@ type Item = { text: string; done: boolean };
 type Section = { title: string; items: Item[] };
 
 async function getTodo(): Promise<Section[]> {
-  const res = await fetch("http://localhost:8000/api/todo/", {
+  const res = await fetch(`${API_INTERNAL}/api/todo/`, {
     next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error("Failed to fetch todo");

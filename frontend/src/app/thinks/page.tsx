@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface Thought {
-  id: number;
-  content: string;
-  created_at: string;
-}
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+import { type Thought, API } from "@/lib/api";
+import { store, storeDel, getAdminToken } from "@/lib/auth";
 const COOLDOWN_MS = 18 * 60 * 60 * 1000; // 18h
 
 const FALLBACK: Thought[] = [
@@ -27,20 +22,6 @@ function formatDate(iso: string) {
 const TRUNK = "1.25rem";
 const NODE_SIZE = 10;
 const HALF_NODE = NODE_SIZE / 2;
-
-/* ── localStorage helpers (SSR-safe) ────────────────── */
-function store(key: string, val?: string): string | null {
-  if (typeof window === "undefined") return null;
-  if (val !== undefined) {
-    localStorage.setItem(key, val);
-    return val;
-  }
-  return localStorage.getItem(key);
-}
-
-function storeDel(key: string) {
-  if (typeof window !== "undefined") localStorage.removeItem(key);
-}
 
 /* ── Compose sprite ─────────────────────────────────── */
 function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
@@ -72,13 +53,6 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     return Date.now() - Number(last) < COOLDOWN_MS;
   }
 
-  function getToken(): string | null {
-    const token = store("adminToken");
-    if (token) return token;
-    window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
-    return null;
-  }
-
   function handleOpen() {
     if (isCoolingDown()) {
       setError("Chill. Too much thinking for today.");
@@ -102,7 +76,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
     const content = text.trim();
     if (!content || posting) return;
 
-    const token = getToken();
+    const token = getAdminToken();
     if (!token) return;
 
     setPosting(true);

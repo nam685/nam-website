@@ -3,16 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
-
-function store(key: string, val?: string): string | null {
-  if (typeof window === "undefined") return null;
-  if (val !== undefined) {
-    localStorage.setItem(key, val);
-    return val;
-  }
-  return localStorage.getItem(key);
-}
+import { API } from "@/lib/api";
+import { store, storeDel } from "@/lib/auth";
 
 function SudoForm() {
   const router = useRouter();
@@ -74,7 +66,7 @@ function SudoForm() {
   }
 
   function handleLogout() {
-    if (typeof window !== "undefined") localStorage.removeItem("adminToken");
+    storeDel("adminToken");
     setAuthed(false);
   }
 
