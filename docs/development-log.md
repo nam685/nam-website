@@ -21,10 +21,25 @@
 - Added A record → 204.168.159.7
 - Installed Caddy, configured reverse proxy to localhost:3000
 - Opened ports 80/443 in ufw (were blocked, causing Let's Encrypt timeout)
-- Next.js running in zellij session `website` (`zellij attach website` to debug)
 - Site live at https://nam685.de
 
 ### Pending
-- GitHub CI/CD for auto-deploy
 - Start PostgreSQL + Redis via Docker Compose
 - Deploy Django backend
+
+## 2026-03-28
+
+### CI/CD & Deploy Pipeline
+- Set up GitHub Actions: CI (lint + type-check) → Deploy (SSH to server)
+- Deploy uses dedicated clone `~/nam-website-deploy` with `git fetch + reset --hard`
+- Fixed SIGTERM issue: appleboy SSH action kills nohup processes on disconnect
+- **Process manager: systemd** — `/etc/systemd/system/nextjs.service` with `Restart=always`
+  - Passwordless sudo for `systemctl restart/start/stop nextjs` via `/etc/sudoers.d/nextjs`
+  - Deploy script: `sudo systemctl restart nextjs` after build
+- Node.js upgraded 18 → 22 via nvm (Next.js 16 requires >=20.9.0; NodeSource ARM64 broken)
+  - Tailwind v4 ARM64 oxide bindings now work with Node 22
+
+### Dependency Updates
+- All dependabot PRs merged: Next.js 15→16, ESLint, @types/node, GitHub Actions deps
+- Dependabot auto-merge workflow: `.github/workflows/dependabot-automerge.yml`
+  - Auto-enables merge on dependabot PRs; triggers `@dependabot rebase` on main push
