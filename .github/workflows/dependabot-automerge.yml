@@ -1,0 +1,39 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  pull-requests: write
+  contents: write
+
+jobs:
+  # When a dependabot PR is opened/updated: enable auto-merge
+  enable-automerge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+    steps:
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # When main is updated: rebase all open dependabot PRs so they stay current
+  rebase-on-main-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Rebase open dependabot PRs
+        run: |
+          gh pr list --repo "$REPO" --author "app/dependabot" --state open --json number \
+            --jq '.[].number' | \
+          while read -r pr; do
+            gh pr comment "$pr" --repo "$REPO" --body "@dependabot rebase"
+          done
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
