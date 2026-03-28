@@ -18,8 +18,12 @@ jobs:
           username: nam
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            cd ~/nam-website
-            git pull origin main
+            if [ ! -d ~/nam-website-deploy ]; then
+              git clone https://github.com/nam685/nam-website.git ~/nam-website-deploy
+            fi
+            cd ~/nam-website-deploy
+            git fetch origin main
+            git reset --hard origin/main
             export PNPM_HOME="$HOME/.local/share/pnpm"
             export PATH="$PNPM_HOME:$PATH"
             cd frontend
