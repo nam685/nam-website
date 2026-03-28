@@ -48,9 +48,9 @@
 - [ ] Ellamind product suite integration (TBD ~June 2026)
 
 ## Design
-- [ ] Discover Stitch (Figma killer) — explore for UI/UX design without being a pro designer
-- [ ] Define color palette and design system
-- [ ] Typography choices
+- [x] Discover Stitch (Figma killer) — explore for UI/UX design without being a pro designer
+- [x] Define color palette and design system
+- [x] Typography choices
 - [ ] Consistent spacing/sizing tokens
 - [x] Light/dark mode (auto, follows system preference)
 - [ ] Pixel art assets for RPG landing page

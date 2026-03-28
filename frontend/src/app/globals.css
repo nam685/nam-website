@@ -3,8 +3,6 @@
 @theme {
   --font-headline: "Space Grotesk", sans-serif;
   --font-body: "Inter", system-ui, -apple-system, sans-serif;
-  --color-crimson: #ff1744;
-  --color-crimson-dim: #b41010;
   --color-surface-lowest: #0e0e0e;
   --color-surface: #131313;
   --color-surface-low: #1a1a1a;
@@ -13,6 +11,11 @@
   --color-on-surface: #e5e2e1;
   --color-muted: #888888;
   --color-zinc-border: #27272a;
+}
+
+/* Section accent — default crimson, overridden per section via JS */
+:root {
+  --accent: #ff1744;
 }
 
 *,
@@ -54,8 +57,8 @@ a {
 
 /* Corner bracket accents */
 .corner-tl {
-  border-top: 2px solid #ff1744;
-  border-left: 2px solid #ff1744;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
   width: 16px;
   height: 16px;
   position: absolute;
@@ -63,8 +66,8 @@ a {
   left: -2px;
 }
 .corner-tr {
-  border-top: 2px solid #ff1744;
-  border-right: 2px solid #ff1744;
+  border-top: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
   width: 16px;
   height: 16px;
   position: absolute;
@@ -72,8 +75,8 @@ a {
   right: -2px;
 }
 .corner-bl {
-  border-bottom: 2px solid #ff1744;
-  border-left: 2px solid #ff1744;
+  border-bottom: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
   width: 16px;
   height: 16px;
   position: absolute;
@@ -81,120 +84,13 @@ a {
   left: -2px;
 }
 .corner-br {
-  border-bottom: 2px solid #ff1744;
-  border-right: 2px solid #ff1744;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
   width: 16px;
   height: 16px;
   position: absolute;
   bottom: -2px;
   right: -2px;
-}
-
-/* Navbar */
-.nav {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1.5rem;
-  height: 4rem;
-  background: #0e0e0e;
-  border-bottom: 2px solid #ff1744;
-  box-shadow: 0 4px 20px rgba(255, 23, 68, 0.12);
-}
-
-.nav-logo {
-  font-family: var(--font-headline);
-  font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  color: #ff1744;
-  text-shadow: 0 0 8px rgba(255, 23, 68, 0.5);
-  text-transform: uppercase;
-}
-
-.nav-links {
-  display: flex;
-  gap: 1.5rem;
-  list-style: none;
-}
-
-.nav-links a {
-  font-family: var(--font-headline);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: #6b7280;
-  transition: color 0.15s;
-  padding: 0.25rem 0.4rem;
-}
-
-.nav-links a:hover {
-  color: #fff;
-  background: rgba(255, 23, 68, 0.08);
-}
-
-.nav-links a.active {
-  color: #ff1744;
-  border-bottom: 2px solid #ff1744;
-}
-
-.nav-toggle {
-  display: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.25rem;
-  color: #ff1744;
-  font-size: 1.25rem;
-}
-
-.nav-mobile {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .nav-links {
-    display: none;
-  }
-
-  .nav-toggle {
-    display: block;
-  }
-
-  .nav-mobile {
-    display: flex;
-    flex-direction: column;
-    padding: 0.75rem 1.5rem 1rem;
-    background: #0e0e0e;
-    border-bottom: 1px solid #27272a;
-    list-style: none;
-  }
-
-  .nav-mobile a {
-    font-family: var(--font-headline);
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: #6b7280;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid #1f1f1f;
-    display: block;
-    transition: color 0.15s;
-  }
-
-  .nav-mobile a:last-child {
-    border-bottom: none;
-  }
-
-  .nav-mobile a:hover,
-  .nav-mobile a.active {
-    color: #ff1744;
-  }
 }
 
 /* Page container */
@@ -226,7 +122,8 @@ a {
   margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #ff1744;
+  color: var(--accent);
+  transition: color 0.4s;
 }
 
 .page p {
@@ -244,9 +141,11 @@ a {
 
 .card {
   background: #1a1a1a;
-  border-left: 3px solid #ff1744;
+  border-left: 3px solid var(--accent);
   overflow: hidden;
-  transition: background 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.4s;
   position: relative;
 }
 
@@ -285,13 +184,15 @@ a {
   width: 100%;
   height: auto;
   cursor: pointer;
-  transition: transform 0.15s;
+  transition:
+    transform 0.15s,
+    border-color 0.4s;
   border: 1px solid #27272a;
 }
 
 .image-grid img:hover {
   transform: scale(1.02);
-  border-color: #ff1744;
+  border-color: var(--accent);
 }
 
 /* Tags */
@@ -304,10 +205,13 @@ a {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   background: #1a1a1a;
-  color: #ff1744;
-  border: 1px solid #ff1744;
+  color: var(--accent);
+  border: 1px solid var(--accent);
   margin-right: 0.35rem;
   margin-top: 0.5rem;
+  transition:
+    color 0.4s,
+    border-color 0.4s;
 }
 
 /* Blog post list */
@@ -333,11 +237,12 @@ a {
 
 .post-item .post-date {
   font-size: 0.8rem;
-  color: #ff1744;
+  color: var(--accent);
   letter-spacing: 0.1em;
   font-family: var(--font-headline);
   text-transform: uppercase;
   margin-bottom: 0.35rem;
+  transition: color 0.4s;
 }
 
 .post-item p {

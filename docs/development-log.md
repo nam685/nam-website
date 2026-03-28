@@ -1,5 +1,9 @@
 # Development Log
 
+## 2026-03-28 — Cyberpunk UI redesign + wheel nav
+
+Rebuilt the entire frontend aesthetic: red/black cyberpunk palette (One True God crimson) with per-section accent colors (draws=purple, vibecodes=green, grinds=amber). Replaced the static navbar with a horizontal wheel nav where items simulate a circular wheel viewed from the side — physics-based x/scale/opacity driven by trigonometry, looping topology, 44px+ touch targets. A single `--accent` CSS variable propagates the active section's color site-wide via `document.documentElement.style.setProperty`, so the navbar border, card borders, headings, and hero all shift hue together when navigating. Used Stitch (Google's AI UI tool) for design exploration and Playwright headless Chromium for local screenshot feedback.
+
 ## 2026-03-21
 
 ### Initial Setup
