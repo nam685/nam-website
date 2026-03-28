@@ -12,7 +12,7 @@ import {
 } from "@/lib/navWheel";
 
 const ITEMS = [
-  { label: "thinks", href: "/blog", accent: "#FF1744" },
+  { label: "thinks", href: "/thinks", accent: "#FF1744" },
   { label: "draws", href: "/gallery", accent: "#a855f7" },
   { label: "codes", href: "/projects", accent: "#22c55e" },
   { label: "grinds", href: "/cv", accent: "#f59e0b" },
