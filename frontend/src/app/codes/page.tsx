@@ -1,30 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { type Project, API_INTERNAL } from "@/lib/api";
+
 export const metadata: Metadata = { title: "codes" };
-
-interface ExtraLink {
-  label: string;
-  url: string;
-}
-
-interface Project {
-  title: string;
-  slug: string;
-  description: string;
-  tags: string[];
-  github_url: string;
-  live_url: string;
-  extra_links: ExtraLink[];
-  status: "active" | "wip" | "archived";
-}
 
 async function getProjects(): Promise<Project[]> {
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/projects/`,
-      { next: { revalidate: 60 } },
-    );
+    const res = await fetch(`${API_INTERNAL}/api/projects/`, {
+      next: { revalidate: 60 },
+    });
     if (!res.ok) return fallback;
     return res.json();
   } catch {

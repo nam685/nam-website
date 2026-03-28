@@ -1,8 +1,11 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from PIL import Image as PILImage  # noqa: I001
 
 from ..auth import require_admin
 from ..models import Drawing
+
+ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
 
 
 def drawing_list(request):  # noqa: ARG001
@@ -32,6 +35,16 @@ def drawing_upload(request):
 
     if image.size > 10 * 1024 * 1024:
         return JsonResponse({"error": "Image too large (max 10MB)"}, status=400)
+
+    try:
+        img = PILImage.open(image)
+        img.verify()
+        image.seek(0)
+    except Exception:
+        return JsonResponse({"error": "Invalid or corrupted image file"}, status=400)
+
+    if img.format not in ALLOWED_FORMATS:
+        return JsonResponse({"error": f"Unsupported format. Allowed: {', '.join(sorted(ALLOWED_FORMATS))}"}, status=400)
 
     category = request.POST.get("category", "")
     if category not in ("pencil", "camera"):

@@ -2,36 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface Drawing {
-  id: number;
-  image: string;
-  category: "pencil" | "camera";
-  caption: string;
-  created_at: string;
-}
+import { type Drawing, API } from "@/lib/api";
+import { getAdminToken } from "@/lib/auth";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 const PURPLE = "#a855f7";
-
-/* ── localStorage helpers (SSR-safe) ────────────────── */
-function store(key: string, val?: string): string | null {
-  if (typeof window === "undefined") return null;
-  if (val !== undefined) {
-    localStorage.setItem(key, val);
-    return val;
-  }
-  return localStorage.getItem(key);
-}
-
-/* ── Auth helper ─────────────────────────────────────── */
-function getAdminToken(): string | null {
-  const token = store("adminToken");
-  if (token) return token;
-  if (typeof window !== "undefined") {
-    window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
-  }
-  return null;
-}
 
 /* ── Upload button ──────────────────────────────────── */
 function UploadButton({
