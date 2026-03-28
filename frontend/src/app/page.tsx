@@ -1,76 +1,50 @@
-"use client";
-
-import { useState } from "react";
-import Image from "next/image";
-
-const tabs = [
-  { label: "Underwater", src: "/images/underwater.jpg" },
-  { label: "House", src: "/images/house.jpg" },
-];
+import Link from "next/link";
 
 export default function Home() {
-  const [active, setActive] = useState(0);
-
   return (
-    <main
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        padding: "1rem",
-      }}
-    >
-      <h1
-        style={{
-          fontSize: "clamp(1.5rem, 5vw, 2rem)",
-          fontWeight: "bold",
-          marginBottom: "1.5rem",
-        }}
-      >
-        Nam Le
-      </h1>
-
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
-        {tabs.map((tab, i) => (
-          <button
-            key={tab.label}
-            onClick={() => setActive(i)}
-            style={{
-              padding: "0.5rem 1rem",
-              borderRadius: "0.5rem",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: 500,
-              fontSize: "0.95rem",
-              background: active === i ? "#111" : "#e5e7eb",
-              color: active === i ? "#fff" : "#374151",
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+    <div className="page">
+      <div style={{ marginTop: "3rem", marginBottom: "2rem" }}>
+        <h1>Hi, I&apos;m Nam</h1>
+        <p style={{ fontSize: "1.1rem", maxWidth: "32rem" }}>
+          I build things, draw pictures, and write about whatever catches my
+          attention.
+        </p>
       </div>
 
-      <div
-        style={{
-          borderRadius: "0.75rem",
-          overflow: "hidden",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-          width: "100%",
-          maxWidth: "600px",
-        }}
-      >
-        <Image
-          src={tabs[active].src}
-          alt={tabs[active].label}
-          width={600}
-          height={450}
-          style={{ width: "100%", height: "auto" }}
-          priority
-        />
+      <div className="card-grid">
+        <Link href="/blog">
+          <div className="card">
+            <div className="card-body">
+              <h3>Blog</h3>
+              <p>Thoughts, diary entries, and random text</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/gallery">
+          <div className="card">
+            <div className="card-body">
+              <h3>Gallery</h3>
+              <p>Drawings, photos of cats, fish, trees, and more</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/projects">
+          <div className="card">
+            <div className="card-body">
+              <h3>Projects</h3>
+              <p>Demos and experiments from GitHub</p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/cv">
+          <div className="card">
+            <div className="card-body">
+              <h3>CV</h3>
+              <p>Professional experience and skills</p>
+            </div>
+          </div>
+        </Link>
       </div>
-    </main>
+    </div>
   );
 }

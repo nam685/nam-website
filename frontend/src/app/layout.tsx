@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "Nam Le",
+  title: {
+    default: "Nam Le",
+    template: "%s | Nam Le",
+  },
   description: "Personal website",
-  viewport: "width=device-width, initial-scale=1",
+  icons: { icon: "/favicon.svg" },
+  alternates: { types: { "application/rss+xml": "/feed.xml" } },
 };
 
 export default function RootLayout({
@@ -14,7 +19,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
+      <body>
+        <Navbar />
+        {children}
+      </body>
     </html>
   );
 }
