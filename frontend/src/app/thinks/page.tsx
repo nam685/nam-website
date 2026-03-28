@@ -97,7 +97,16 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
       return;
     }
     setOpen(true);
-    setTimeout(() => inputRef.current?.focus(), 150);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.selectionStart = el.selectionEnd = el.value.length;
+        // Restore auto-grow height for cached text
+        el.style.height = "auto";
+        el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+      }
+    }, 150);
   }
 
   async function handleSubmit() {
