@@ -36,15 +36,28 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  function store(key: string, val?: string): string | null {
+    if (typeof window === "undefined") return null;
+    if (val !== undefined) {
+      localStorage.setItem(key, val);
+      return val;
+    }
+    return localStorage.getItem(key);
+  }
+
+  function storeDel(key: string) {
+    if (typeof window !== "undefined") localStorage.removeItem(key);
+  }
+
   // Check cooldown from localStorage
   function isCoolingDown() {
-    const last = localStorage.getItem("lastThoughtTime");
+    const last = store("lastThoughtTime");
     if (!last) return false;
     return Date.now() - Number(last) < COOLDOWN_MS;
   }
 
   function cooldownRemaining(): string {
-    const last = Number(localStorage.getItem("lastThoughtTime") || 0);
+    const last = Number(store("lastThoughtTime") || 0);
     const remaining = COOLDOWN_MS - (Date.now() - last);
     if (remaining <= 0) return "";
     const h = Math.floor(remaining / 3600000);
@@ -54,10 +67,10 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
 
   // Get or prompt for auth token
   function getToken(): string | null {
-    let token = localStorage.getItem("thoughtToken");
+    let token = store("thoughtToken");
     if (!token) {
       token = prompt("Enter thought token:");
-      if (token) localStorage.setItem("thoughtToken", token);
+      if (token) store("thoughtToken", token);
     }
     return token;
   }
@@ -91,7 +104,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
         body: JSON.stringify({ content }),
       });
       if (res.status === 401) {
-        localStorage.removeItem("thoughtToken");
+        storeDel("thoughtToken");
         setError("Bad token — cleared, try again");
         return;
       }
@@ -101,7 +114,7 @@ function ComposeSprite({ onPost }: { onPost: (t: Thought) => void }) {
         return;
       }
       const thought: Thought = await res.json();
-      localStorage.setItem("lastThoughtTime", String(Date.now()));
+      store("lastThoughtTime", String(Date.now()));
       onPost(thought);
       setText("");
       setOpen(false);
