@@ -120,6 +120,10 @@ const sections: Section[] = [
   {
     title: "Design",
     items: [
+      {
+        text: "Discover Stitch (Figma killer) — explore for UI/UX design without being a pro designer",
+        done: false,
+      },
       { text: "Define color palette and design system", done: false },
       { text: "Typography choices", done: false },
       { text: "Consistent spacing/sizing tokens", done: false },
