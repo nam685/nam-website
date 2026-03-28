@@ -14,4 +14,298 @@ body {
   -webkit-font-smoothing: antialiased;
   background: #f9fafb;
   color: #111;
+  line-height: 1.6;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Navbar */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.nav-logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+}
+
+.nav-links a {
+  font-size: 0.95rem;
+  color: #6b7280;
+  transition: color 0.15s;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+  color: #111;
+}
+
+.nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.nav-mobile {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .nav-links {
+    display: none;
+  }
+
+  .nav-toggle {
+    display: block;
+  }
+
+  .nav-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem 1rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    list-style: none;
+  }
+
+  .nav-mobile a {
+    font-size: 1rem;
+    color: #6b7280;
+    padding: 0.25rem 0;
+  }
+
+  .nav-mobile a:hover,
+  .nav-mobile a.active {
+    color: #111;
+  }
+}
+
+/* Page container */
+.page {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.page-wide {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.page h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.page h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.page p {
+  color: #4b5563;
+  margin-bottom: 1rem;
+}
+
+/* Cards grid */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  transition: box-shadow 0.15s;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card-body {
+  padding: 1rem;
+}
+
+.card-body h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.card-body p {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 0;
+}
+
+/* Image grid */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.image-grid img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.image-grid img:hover {
+  transform: scale(1.02);
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 9999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  margin-right: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+/* Blog post list */
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.post-item {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.post-item h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.post-item .post-date {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin-bottom: 0.35rem;
+}
+
+.post-item p {
+  font-size: 0.95rem;
+  color: #6b7280;
+  margin-bottom: 0;
+}
+
+/* Todo list */
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.95rem;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111;
+    color: #e5e7eb;
+  }
+
+  .nav {
+    background: #1a1a1a;
+    border-bottom-color: #333;
+  }
+
+  .nav-links a {
+    color: #9ca3af;
+  }
+
+  .nav-links a:hover,
+  .nav-links a.active {
+    color: #fff;
+  }
+
+  .nav-mobile {
+    background: #1a1a1a;
+    border-bottom-color: #333;
+  }
+
+  .nav-mobile a {
+    color: #9ca3af;
+  }
+
+  .nav-mobile a:hover,
+  .nav-mobile a.active {
+    color: #fff;
+  }
+
+  .page p {
+    color: #9ca3af;
+  }
+
+  .card {
+    background: #1a1a1a;
+    border-color: #333;
+  }
+
+  .card:hover {
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+  }
+
+  .card-body p {
+    color: #9ca3af;
+  }
+
+  .tag {
+    background: #333;
+    color: #9ca3af;
+  }
+
+  .post-item {
+    border-bottom-color: #333;
+  }
+
+  .post-item p {
+    color: #9ca3af;
+  }
+
+  .todo-item {
+    border-bottom-color: #333;
+  }
 }
