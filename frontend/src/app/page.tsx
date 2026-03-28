@@ -78,19 +78,8 @@ export default function Home() {
           {cards.map((card) => (
             <Link key={card.href} href={card.href}>
               <div
-                className="group relative h-40 sm:h-52 md:h-64 flex flex-col justify-between p-5 md:p-8 transition-colors"
-                style={{
-                  background: "#1a1a1a",
-                  borderLeft: "3px solid #FF1744",
-                }}
-                onMouseEnter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.background =
-                    "#2a2a2a")
-                }
-                onMouseLeave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.background =
-                    "#1a1a1a")
-                }
+                className="group relative h-40 sm:h-52 md:h-64 flex flex-col justify-between p-5 md:p-8 transition-colors bg-[#1a1a1a] hover:bg-[#2a2a2a]"
+                style={{ borderLeft: "3px solid #FF1744" }}
               >
                 <div className="flex justify-between items-start">
                   <span
