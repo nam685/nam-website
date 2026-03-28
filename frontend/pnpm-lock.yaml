@@ -21,9 +21,6 @@ importers:
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
-      '@tailwindcss/oxide-linux-arm64-gnu':
-        specifier: ^4.2.2
-        version: 4.2.2
       '@tailwindcss/postcss':
         specifier: ^4.1
         version: 4.2.2
@@ -2335,7 +2332,8 @@ snapshots:
   '@tailwindcss/oxide-linux-arm-gnueabihf@4.2.2':
     optional: true
 
-  '@tailwindcss/oxide-linux-arm64-gnu@4.2.2': {}
+  '@tailwindcss/oxide-linux-arm64-gnu@4.2.2':
+    optional: true
 
   '@tailwindcss/oxide-linux-arm64-musl@4.2.2':
     optional: true
