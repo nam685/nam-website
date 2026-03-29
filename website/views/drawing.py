@@ -69,7 +69,7 @@ def drawing_upload(request):
 @csrf_exempt
 @require_admin
 @require_POST
-def drawing_delete(request, drawing_id):
+def drawing_delete(request, drawing_id):  # noqa: ARG001
     try:
         drawing = Drawing.objects.get(id=drawing_id)
     except Drawing.DoesNotExist:
