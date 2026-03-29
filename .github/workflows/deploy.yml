@@ -11,25 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     steps:
-      - name: Download frontend build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend-build
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload build to server
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: nam
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: frontend-build/*
-          target: /tmp/next-build
-          strip_components: 1
-          overwrite: true
-
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
         with:
@@ -56,6 +37,5 @@ jobs:
             # Frontend
             cd frontend
             pnpm install --frozen-lockfile
-            rm -rf .next
-            mv /tmp/next-build .next
+            pnpm exec next build
             sudo systemctl restart nextjs
