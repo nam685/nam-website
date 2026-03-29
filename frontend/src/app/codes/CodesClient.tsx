@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API } from "@/lib/api";
+import { store } from "@/lib/auth";
 
 /* ── Data ──────────────────────────────────────────── */
 
@@ -400,15 +401,13 @@ function RefreshButton() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    setIsAdmin(true);
+    if (store("adminToken")) setIsAdmin(true);
   }, []);
 
   if (!isAdmin) return null;
 
   function handleRefresh() {
-    const token = localStorage.getItem("token") ?? "";
+    const token = store("adminToken") ?? "";
     window.location.href = `${API}/api/github/auth/?token=${encodeURIComponent(token)}`;
   }
 
