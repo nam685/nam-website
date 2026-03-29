@@ -198,7 +198,7 @@ function Lightbox({
 
         {/* Image */}
         <img
-          src={d.image}
+          src={`${API}${d.image}`}
           alt={d.caption || `Drawing ${d.id}`}
           style={{
             maxWidth: "100%",
@@ -340,7 +340,7 @@ function ImageColumn({
             }}
           >
             <img
-              src={d.image}
+              src={`${API}${d.image}`}
               alt={d.caption || `Drawing ${d.id}`}
               loading="lazy"
               style={{
@@ -696,7 +696,7 @@ export default function DrawsPage() {
                       }}
                     >
                       <img
-                        src={d.image}
+                        src={`${API}${d.image}`}
                         alt={d.caption || `Drawing ${d.id}`}
                         loading="lazy"
                         style={{
