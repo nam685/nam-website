@@ -50,20 +50,20 @@ describe("wheelTransform", () => {
     expect(t.opacity).toBeCloseTo(1);
   });
 
-  it("shows 5 items: d=±2 clearly visible (opacity ≥ 0.4)", () => {
-    const t = wheelTransform(2, R);
+  it("d=±1 clearly visible (opacity ≥ 0.4)", () => {
+    const t = wheelTransform(1, R);
     expect(t.opacity).toBeGreaterThanOrEqual(0.4);
     expect(t.opacity).toBeLessThan(1);
   });
 
-  it("edge items (d=±2) scale is ≥ 0.7 (readable, not tiny)", () => {
-    const t = wheelTransform(2, R);
+  it("d=±1 scale is ≥ 0.7 (readable, not tiny)", () => {
+    const t = wheelTransform(1, R);
     expect(t.scale).toBeGreaterThanOrEqual(0.7);
   });
 
-  it("d=±3 invisible (opacity = 0) with DEG=30", () => {
-    const t = wheelTransform(3, R);
-    expect(t.opacity).toBeCloseTo(0, 5);
+  it("d=±2 invisible (opacity ≈ 0) with DEG=45", () => {
+    const t = wheelTransform(2, R);
+    expect(t.opacity).toBeLessThan(0.01);
   });
 
   it("items beyond d=3 stay at 0 opacity (not negative)", () => {

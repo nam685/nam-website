@@ -1,6 +1,6 @@
 // Pure nav-wheel logic — extracted so it can be unit-tested without a DOM.
 
-export const NAV_DEG = 30;
+export const NAV_DEG = 45;
 export const SPRING_FACTOR = 0.18;
 export const SPRING_THRESHOLD = 0.005;
 
@@ -15,8 +15,8 @@ export function circularD(i: number, center: number, n: number): number {
 /**
  * Visual transform for a wheel item at circular distance d from center.
  * r = radius in pixels (responsive to container width).
- * With DEG=30, items at d=±2 have opacity 0.5, d=±3 have opacity 0.
- * This gives exactly 5 clearly visible items.
+ * With DEG=45, items at d=±1 are clearly visible, d=±2 are faint.
+ * This gives 3 clearly visible items with more breathing room.
  */
 export function wheelTransform(d: number, r: number) {
   const θ = d * NAV_DEG * (Math.PI / 180);

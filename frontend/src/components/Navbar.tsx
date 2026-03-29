@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { peekAdminToken } from "@/lib/auth";
 import {
   SPRING_THRESHOLD,
   circularD,
@@ -11,7 +12,7 @@ import {
   wheelTransform,
 } from "@/lib/navWheel";
 
-const ITEMS = [
+const BASE_ITEMS = [
   { label: "thinks", href: "/thinks", accent: "#FF1744" },
   { label: "draws", href: "/draws", accent: "#a855f7" },
   { label: "codes", href: "/codes", accent: "#22c55e" },
@@ -23,7 +24,7 @@ const ITEMS = [
   { label: "bets", href: "/bets", accent: "#db2777" },
 ];
 
-const N = ITEMS.length;
+const DEBUG_ITEM = { label: "debugs", href: "/debug", accent: "#10b981" };
 
 function applyAccent(accent: string) {
   document.documentElement.style.setProperty("--accent", accent);
@@ -32,9 +33,20 @@ function applyAccent(accent: string) {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    setIsAdmin(!!peekAdminToken());
+    const onStorage = () => setIsAdmin(!!peekAdminToken());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const items = isAdmin ? [...BASE_ITEMS, DEBUG_ITEM] : BASE_ITEMS;
+  const n = items.length;
 
   const [center, setCenter] = useState(() => {
-    const idx = ITEMS.findIndex(
+    const idx = items.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
     );
     return idx !== -1 ? idx : 0;
@@ -64,13 +76,13 @@ export default function Navbar() {
 
     const tick = () => {
       const vc = visualCenter.current;
-      const d = circularD(center, vc, N);
+      const d = circularD(center, vc, n);
       if (Math.abs(d) < SPRING_THRESHOLD) {
         visualCenter.current = center;
         rerender((n) => n + 1);
         return;
       }
-      visualCenter.current = springStep(vc, center, N);
+      visualCenter.current = springStep(vc, center, n);
       rerender((n) => n + 1);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -79,29 +91,29 @@ export default function Navbar() {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [center]);
+  }, [center, n]);
 
   // Sync wheel position and accent to current route.
   const centerRef = useRef(center);
   centerRef.current = center;
 
   useEffect(() => {
-    const idx = ITEMS.findIndex(
+    const idx = items.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
     );
     if (idx !== -1) {
       setCenter(idx);
-      applyAccent(ITEMS[idx].accent);
+      applyAccent(items[idx].accent);
     } else {
-      applyAccent(ITEMS[centerRef.current].accent);
+      applyAccent(items[centerRef.current].accent);
     }
   }, [pathname]);
 
   function shift(dir: -1 | 1) {
-    const next = shiftCenter(center, dir, N);
+    const next = shiftCenter(center, dir, n);
     setCenter(next);
-    applyAccent(ITEMS[next].accent);
-    router.push(ITEMS[next].href);
+    applyAccent(items[next].accent);
+    router.push(items[next].href);
   }
 
   const vc = visualCenter.current;
@@ -194,8 +206,8 @@ export default function Navbar() {
           touchStartX.current = null;
         }}
       >
-        {ITEMS.map((item, i) => {
-          const d = circularD(i, vc, N);
+        {items.map((item, i) => {
+          const d = circularD(i, vc, n);
           const { x, scale, opacity } = wheelTransform(d, radius);
 
           const isCentered = i === center;

@@ -1,5 +1,6 @@
 from .auth import check as auth_check
 from .auth import login as auth_login
+from .debug import debug_upload, debug_uploads
 from .drawing import drawing_list, drawing_upload
 from .health import health
 from .project import project_list
@@ -9,6 +10,8 @@ from .todo import todo_list
 __all__ = [
     "auth_check",
     "auth_login",
+    "debug_upload",
+    "debug_uploads",
     "drawing_list",
     "drawing_upload",
     "health",
