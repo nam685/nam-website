@@ -3,22 +3,47 @@
 ## Server
 
 - **Provider:** Hetzner Cloud
-- **Public IP:** 204.168.159.7
+- **Public IP:** (update after new server provisioned)
 - **Architecture:** aarch64 (ARM64)
 - **OS:** Linux (Ubuntu)
-- **Node.js:** v18.19.1
+- **Node.js:** v20
 
 ## Domain
 
 - **Domain:** nam685.de (registered via Porkbun, ~$2.50/yr first year)
-- **DNS:** Porkbun DNS, A record → 204.168.159.7
+- **DNS:** Porkbun DNS, A record → (update to new server IP)
 
 ## Services Running
 
 - **Caddy** — reverse proxy on ports 80/443, auto HTTPS via Let's Encrypt
-- **Next.js frontend** — port 3000, running in zellij session `website`
-- **Django backend** — not yet deployed
-- **PostgreSQL + Redis** — via Docker Compose (not yet started)
+- **Next.js frontend** — port 3000, systemd service (`nextjs`)
+- **Django backend** — port 8000, systemd service (`django`) via gunicorn
+- **PostgreSQL + Redis** — via Docker Compose
+
+## First-time Server Setup
+
+After provisioning a new server, run these steps once (deploy CI only restarts services):
+
+```bash
+# 1. Copy systemd services
+sudo cp infra/django.service /etc/systemd/system/django.service
+sudo cp infra/nextjs.service /etc/systemd/system/nextjs.service
+sudo systemctl daemon-reload
+sudo systemctl enable django nextjs
+
+# 2. Copy Caddyfile
+sudo cp infra/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+
+# 3. Create .env at deploy path
+cp .env.example ~/nam-website-deploy/.env
+# Edit with real SECRET_KEY, ADMIN_SECRET, DATABASE_URL, etc.
+
+# 4. Start Docker services (PostgreSQL + Redis)
+docker compose up -d
+
+# 5. Update GitHub Secret DEPLOY_HOST to new server IP
+```
 
 ## Firewall (ufw)
 

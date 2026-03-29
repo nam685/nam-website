@@ -9,7 +9,8 @@ import { store, storeDel } from "@/lib/auth";
 function SudoForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const from = searchParams.get("from") || "/";
+  const rawFrom = searchParams.get("from") || "/";
+  const from = rawFrom.startsWith("/") && !rawFrom.startsWith("//") ? rawFrom : "/";
 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

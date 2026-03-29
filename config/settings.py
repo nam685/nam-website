@@ -85,6 +85,11 @@ ADMIN_SECRET = env("ADMIN_SECRET", default="")
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+SESSION_COOKIE_SAMESITE = "Strict"
+CSRF_COOKIE_SAMESITE = "Strict"
+
 # ── Security settings (enabled in production, when DEBUG=False) ──
 if not DEBUG:
     SECURE_SSL_REDIRECT = True

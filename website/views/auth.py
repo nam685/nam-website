@@ -1,15 +1,13 @@
+import hmac
 import json
-import time
-from collections import defaultdict
 
+import redis
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import create_token, verify_token
 
-# Simple in-memory rate limiter for login attempts
-_login_attempts: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_MAX = 5
 _RATE_LIMIT_WINDOW = 900  # 15 minutes
 
@@ -22,9 +20,16 @@ def _get_client_ip(request):
 
 
 def _is_rate_limited(ip: str) -> bool:
-    now = time.monotonic()
-    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_LIMIT_WINDOW]
-    return len(_login_attempts[ip]) >= _RATE_LIMIT_MAX
+    try:
+        r = redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        key = f"login_attempts:{ip}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, _RATE_LIMIT_WINDOW)
+        return count > _RATE_LIMIT_MAX
+    except redis.RedisError:
+        # If Redis is unavailable, fail open to avoid locking out the admin
+        return False
 
 
 @csrf_exempt
@@ -46,8 +51,7 @@ def login(request):
     if not admin_secret:
         return JsonResponse({"error": "Not configured"}, status=503)
 
-    if secret != admin_secret:
-        _login_attempts[ip].append(time.monotonic())
+    if not hmac.compare_digest(secret.encode(), admin_secret.encode()):
         return JsonResponse({"error": "Wrong secret"}, status=401)
 
     return JsonResponse({"token": create_token()})
