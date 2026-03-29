@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
+import { getContribColor } from "@/lib/contributions";
 
 /* ── Data ──────────────────────────────────────────── */
 
@@ -299,14 +300,6 @@ function ProjectCard({ project }: { project: CodeProject }) {
 }
 
 /* ── Contribution graph ──────────────────────────── */
-
-function getContribColor(count: number): string {
-  if (count === 0) return "#161b22";
-  if (count <= 2) return `color-mix(in srgb, ${ACCENT} 25%, #0e0e0e)`;
-  if (count <= 5) return `color-mix(in srgb, ${ACCENT} 45%, #0e0e0e)`;
-  if (count <= 10) return `color-mix(in srgb, ${ACCENT} 65%, #0e0e0e)`;
-  return ACCENT;
-}
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
