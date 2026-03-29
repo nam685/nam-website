@@ -39,9 +39,12 @@ function UploadButton({
       if (res.ok) {
         const drawing: Drawing = await res.json();
         onUpload(drawing);
+      } else {
+        const err = await res.json().catch(() => null);
+        alert(err?.error ?? `Upload failed (${res.status})`);
       }
     } catch {
-      /* ignore */
+      alert("Upload failed — check your connection");
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -49,7 +52,10 @@ function UploadButton({
   }
 
   return (
-    <label
+    <button
+      type="button"
+      onClick={() => fileRef.current?.click()}
+      disabled={uploading}
       style={{
         background: "none",
         border: `1px solid ${PURPLE}40`,
@@ -64,6 +70,7 @@ function UploadButton({
         fontSize: "0.9rem",
         transition: "border-color 0.2s, background 0.2s",
         flexShrink: 0,
+        padding: 0,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = PURPLE;
@@ -80,7 +87,6 @@ function UploadButton({
         type="file"
         accept="image/*"
         onChange={handleFile}
-        disabled={uploading}
         style={{
           position: "absolute",
           width: 0,
@@ -90,7 +96,7 @@ function UploadButton({
         }}
       />
       {uploading ? "..." : "+"}
-    </label>
+    </button>
   );
 }
 
