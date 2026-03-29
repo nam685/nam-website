@@ -13,4 +13,7 @@ urlpatterns = [
     path("drawings/", views.drawing_list),
     path("drawings/upload/", views.drawing_upload),
     path("github/contributions/", views.github_contributions),
+    path("github/auth/", views.github_auth),
+    path("github/callback/", views.github_callback),
+    path("github/refresh-status/", views.github_refresh_status),
 ]
