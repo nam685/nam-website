@@ -558,15 +558,16 @@ export default function CodesClient({
             zIndex: 2,
           }}
         >
-          {calendar && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                marginBottom: "0.5rem",
-              }}
-            >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: "0.75rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            {calendar && (
               <span
                 style={{
                   fontFamily: "var(--font-headline)",
@@ -577,8 +578,9 @@ export default function CodesClient({
               >
                 {calendar.totalContributions} contributions in the last year
               </span>
-            </div>
-          )}
+            )}
+            <RefreshButton />
+          </div>
 
           <div
             style={{
