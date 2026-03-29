@@ -2,23 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-import { ENTRIES, type GrindEntry } from "@/lib/grindsData";
+import { ENTRIES, type GrindEntry, type LeafConfig } from "@/lib/grindsData";
 
 const ACCENT = "#f59e0b";
 
 /* ── Fluorescent leaf decorations ──────────────────── */
-interface LeafProps {
-  src: string;
-  top: string;
-  left: string;
-  width: string;
-  opacity: number;
-  rotate?: number;
-  flipX?: boolean;
-  delay?: number;
-}
-
-function FloatingLeaf({ src, top, left, width, opacity, rotate = 0, flipX = false, delay = 0 }: LeafProps) {
+function FloatingLeaf({ src, top, left, width, opacity, rotate = 0, flipX = false, delay = 0 }: LeafConfig) {
   return (
     <img
       src={src}
@@ -98,9 +87,10 @@ function TimelineCard({
           borderRadius: "0.5rem",
           padding: "1.25rem 1.5rem",
           position: "relative",
-          overflow: "hidden",
         }}
       >
+        {/* Leaf decoration */}
+        <FloatingLeaf {...entry.leaf} />
         {/* Corner bracket — top, trunk-facing side */}
         <div
           style={{
@@ -267,6 +257,9 @@ function MobileTimelineCard({
           zIndex: 3,
         }}
       />
+
+      {/* Leaf decoration */}
+      <FloatingLeaf {...entry.leaf} />
 
       {/* Period + city */}
       <div
@@ -452,13 +445,6 @@ export default function GrindsPage() {
           minHeight: "100vh",
         }}
       >
-        {/* Fluorescent leaf decorations */}
-        <FloatingLeaf src="/grinds-leaves.png" top="65%" left="-2%" width="180px" opacity={0.35} rotate={5} delay={0} />
-        <FloatingLeaf src="/grinds-vine.png" top="5%" left="78%" width="160px" opacity={0.25} rotate={15} delay={2} />
-        <FloatingLeaf src="/grinds-leaves.png" top="30%" left="82%" width="120px" opacity={0.2} rotate={-10} flipX delay={1} />
-        <FloatingLeaf src="/grinds-vine.png" top="75%" left="85%" width="140px" opacity={0.2} rotate={-20} flipX delay={3} />
-        <FloatingLeaf src="/grinds-leaves.png" top="10%" left="-3%" width="100px" opacity={0.15} rotate={20} flipX delay={1.5} />
-
         {/* Tagline */}
         <div
           style={{
