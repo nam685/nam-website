@@ -12,6 +12,4 @@ urlpatterns = [
     path("thoughts/create/", views.thought_create),
     path("drawings/", views.drawing_list),
     path("drawings/upload/", views.drawing_upload),
-    path("debug/uploads/", views.debug_uploads),
-    path("debug/upload/", views.debug_upload),
 ]

@@ -24,8 +24,3 @@ export function getAdminToken(): string | null {
   }
   return null;
 }
-
-/** Returns token without redirecting — for conditional UI */
-export function peekAdminToken(): string | null {
-  return store("adminToken") ?? null;
-}
