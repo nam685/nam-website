@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   NAV_DEG,
+  NAV_DEG_MOBILE,
   SPRING_THRESHOLD,
   circularD,
   shiftCenter,
@@ -61,8 +62,18 @@ describe("wheelTransform", () => {
     expect(t.scale).toBeGreaterThanOrEqual(0.7);
   });
 
-  it("d=±2 invisible (opacity ≈ 0) with DEG=45", () => {
+  it("d=±2 visible (opacity ≈ 0.5) with DEG=30", () => {
     const t = wheelTransform(2, R);
+    expect(t.opacity).toBeCloseTo(0.5, 1);
+  });
+
+  it("d=±3 invisible (opacity ≈ 0) with DEG=30", () => {
+    const t = wheelTransform(3, R);
+    expect(t.opacity).toBeLessThan(0.01);
+  });
+
+  it("mobile: d=±1 invisible with DEG=90", () => {
+    const t = wheelTransform(1, R, NAV_DEG_MOBILE);
     expect(t.opacity).toBeLessThan(0.01);
   });
 

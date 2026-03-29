@@ -1,6 +1,7 @@
 // Pure nav-wheel logic — extracted so it can be unit-tested without a DOM.
 
-export const NAV_DEG = 45;
+export const NAV_DEG = 30;
+export const NAV_DEG_MOBILE = 90;
 export const SPRING_FACTOR = 0.18;
 export const SPRING_THRESHOLD = 0.005;
 
@@ -15,11 +16,10 @@ export function circularD(i: number, center: number, n: number): number {
 /**
  * Visual transform for a wheel item at circular distance d from center.
  * r = radius in pixels (responsive to container width).
- * With DEG=45, items at d=±1 are clearly visible, d=±2 are faint.
- * This gives 3 clearly visible items with more breathing room.
+ * Desktop (deg=30): 5 visible items. Mobile (deg=90): center only.
  */
-export function wheelTransform(d: number, r: number) {
-  const θ = d * NAV_DEG * (Math.PI / 180);
+export function wheelTransform(d: number, r: number, deg = NAV_DEG) {
+  const θ = d * deg * (Math.PI / 180);
   const cosθ = Math.cos(θ);
   // Scale uses sqrt(cos) so edge items (d=±2) are ~0.84x, not 0.5x.
   // This keeps edge labels readable — only slightly smaller than center.
