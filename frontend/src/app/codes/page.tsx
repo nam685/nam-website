@@ -35,7 +35,7 @@ async function fetchContributions() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query }),
-      next: { revalidate: 86400 }, // rebuild daily
+      cache: "force-cache", // baked at build time, refreshes on deploy
     });
     if (!res.ok) return null;
     const data = await res.json();
