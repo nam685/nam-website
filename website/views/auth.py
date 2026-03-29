@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import create_token, verify_token
 
-_RATE_LIMIT_MAX = 5
+_RATE_LIMIT_MAX = 15
 _RATE_LIMIT_WINDOW = 900  # 15 minutes
 
 

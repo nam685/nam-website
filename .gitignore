@@ -28,6 +28,9 @@ frontend/.next/
 frontend/out/
 frontend/.vercel
 
+# Claude Code
+.claude/
+
 # IDE
 .vscode/
 .idea/
