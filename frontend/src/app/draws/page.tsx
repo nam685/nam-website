@@ -106,15 +106,18 @@ function Lightbox({
   index,
   onClose,
   onNav,
+  onDelete,
 }: {
   drawings: Drawing[];
   index: number;
   onClose: () => void;
   onNav: (dir: -1 | 1) => void;
+  onDelete: (id: number) => void;
 }) {
   const d = drawings[index];
   const hasPrev = index > 0;
   const hasNext = index < drawings.length - 1;
+  const isAdmin = typeof window !== "undefined" && !!localStorage.getItem("adminToken");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -250,6 +253,38 @@ function Lightbox({
         </p>
       )}
 
+      {/* Delete button (admin only) */}
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm("Delete this drawing?")) onDelete(d.id);
+          }}
+          style={{
+            marginTop: "0.75rem",
+            background: "none",
+            border: `1px solid #f8717140`,
+            borderRadius: "4px",
+            color: "#f87171",
+            fontSize: "0.75rem",
+            padding: "0.25rem 0.75rem",
+            cursor: "pointer",
+            transition: "background 0.2s, border-color 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#f87171";
+            e.currentTarget.style.background = "#f8717115";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "#f8717140";
+            e.currentTarget.style.background = "none";
+          }}
+        >
+          delete
+        </button>
+      )}
+
       {/* Bottom separator */}
       <div
         style={{
@@ -353,6 +388,25 @@ export default function DrawsPage() {
     if (next >= 0 && next < drawings.length) setLightboxIdx(next);
   }
 
+  async function handleDelete(id: number) {
+    const token = getAdminToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/drawings/${id}/delete/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setDrawings((prev) => prev.filter((d) => d.id !== id));
+        setLightboxIdx(null);
+      } else {
+        alert("Failed to delete");
+      }
+    } catch {
+      alert("Failed to delete — check your connection");
+    }
+  }
+
   return (
     <>
       <title>Nam draws</title>
@@ -363,6 +417,7 @@ export default function DrawsPage() {
           index={lightboxIdx}
           onClose={() => setLightboxIdx(null)}
           onNav={handleLightboxNav}
+          onDelete={handleDelete}
         />
       )}
 
