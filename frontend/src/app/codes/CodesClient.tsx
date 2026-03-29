@@ -558,31 +558,15 @@ export default function CodesClient({
             zIndex: 2,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "1rem",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <h2
-                style={{
-                  fontFamily: "var(--font-headline)",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  color: ACCENT,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  margin: 0,
-                }}
-              >
-                Contribution Map
-              </h2>
-              <RefreshButton />
-            </div>
-            {calendar && (
+          {calendar && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                marginBottom: "0.5rem",
+              }}
+            >
               <span
                 style={{
                   fontFamily: "var(--font-headline)",
@@ -593,8 +577,8 @@ export default function CodesClient({
               >
                 {calendar.totalContributions} contributions in the last year
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           <div
             style={{
@@ -617,7 +601,7 @@ export default function CodesClient({
                   letterSpacing: "0.1em",
                 }}
               >
-                no data yet — click sync to fetch
+                no contribution data yet
               </div>
             )}
 
@@ -669,24 +653,6 @@ export default function CodesClient({
             )}
           </div>
 
-          {/* Link to GitHub profile */}
-          <div style={{ textAlign: "center", marginTop: "0.75rem" }}>
-            <a
-              href="https://github.com/nam685"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="code-link"
-              style={{
-                fontFamily: "var(--font-headline)",
-                fontSize: "0.6rem",
-                color: "#333",
-                letterSpacing: "0.15em",
-                textTransform: "uppercase",
-              }}
-            >
-              github.com/nam685
-            </a>
-          </div>
         </div>
 
         {/* Bottom tagline */}
@@ -698,7 +664,11 @@ export default function CodesClient({
             zIndex: 2,
           }}
         >
-          <span
+          <a
+            href="https://github.com/nam685"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="code-link"
             style={{
               fontFamily: "var(--font-headline)",
               fontSize: "0.65rem",
@@ -707,8 +677,8 @@ export default function CodesClient({
               textTransform: "uppercase",
             }}
           >
-            shipping since 2023
-          </span>
+            github.com/nam685
+          </a>
         </div>
       </div>
     </>

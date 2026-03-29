@@ -51,7 +51,7 @@ const ENTRIES: GrindEntry[] = [
   {
     period: "2004 – 2019",
     org: "Vietnamese Education System",
-    url: "https://en.wikipedia.org/wiki/Education_in_Vietnam",
+    url: "https://moet.gov.vn/page/sitemapPortal",
     role: "Battle Royale",
     city: "Hanoi",
     description:
