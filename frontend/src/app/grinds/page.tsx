@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 interface GrindEntry {
   period: string;
   org: string;
+  url: string;
   role: string;
   city: string;
   description: string;
@@ -17,6 +18,7 @@ const ENTRIES: GrindEntry[] = [
   {
     period: "now",
     org: "ellamind",
+    url: "https://ellamind.com",
     role: "Button pressing but AI",
     city: "Bremen",
     description:
@@ -27,6 +29,7 @@ const ENTRIES: GrindEntry[] = [
   {
     period: "2023 – 2026",
     org: "Peregrine.ai",
+    url: "https://peregrine.ai",
     role: "Button pressing",
     city: "Berlin",
     description:
@@ -37,6 +40,7 @@ const ENTRIES: GrindEntry[] = [
   {
     period: "2019 – 2023",
     org: "Sorbonne University",
+    url: "https://www.sorbonne-universite.fr",
     role: "Button pressing practice",
     city: "Paris",
     description:
@@ -47,6 +51,7 @@ const ENTRIES: GrindEntry[] = [
   {
     period: "2004 – 2019",
     org: "Vietnamese Education System",
+    url: "https://en.wikipedia.org/wiki/Education_in_Vietnam",
     role: "Battle Royale",
     city: "Hanoi",
     description:
@@ -205,12 +210,18 @@ function TimelineCard({
             fontFamily: "var(--font-headline)",
             fontSize: "1.1rem",
             fontWeight: 700,
-            color: "#e5e2e1",
             letterSpacing: "-0.01em",
             marginBottom: "0.15rem",
           }}
         >
-          {entry.org}
+          <a
+            href={entry.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="grind-org-link"
+          >
+            {entry.org}
+          </a>
         </h3>
 
         {/* Role */}
@@ -353,11 +364,17 @@ function MobileTimelineCard({
           fontFamily: "var(--font-headline)",
           fontSize: "1rem",
           fontWeight: 700,
-          color: "#e5e2e1",
           marginBottom: "0.1rem",
         }}
       >
-        {entry.org}
+        <a
+          href={entry.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="grind-org-link"
+        >
+          {entry.org}
+        </a>
       </h3>
 
       {/* Role */}
@@ -468,6 +485,14 @@ export default function GrindsPage() {
         .grind-card-mobile { animation-name: slideUp; }
         .grind-card-inner {
           transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .grind-org-link {
+          color: #e5e2e1;
+          text-decoration: none;
+          transition: color 0.2s;
+        }
+        .grind-org-link:hover {
+          color: ${ACCENT};
         }
         .grind-card-inner:hover {
           border-color: color-mix(in srgb, ${ACCENT} 50%, #1a1a1a) !important;
