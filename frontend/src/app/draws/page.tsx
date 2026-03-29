@@ -49,45 +49,48 @@ function UploadButton({
   }
 
   return (
-    <>
+    <label
+      style={{
+        background: "none",
+        border: `1px solid ${PURPLE}40`,
+        borderRadius: "50%",
+        width: "1.75rem",
+        height: "1.75rem",
+        cursor: uploading ? "wait" : "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: PURPLE,
+        fontSize: "0.9rem",
+        transition: "border-color 0.2s, background 0.2s",
+        flexShrink: 0,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = PURPLE;
+        e.currentTarget.style.background = `${PURPLE}15`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = `${PURPLE}40`;
+        e.currentTarget.style.background = "none";
+      }}
+      title={`Upload ${category}`}
+    >
       <input
         ref={fileRef}
         type="file"
         accept="image/*"
         onChange={handleFile}
-        style={{ display: "none" }}
-      />
-      <button
-        onClick={() => fileRef.current?.click()}
         disabled={uploading}
         style={{
-          background: "none",
-          border: `1px solid ${PURPLE}40`,
-          borderRadius: "50%",
-          width: "1.75rem",
-          height: "1.75rem",
-          cursor: uploading ? "wait" : "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: PURPLE,
-          fontSize: "0.9rem",
-          transition: "border-color 0.2s, background 0.2s",
-          flexShrink: 0,
+          position: "absolute",
+          width: 0,
+          height: 0,
+          overflow: "hidden",
+          opacity: 0,
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = PURPLE;
-          e.currentTarget.style.background = `${PURPLE}15`;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = `${PURPLE}40`;
-          e.currentTarget.style.background = "none";
-        }}
-        title={`Upload ${category}`}
-      >
-        {uploading ? "..." : "+"}
-      </button>
-    </>
+      />
+      {uploading ? "..." : "+"}
+    </label>
   );
 }
 

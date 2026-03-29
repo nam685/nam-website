@@ -49,6 +49,7 @@ export default function Navbar() {
   const wheelRef = useRef<HTMLDivElement>(null);
   const [radius, setRadius] = useState(310);
   const [deg, setDeg] = useState(NAV_DEG);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Measure wheel container width → derive radius + mobile deg
   useEffect(() => {
@@ -60,7 +61,15 @@ export default function Navbar() {
       setDeg(w < 300 ? NAV_DEG_MOBILE : NAV_DEG);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+
+    const mq = window.matchMedia("(max-width: 640px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => {
+      ro.disconnect();
+      mq.removeEventListener("change", handler);
+    };
   }, []);
 
   // Spring: animate visualCenter toward center along the shortest circular arc
@@ -204,6 +213,7 @@ export default function Navbar() {
           const { x, scale, opacity } = wheelTransform(d, radius, deg);
 
           const isCentered = i === center;
+          const hidden = isMobile && !isCentered;
 
           return (
             <Link
@@ -219,7 +229,7 @@ export default function Navbar() {
                 top: "50%",
                 transform: `translate(calc(-50% + ${x}px), -50%) scale(${scale})`,
                 transition: "color 0.3s",
-                opacity,
+                opacity: hidden ? 0 : opacity,
                 color: isCentered ? item.accent : "#9ca3af",
                 fontFamily: "var(--font-headline)",
                 fontWeight: 700,
