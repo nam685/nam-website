@@ -18,6 +18,10 @@ jobs:
           username: nam
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
+            export PATH="$HOME/.local/bin:$HOME/.local/share/pnpm:$PATH"
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
             if [ ! -d ~/nam-website-deploy ]; then
               git clone https://github.com/nam685/nam-website.git ~/nam-website-deploy
             fi
@@ -31,10 +35,6 @@ jobs:
             sudo systemctl restart django
 
             # Frontend
-            export NVM_DIR="$HOME/.nvm"
-            source "$NVM_DIR/nvm.sh"
-            export PNPM_HOME="$HOME/.local/share/pnpm"
-            export PATH="$PNPM_HOME:$PATH"
             cd frontend
             pnpm install --frozen-lockfile
             pnpm exec next build
