@@ -1,5 +1,6 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from PIL import Image as PILImage  # noqa: I001
 
 from ..auth import require_admin
@@ -63,3 +64,17 @@ def drawing_upload(request):
         },
         status=201,
     )
+
+
+@csrf_exempt
+@require_admin
+@require_POST
+def drawing_delete(request, drawing_id):
+    try:
+        drawing = Drawing.objects.get(id=drawing_id)
+    except Drawing.DoesNotExist:
+        return JsonResponse({"error": "Drawing not found"}, status=404)
+
+    drawing.image.delete(save=False)
+    drawing.delete()
+    return JsonResponse({"ok": True})
