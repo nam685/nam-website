@@ -36,17 +36,7 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm build
-
-      - name: Upload frontend build
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend/.next
-          retention-days: 1
 
       - uses: actions/setup-python@v6
         with:
