@@ -1,5 +1,9 @@
 # Development Log
 
+## 2026-03-29 — Security hardening + server rebuild after ransomware
+
+Hardened server attack surface after ransomware incident: bound PostgreSQL and Redis to `127.0.0.1` only (previously exposed to internet on `0.0.0.0`), moved postgres credentials to env vars, added Redis-backed rate limiting to the login endpoint (replacing in-memory dict), switched to `hmac.compare_digest` for timing-safe secret comparison. Added CSP header to Caddyfile, `SameSite=Strict` on session/CSRF cookies, fixed an open redirect in the `/sudo` login page, and created the missing `infra/nextjs.service` systemd unit. Updated `docs/infrastructure.md` with first-time server setup steps for the new Hetzner server (IP: 46.224.162.194).
+
 ## 2026-03-28 — Cyberpunk UI redesign + wheel nav
 
 Rebuilt the entire frontend aesthetic: red/black cyberpunk palette (One True God crimson) with per-section accent colors (draws=purple, vibecodes=green, grinds=amber). Replaced the static navbar with a horizontal wheel nav where items simulate a circular wheel viewed from the side — physics-based x/scale/opacity driven by trigonometry, looping topology, 44px+ touch targets. A single `--accent` CSS variable propagates the active section's color site-wide via `document.documentElement.style.setProperty`, so the navbar border, card borders, headings, and hero all shift hue together when navigating. Used Stitch (Google's AI UI tool) for design exploration and Playwright headless Chromium for local screenshot feedback.

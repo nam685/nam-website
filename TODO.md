@@ -81,7 +81,7 @@
 - [ ] OAuth / social login (optional)
 
 ## Infrastructure
-- [ ] Set up GitHub Actions deploy SSH key secret
+- [x] Set up GitHub Actions deploy SSH key secret
 - [x] Start PostgreSQL + Redis via Docker Compose
 - [x] Deploy Django backend
 - [x] Upgrade Node.js to 20+ (fixes Tailwind v4 ARM64 support)
