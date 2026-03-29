@@ -15,43 +15,43 @@ interface GrindEntry {
 
 const ENTRIES: GrindEntry[] = [
   {
-    period: "2015 – 2018",
-    org: "Vietnamese Education System",
-    role: "Battle Royale",
-    city: "Hanoi",
-    description:
-      "Survived the gauntlet of Vietnamese high school where 40 students per class compete for university spots like it's a hunger games qualifier. Learned that sleep is optional and math is eternal.",
-    tags: ["math", "physics", "survival"],
-    side: "right",
-  },
-  {
-    period: "2018 – 2022",
-    org: "Sorbonne University",
-    role: "Button pressing practice",
-    city: "Paris",
-    description:
-      "Practiced pressing buttons in a more structured environment. Studied computer science where the lectures were in French but the Stack Overflow was in English. Baguettes were consumed.",
-    tags: ["CS", "algorithms", "baguettes"],
-    side: "left",
-  },
-  {
-    period: "2022 – 2024",
-    org: "Peregrine.ai",
-    role: "Button pressing",
-    city: "Berlin",
-    description:
-      "Started pressing buttons professionally. Turned caffeine into code and meetings into Jira tickets. Learned that production is just a more stressful version of localhost.",
-    tags: ["fullstack", "startup", "coffee"],
-    side: "right",
-  },
-  {
-    period: "2024 – present",
+    period: "now",
     org: "ellamind",
     role: "Button pressing but AI",
     city: "Bremen",
     description:
-      "Same button pressing but now the buttons sometimes press themselves. Working on AI things where half the job is explaining to the model what you actually want. The other half is debugging prompts.",
-    tags: ["AI", "LLMs", "prompt-whispering"],
+      "I get skill gapped by agent.",
+    tags: ["vibecode"],
+    side: "right",
+  },
+  {
+    period: "2023 – 2026",
+    org: "Peregrine.ai",
+    role: "Button pressing",
+    city: "Berlin",
+    description:
+      "I write actual understandable code.",
+    tags: ["software engineer"],
+    side: "left",
+  },
+  {
+    period: "2019 – 2023",
+    org: "Sorbonne University",
+    role: "Button pressing practice",
+    city: "Paris",
+    description:
+      "I beat other kids but in french.",
+    tags: ["computer science"],
+    side: "right",
+  },
+  {
+    period: "2004 – 2019",
+    org: "Vietnamese Education System",
+    role: "Battle Royale",
+    city: "Hanoi",
+    description:
+      "I beat other kids.",
+    tags: ["math"],
     side: "left",
   },
 ];
@@ -173,7 +173,7 @@ function TimelineCard({
           overflow: "hidden",
         }}
       >
-        {/* Corner brackets */}
+        {/* Corner bracket — top, trunk-facing side */}
         <div
           style={{
             position: "absolute",
@@ -183,17 +183,6 @@ function TimelineCard({
             height: "14px",
             borderTop: `2px solid ${ACCENT}`,
             [isLeft ? "borderRight" : "borderLeft"]: `2px solid ${ACCENT}`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: -1,
-            [isLeft ? "left" : "right"]: -1,
-            width: "14px",
-            height: "14px",
-            borderBottom: `2px solid ${ACCENT}`,
-            [isLeft ? "borderLeft" : "borderRight"]: `2px solid ${ACCENT}`,
           }}
         />
 
@@ -552,19 +541,6 @@ export default function GrindsPage() {
             zIndex: 2,
           }}
         >
-          <h1
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "1.75rem",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "-0.02em",
-              color: "#e5e2e1",
-              marginBottom: "0.75rem",
-            }}
-          >
-            grinds
-          </h1>
           <p
             style={{
               fontStyle: "italic",
@@ -573,7 +549,7 @@ export default function GrindsPage() {
               letterSpacing: "0.04em",
             }}
           >
-            i press buttons for a living
+            i press buttons to pay rent
           </p>
         </div>
 
@@ -588,7 +564,7 @@ export default function GrindsPage() {
                 top: 0,
                 bottom: 0,
                 width: "1px",
-                background: `linear-gradient(to bottom, transparent, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
+                background: `linear-gradient(to bottom, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
                 boxShadow: `0 0 12px ${ACCENT}20`,
                 zIndex: 2,
               }}
@@ -630,7 +606,7 @@ export default function GrindsPage() {
                 top: 0,
                 bottom: 0,
                 width: "1px",
-                background: `linear-gradient(to bottom, transparent, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
+                background: `linear-gradient(to bottom, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
                 boxShadow: `0 0 8px ${ACCENT}20`,
               }}
             />
@@ -659,7 +635,7 @@ export default function GrindsPage() {
               textTransform: "uppercase",
             }}
           >
-            buttons pressed since 2015
+            buttons pressed since 2004
           </span>
         </div>
       </div>
