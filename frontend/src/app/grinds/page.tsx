@@ -15,98 +15,78 @@ interface GrindEntry {
 
 const ENTRIES: GrindEntry[] = [
   {
-    period: "2015 – 2018",
-    org: "Vietnamese Education System",
-    role: "Battle Royale",
-    city: "Hanoi",
-    description:
-      "Survived the gauntlet of Vietnamese high school where 40 students per class compete for university spots like it's a hunger games qualifier. Learned that sleep is optional and math is eternal.",
-    tags: ["math", "physics", "survival"],
-    side: "right",
-  },
-  {
-    period: "2018 – 2022",
-    org: "Sorbonne University",
-    role: "Button pressing practice",
-    city: "Paris",
-    description:
-      "Practiced pressing buttons in a more structured environment. Studied computer science where the lectures were in French but the Stack Overflow was in English. Baguettes were consumed.",
-    tags: ["CS", "algorithms", "baguettes"],
-    side: "left",
-  },
-  {
-    period: "2022 – 2024",
-    org: "Peregrine.ai",
-    role: "Button pressing",
-    city: "Berlin",
-    description:
-      "Started pressing buttons professionally. Turned caffeine into code and meetings into Jira tickets. Learned that production is just a more stressful version of localhost.",
-    tags: ["fullstack", "startup", "coffee"],
-    side: "right",
-  },
-  {
-    period: "2024 – present",
+    period: "now",
     org: "ellamind",
     role: "Button pressing but AI",
     city: "Bremen",
     description:
-      "Same button pressing but now the buttons sometimes press themselves. Working on AI things where half the job is explaining to the model what you actually want. The other half is debugging prompts.",
-    tags: ["AI", "LLMs", "prompt-whispering"],
+      "I get skill gapped by agent.",
+    tags: ["vibecode"],
+    side: "right",
+  },
+  {
+    period: "2023 – 2026",
+    org: "Peregrine.ai",
+    role: "Button pressing",
+    city: "Berlin",
+    description:
+      "I write actual understandable code.",
+    tags: ["software engineer"],
+    side: "left",
+  },
+  {
+    period: "2019 – 2023",
+    org: "Sorbonne University",
+    role: "Button pressing practice",
+    city: "Paris",
+    description:
+      "I beat other kids but in french.",
+    tags: ["computer science"],
+    side: "right",
+  },
+  {
+    period: "2004 – 2019",
+    org: "Vietnamese Education System",
+    role: "Battle Royale",
+    city: "Hanoi",
+    description:
+      "I beat other kids.",
+    tags: ["math"],
     side: "left",
   },
 ];
 
 const ACCENT = "#f59e0b";
 
-/* ── Cyberpunk background SVG ──────────────────────── */
-function CyberGrid() {
+/* ── Fluorescent leaf decorations ──────────────────── */
+interface LeafProps {
+  src: string;
+  top: string;
+  left: string;
+  width: string;
+  opacity: number;
+  rotate?: number;
+  flipX?: boolean;
+  delay?: number;
+}
+
+function FloatingLeaf({ src, top, left, width, opacity, rotate = 0, flipX = false, delay = 0 }: LeafProps) {
   return (
-    <svg
+    <img
+      src={src}
+      alt=""
       style={{
         position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
+        top,
+        left,
+        width,
+        opacity,
+        transform: `rotate(${rotate}deg)${flipX ? " scaleX(-1)" : ""}`,
+        mixBlendMode: "screen",
         pointerEvents: "none",
-        opacity: 0.06,
+        animation: `leafSway 8s ${delay}s ease-in-out infinite`,
       }}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-          <path
-            d="M 60 0 L 0 0 0 60"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="0.5"
-          />
-        </pattern>
-        <pattern
-          id="diag"
-          width="40"
-          height="40"
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d="M-10,10 l20,-20 M0,40 l40,-40 M30,50 l20,-20"
-            stroke={ACCENT}
-            strokeWidth="0.3"
-            fill="none"
-          />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid)" />
-      <rect width="100%" height="100%" fill="url(#diag)" />
-      {/* Circuit nodes */}
-      <circle cx="15%" cy="20%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <circle cx="85%" cy="35%" r="2" fill={ACCENT} opacity="0.4" />
-      <circle cx="10%" cy="60%" r="2" fill={ACCENT} opacity="0.3" />
-      <circle cx="90%" cy="75%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="12%" y1="20%" x2="18%" y2="20%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="82%" y1="35%" x2="88%" y2="35%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="7%" y1="60%" x2="13%" y2="60%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="87%" y1="75%" x2="93%" y2="75%" stroke={ACCENT} strokeWidth="0.5" />
-    </svg>
+    />
   );
 }
 
@@ -173,7 +153,7 @@ function TimelineCard({
           overflow: "hidden",
         }}
       >
-        {/* Corner brackets */}
+        {/* Corner bracket — top, trunk-facing side */}
         <div
           style={{
             position: "absolute",
@@ -183,17 +163,6 @@ function TimelineCard({
             height: "14px",
             borderTop: `2px solid ${ACCENT}`,
             [isLeft ? "borderRight" : "borderLeft"]: `2px solid ${ACCENT}`,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            bottom: -1,
-            [isLeft ? "left" : "right"]: -1,
-            width: "14px",
-            height: "14px",
-            borderBottom: `2px solid ${ACCENT}`,
-            [isLeft ? "borderLeft" : "borderRight"]: `2px solid ${ACCENT}`,
           }}
         />
 
@@ -485,9 +454,9 @@ export default function GrindsPage() {
           from { opacity: 0; transform: translateY(1rem); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes hexFloat {
-          0%, 100% { opacity: 0.15; transform: rotate(45deg) scale(1); }
-          50% { opacity: 0.25; transform: rotate(45deg) scale(1.1); }
+        @keyframes leafSway {
+          0%, 100% { filter: saturate(1.2) brightness(1); }
+          50% { filter: saturate(1.4) brightness(1.15); }
         }
         .grind-card {
           animation-duration: 0.6s;
@@ -513,35 +482,14 @@ export default function GrindsPage() {
           padding: "2rem 1.5rem 6rem",
           position: "relative",
           minHeight: "100vh",
-          overflow: "hidden",
         }}
       >
-        {/* Cyberpunk background */}
-        <CyberGrid />
-
-        {/* Floating hex decorations */}
-        {[
-          { top: "8%", left: "5%", size: 30, delay: 0 },
-          { top: "25%", left: "88%", size: 20, delay: 1.5 },
-          { top: "55%", left: "3%", size: 25, delay: 0.8 },
-          { top: "70%", left: "92%", size: 18, delay: 2 },
-          { top: "40%", left: "90%", size: 22, delay: 0.4 },
-        ].map((h, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              top: h.top,
-              left: h.left,
-              width: `${h.size}px`,
-              height: `${h.size}px`,
-              border: `1px solid color-mix(in srgb, ${ACCENT} 20%, transparent)`,
-              transform: "rotate(45deg)",
-              animation: `hexFloat 6s ${h.delay}s ease-in-out infinite`,
-              pointerEvents: "none",
-            }}
-          />
-        ))}
+        {/* Fluorescent leaf decorations */}
+        <FloatingLeaf src="/grinds-leaves.png" top="65%" left="-2%" width="180px" opacity={0.35} rotate={5} delay={0} />
+        <FloatingLeaf src="/grinds-vine.png" top="5%" left="78%" width="160px" opacity={0.25} rotate={15} delay={2} />
+        <FloatingLeaf src="/grinds-leaves.png" top="30%" left="82%" width="120px" opacity={0.2} rotate={-10} flipX delay={1} />
+        <FloatingLeaf src="/grinds-vine.png" top="75%" left="85%" width="140px" opacity={0.2} rotate={-20} flipX delay={3} />
+        <FloatingLeaf src="/grinds-leaves.png" top="10%" left="-3%" width="100px" opacity={0.15} rotate={20} flipX delay={1.5} />
 
         {/* Tagline */}
         <div
@@ -552,19 +500,6 @@ export default function GrindsPage() {
             zIndex: 2,
           }}
         >
-          <h1
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "1.75rem",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "-0.02em",
-              color: "#e5e2e1",
-              marginBottom: "0.75rem",
-            }}
-          >
-            grinds
-          </h1>
           <p
             style={{
               fontStyle: "italic",
@@ -573,7 +508,7 @@ export default function GrindsPage() {
               letterSpacing: "0.04em",
             }}
           >
-            i press buttons for a living
+            i press buttons to pay rent
           </p>
         </div>
 
@@ -588,7 +523,7 @@ export default function GrindsPage() {
                 top: 0,
                 bottom: 0,
                 width: "1px",
-                background: `linear-gradient(to bottom, transparent, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
+                background: `linear-gradient(to bottom, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
                 boxShadow: `0 0 12px ${ACCENT}20`,
                 zIndex: 2,
               }}
@@ -630,7 +565,7 @@ export default function GrindsPage() {
                 top: 0,
                 bottom: 0,
                 width: "1px",
-                background: `linear-gradient(to bottom, transparent, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
+                background: `linear-gradient(to bottom, ${ACCENT}60, ${ACCENT}40, ${ACCENT}60, transparent)`,
                 boxShadow: `0 0 8px ${ACCENT}20`,
               }}
             />
@@ -659,7 +594,7 @@ export default function GrindsPage() {
               textTransform: "uppercase",
             }}
           >
-            buttons pressed since 2015
+            buttons pressed since 2004
           </span>
         </div>
       </div>
