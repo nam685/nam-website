@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { peekAdminToken } from "@/lib/auth";
 import {
+  NAV_DEG,
+  NAV_DEG_MOBILE,
   SPRING_THRESHOLD,
   circularD,
   shiftCenter,
@@ -58,13 +60,16 @@ export default function Navbar() {
   const touchStartX = useRef<number | null>(null);
   const wheelRef = useRef<HTMLDivElement>(null);
   const [radius, setRadius] = useState(310);
+  const [deg, setDeg] = useState(NAV_DEG);
 
-  // Measure wheel container width → derive radius
+  // Measure wheel container width → derive radius + mobile deg
   useEffect(() => {
     const el = wheelRef.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
-      setRadius(Math.min(Math.max(entry.contentRect.width * 0.35, 80), 450));
+      const w = entry.contentRect.width;
+      setRadius(Math.min(Math.max(w * 0.35, 80), 450));
+      setDeg(w < 300 ? NAV_DEG_MOBILE : NAV_DEG);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -208,7 +213,7 @@ export default function Navbar() {
       >
         {items.map((item, i) => {
           const d = circularD(i, vc, n);
-          const { x, scale, opacity } = wheelTransform(d, radius);
+          const { x, scale, opacity } = wheelTransform(d, radius, deg);
 
           const isCentered = i === center;
 
