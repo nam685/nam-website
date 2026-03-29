@@ -4,21 +4,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0008_drawing'),
+        ("website", "0008_drawing"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='GitHubContributions',
+            name="GitHubContributions",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('data', models.JSONField(help_text='Contribution calendar JSON from GitHub GraphQL API')),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("data", models.JSONField(help_text="Contribution calendar JSON from GitHub GraphQL API")),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name_plural': 'GitHub contributions',
+                "verbose_name_plural": "GitHub contributions",
             },
         ),
     ]

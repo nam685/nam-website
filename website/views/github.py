@@ -35,11 +35,13 @@ def github_auth(request):
 
     # Pass the admin token through OAuth state so callback can verify
     admin_token = request.GET.get("token", "")
-    params = urllib.parse.urlencode({
-        "client_id": client_id,
-        "scope": "read:user",
-        "state": admin_token,
-    })
+    params = urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "scope": "read:user",
+            "state": admin_token,
+        }
+    )
     return HttpResponseRedirect(f"{GITHUB_AUTHORIZE_URL}?{params}")
 
 
@@ -69,11 +71,13 @@ def github_callback(request):
     client_id = os.environ.get("GITHUB_CLIENT_ID", "")
     client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "")
 
-    token_data = urllib.parse.urlencode({
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "code": code,
-    }).encode()
+    token_data = urllib.parse.urlencode(
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code,
+        }
+    ).encode()
 
     token_req = urllib.request.Request(
         GITHUB_TOKEN_URL,
@@ -92,7 +96,8 @@ def github_callback(request):
         return JsonResponse({"error": "No access token received"}, status=502)
 
     # Fetch contributions
-    query = """{
+    query = (
+        """{
       user(login: "%s") {
         contributionsCollection {
           contributionCalendar {
@@ -106,7 +111,9 @@ def github_callback(request):
           }
         }
       }
-    }""" % GITHUB_USERNAME
+    }"""
+        % GITHUB_USERNAME
+    )
 
     gql_req = urllib.request.Request(
         GITHUB_GRAPHQL_URL,
