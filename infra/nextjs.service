@@ -7,7 +7,7 @@ User=nam
 WorkingDirectory=/home/nam/nam-website-deploy/frontend
 Environment=NODE_ENV=production
 Environment=PORT=3000
-ExecStart=/home/nam/.local/share/pnpm/pnpm start
+ExecStart=/bin/bash -c 'source /home/nam/.nvm/nvm.sh && exec /home/nam/.local/share/pnpm/pnpm start'
 EnvironmentFile=/home/nam/nam-website-deploy/.env
 Restart=always
 RestartSec=3
