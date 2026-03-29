@@ -27,7 +27,7 @@ docker compose up -d   # PostgreSQL + Redis
 ```
 
 ## Workflow
-- **Worktrees** for every feature/fix — place under `.claude/worktrees/`. Example: `git worktree add .claude/worktrees/my-feature -b feat/my-feature origin/main`
+- **MUST use worktrees** for every feature/fix — **always** work in `.claude/worktrees/`, never directly on main. Create with: `git worktree add .claude/worktrees/my-feature -b feat/my-feature origin/main`
 - Visually verify UI changes with `pnpm dev` + Playwright screenshots before pushing
 
 ## Auth
