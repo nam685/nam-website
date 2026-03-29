@@ -1,5 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+import { API } from "@/lib/api";
+
 /* ── Data ──────────────────────────────────────────── */
 
 interface CodeProject {
@@ -390,6 +394,56 @@ function ContributionGraph({ calendar }: { calendar: ContributionCalendar }) {
   );
 }
 
+/* ── Refresh button ──────────────────────────────── */
+
+function RefreshButton() {
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setIsAdmin(true);
+  }, []);
+
+  if (!isAdmin) return null;
+
+  function handleRefresh() {
+    const token = localStorage.getItem("token") ?? "";
+    window.location.href = `${API}/api/github/auth/?token=${encodeURIComponent(token)}`;
+  }
+
+  return (
+    <button
+      onClick={handleRefresh}
+      title="Refresh contributions via GitHub"
+      className="code-link"
+      style={{
+        background: "none",
+        border: `1px solid color-mix(in srgb, ${ACCENT} 30%, transparent)`,
+        borderRadius: "3px",
+        cursor: "pointer",
+        color: ACCENT,
+        fontFamily: "var(--font-headline)",
+        fontSize: "0.6rem",
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+        padding: "0.2rem 0.5rem",
+        display: "flex",
+        alignItems: "center",
+        gap: "0.3rem",
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 2v6h-6" />
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+        <path d="M3 22v-6h6" />
+        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      </svg>
+      Sync
+    </button>
+  );
+}
+
 /* ── Main component ──────────────────────────────── */
 
 export default function CodesClient({
@@ -497,22 +551,22 @@ export default function CodesClient({
         </div>
 
         {/* GitHub contribution graph */}
-        {calendar && (
+        <div
+          style={{
+            marginTop: "4rem",
+            position: "relative",
+            zIndex: 2,
+          }}
+        >
           <div
             style={{
-              marginTop: "4rem",
-              position: "relative",
-              zIndex: 2,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "1rem",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "1rem",
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <h2
                 style={{
                   fontFamily: "var(--font-headline)",
@@ -526,6 +580,9 @@ export default function CodesClient({
               >
                 Contribution Map
               </h2>
+              <RefreshButton />
+            </div>
+            {calendar && (
               <span
                 style={{
                   fontFamily: "var(--font-headline)",
@@ -536,19 +593,36 @@ export default function CodesClient({
               >
                 {calendar.totalContributions} contributions in the last year
               </span>
-            </div>
+            )}
+          </div>
 
-            <div
-              style={{
-                background: "#0d1117",
-                border: `1px solid color-mix(in srgb, ${ACCENT} 15%, #1a1a1a)`,
-                borderRadius: "0.5rem",
-                padding: "1rem",
-              }}
-            >
+          <div
+            style={{
+              background: "#0d1117",
+              border: `1px solid color-mix(in srgb, ${ACCENT} 15%, #1a1a1a)`,
+              borderRadius: "0.5rem",
+              padding: "1rem",
+            }}
+          >
+            {calendar ? (
               <ContributionGraph calendar={calendar} />
+            ) : (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "2rem",
+                  color: "#333",
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.7rem",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                no data yet — click sync to fetch
+              </div>
+            )}
 
-              {/* Legend */}
+            {/* Legend */}
+            {calendar && (
               <div
                 style={{
                   display: "flex",
@@ -592,28 +666,28 @@ export default function CodesClient({
                   More
                 </span>
               </div>
-            </div>
-
-            {/* Link to GitHub profile */}
-            <div style={{ textAlign: "center", marginTop: "0.75rem" }}>
-              <a
-                href="https://github.com/nam685"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="code-link"
-                style={{
-                  fontFamily: "var(--font-headline)",
-                  fontSize: "0.6rem",
-                  color: "#333",
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
-                }}
-              >
-                github.com/nam685
-              </a>
-            </div>
+            )}
           </div>
-        )}
+
+          {/* Link to GitHub profile */}
+          <div style={{ textAlign: "center", marginTop: "0.75rem" }}>
+            <a
+              href="https://github.com/nam685"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="code-link"
+              style={{
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.6rem",
+                color: "#333",
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+              }}
+            >
+              github.com/nam685
+            </a>
+          </div>
+        </div>
 
         {/* Bottom tagline */}
         <div
