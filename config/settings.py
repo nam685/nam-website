@@ -84,6 +84,8 @@ ADMIN_SECRET = env("ADMIN_SECRET", default="")
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
