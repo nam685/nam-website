@@ -19,7 +19,7 @@ _last_refresh: float = 0
 REFRESH_COOLDOWN = 600
 
 
-def contributions(request):
+def contributions(_request):
     """Public endpoint: return stored contribution data."""
     record = GitHubContributions.objects.first()
     if not record or not record.data:
