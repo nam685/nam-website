@@ -1,69 +1,39 @@
 # nam-website
 
-Personal website. Django backend + Next.js frontend with Tailwind CSS.
+Personal website. Django + Next.js, deployed to Hetzner VPS (nam685.de).
 
-## Tech Stack
-
-- **Backend:** Python 3.12+, Django 5.1+, PostgreSQL 16, managed with uv
-- **Frontend:** Next.js 16 (App Router, Turbopack), React 19, Tailwind CSS v4, TypeScript, pnpm
-- **Infra:** Docker Compose (PostgreSQL + Redis), Caddy reverse proxy, systemd services
-
-## Project Structure
-
-- `config/` - Django project settings, URLs, WSGI/ASGI
-- `website/` - Main Django app (models, views, API)
-- `frontend/` - Next.js frontend app
-- `frontend/src/app/` - Next.js App Router pages
+## Stack
+- **Backend:** Python 3.12+, Django 5.1+, PostgreSQL 16, Redis — managed with `uv`
+- **Frontend:** Next.js 16 (App Router), React 19, Tailwind CSS v4, TypeScript — managed with `pnpm`
+- **Deploy:** Caddy (auto-TLS), systemd, GitHub Actions CI → SSH deploy
 
 ## Commands
-
-### Backend
 ```bash
-uv run python manage.py runserver     # Dev server
-uv run python manage.py migrate       # Run migrations
-uv run python manage.py makemigrations # Create migrations
-uv run pytest                          # Run tests
-uvx ruff check .                       # Lint
-uvx ruff format .                      # Format
-```
+# Backend
+uv run python manage.py runserver          # dev server
+uv run python manage.py makemigrations     # create migrations
+uv run python manage.py migrate            # apply migrations
+uv run pytest                              # tests
+uvx ruff check . && uvx ruff format .      # lint+format
 
-### Frontend
-```bash
-cd frontend
-pnpm dev        # Dev server (Turbopack)
-pnpm build      # Production build
-pnpm lint       # ESLint
-pnpm format     # Prettier
-```
+# Frontend (cd frontend)
+pnpm dev      # dev server (Turbopack)
+pnpm build    # prod build
+pnpm lint     # ESLint
+pnpm test     # vitest
 
-### Infrastructure
-```bash
-docker compose up -d   # Start PostgreSQL + Redis
-docker compose down    # Stop services
+# Infra
+docker compose up -d   # PostgreSQL + Redis
 ```
 
 ## Workflow
+- **Worktrees** for every feature/fix — place under `.claude/worktrees/`. Example: `git worktree add .claude/worktrees/my-feature -b feat/my-feature origin/main`
+- Visually verify UI changes with `pnpm dev` + Playwright screenshots before pushing
 
-- **Always use a git worktree** for each new feature/fix — multiple Claude instances may run concurrently, and branch-switching in a shared checkout causes lost work. Use `git worktree add` or the Agent `isolation: "worktree"` mode.
-- Use the local dev server (`pnpm dev`) + Playwright screenshots to visually verify UI changes before pushing — this keeps the feedback loop short without waiting for CI/deploy
-
-## Auth System
-
-- Custom token-based admin auth (not Django's user system)
-- Login via `POST /api/auth/login/` with `ADMIN_SECRET` env var
-- Token: Django signing module, 7-day TTL, Bearer header
-- Protected endpoints: thought creation, drawing upload
-- Frontend: `/sudo` page for login, token stored in localStorage
-
-## Deploy Architecture
-
-- **Server:** Hetzner VPS, Caddy (auto-TLS), systemd for django + nextjs
-- **Flow:** PR merge → GitHub Actions CI → SSH deploy to `~/nam-website-deploy`
-- **Caddy routes:** `/api/*`, `/admin/*` → Django :8000; `/media/*` → file_server; `/*` → Next.js :3000
+## Auth
+Custom token auth (not Django users). Login: `POST /api/auth/login/` with `ADMIN_SECRET` env var. Token via Django signing, 7-day TTL, Bearer header. Frontend: `/sudo` login page, token in localStorage.
 
 ## Conventions
-
-- Python: Ruff for linting/formatting (line-length=120)
+- Python: Ruff (line-length=120). Auto-runs on save via PostToolUse hook.
 - Frontend: Prettier + ESLint (next/core-web-vitals)
-- Shared frontend types/helpers in `frontend/src/lib/` (api.ts, auth.ts)
-- Environment variables via `.env` (see `.env.example`)
+- Caddy routes: `/api/*`, `/admin/*` → Django :8000; `/media/*` → file_server; `/*` → Next.js :3000
