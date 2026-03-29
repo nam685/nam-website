@@ -12,4 +12,5 @@ urlpatterns = [
     path("thoughts/create/", views.thought_create),
     path("drawings/", views.drawing_list),
     path("drawings/upload/", views.drawing_upload),
+    path("github/contributions/", views.github_contributions),
 ]
