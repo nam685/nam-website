@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 const BG_MAP: Record<string, string> = {
@@ -17,13 +18,31 @@ const BG_MAP: Record<string, string> = {
 export default function PageBackground() {
   const pathname = usePathname();
   const bg = BG_MAP[pathname];
-  if (!bg) return null;
+  const [loaded, setLoaded] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!bg) {
+      setLoaded(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => setLoaded(bg);
+    img.src = bg;
+  }, [bg]);
+
+  if (!loaded) return null;
 
   return (
     <div
-      className="fixed inset-0 z-0 pointer-events-none"
+      className="z-0 pointer-events-none animate-[fadeIn_0.4s_ease-out]"
       style={{
-        backgroundImage: `url(${bg})`,
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100dvh",
+        transform: "translateZ(0)",
+        backgroundImage: `url(${loaded})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",

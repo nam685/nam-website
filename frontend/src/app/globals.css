@@ -113,6 +113,12 @@ a {
   right: -2px;
 }
 
+/* Background fade-in */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Page container */
 .page {
   max-width: 48rem;
