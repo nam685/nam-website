@@ -58,55 +58,35 @@ const ENTRIES: GrindEntry[] = [
 
 const ACCENT = "#f59e0b";
 
-/* ── Cyberpunk background SVG ──────────────────────── */
-function CyberGrid() {
+/* ── Fluorescent leaf decorations ──────────────────── */
+interface LeafProps {
+  src: string;
+  top: string;
+  left: string;
+  width: string;
+  opacity: number;
+  rotate?: number;
+  flipX?: boolean;
+  delay?: number;
+}
+
+function FloatingLeaf({ src, top, left, width, opacity, rotate = 0, flipX = false, delay = 0 }: LeafProps) {
   return (
-    <svg
+    <img
+      src={src}
+      alt=""
       style={{
         position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
+        top,
+        left,
+        width,
+        opacity,
+        transform: `rotate(${rotate}deg)${flipX ? " scaleX(-1)" : ""}`,
+        mixBlendMode: "screen",
         pointerEvents: "none",
-        opacity: 0.06,
+        animation: `leafSway 8s ${delay}s ease-in-out infinite`,
       }}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-          <path
-            d="M 60 0 L 0 0 0 60"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="0.5"
-          />
-        </pattern>
-        <pattern
-          id="diag"
-          width="40"
-          height="40"
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d="M-10,10 l20,-20 M0,40 l40,-40 M30,50 l20,-20"
-            stroke={ACCENT}
-            strokeWidth="0.3"
-            fill="none"
-          />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid)" />
-      <rect width="100%" height="100%" fill="url(#diag)" />
-      {/* Circuit nodes */}
-      <circle cx="15%" cy="20%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <circle cx="85%" cy="35%" r="2" fill={ACCENT} opacity="0.4" />
-      <circle cx="10%" cy="60%" r="2" fill={ACCENT} opacity="0.3" />
-      <circle cx="90%" cy="75%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="12%" y1="20%" x2="18%" y2="20%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="82%" y1="35%" x2="88%" y2="35%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="7%" y1="60%" x2="13%" y2="60%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="87%" y1="75%" x2="93%" y2="75%" stroke={ACCENT} strokeWidth="0.5" />
-    </svg>
+    />
   );
 }
 
@@ -474,9 +454,9 @@ export default function GrindsPage() {
           from { opacity: 0; transform: translateY(1rem); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes hexFloat {
-          0%, 100% { opacity: 0.15; transform: rotate(45deg) scale(1); }
-          50% { opacity: 0.25; transform: rotate(45deg) scale(1.1); }
+        @keyframes leafSway {
+          0%, 100% { filter: saturate(1.2) brightness(1); }
+          50% { filter: saturate(1.4) brightness(1.15); }
         }
         .grind-card {
           animation-duration: 0.6s;
@@ -502,35 +482,14 @@ export default function GrindsPage() {
           padding: "2rem 1.5rem 6rem",
           position: "relative",
           minHeight: "100vh",
-          overflow: "hidden",
         }}
       >
-        {/* Cyberpunk background */}
-        <CyberGrid />
-
-        {/* Floating hex decorations */}
-        {[
-          { top: "8%", left: "5%", size: 30, delay: 0 },
-          { top: "25%", left: "88%", size: 20, delay: 1.5 },
-          { top: "55%", left: "3%", size: 25, delay: 0.8 },
-          { top: "70%", left: "92%", size: 18, delay: 2 },
-          { top: "40%", left: "90%", size: 22, delay: 0.4 },
-        ].map((h, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              top: h.top,
-              left: h.left,
-              width: `${h.size}px`,
-              height: `${h.size}px`,
-              border: `1px solid color-mix(in srgb, ${ACCENT} 20%, transparent)`,
-              transform: "rotate(45deg)",
-              animation: `hexFloat 6s ${h.delay}s ease-in-out infinite`,
-              pointerEvents: "none",
-            }}
-          />
-        ))}
+        {/* Fluorescent leaf decorations */}
+        <FloatingLeaf src="/grinds-leaves.png" top="65%" left="-2%" width="180px" opacity={0.35} rotate={5} delay={0} />
+        <FloatingLeaf src="/grinds-vine.png" top="5%" left="78%" width="160px" opacity={0.25} rotate={15} delay={2} />
+        <FloatingLeaf src="/grinds-leaves.png" top="30%" left="82%" width="120px" opacity={0.2} rotate={-10} flipX delay={1} />
+        <FloatingLeaf src="/grinds-vine.png" top="75%" left="85%" width="140px" opacity={0.2} rotate={-20} flipX delay={3} />
+        <FloatingLeaf src="/grinds-leaves.png" top="10%" left="-3%" width="100px" opacity={0.15} rotate={20} flipX delay={1.5} />
 
         {/* Tagline */}
         <div
