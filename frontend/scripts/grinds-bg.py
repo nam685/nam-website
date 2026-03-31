@@ -6,8 +6,17 @@ import random
 import subprocess
 
 SPRITES = [
-    ("public/grinds-leaves.png", [(187, 305, 683, 150), (128, 410, 132, 502), (139, 373, 446, 344),
-                                   (132, 290, 139, 138), (261, 263, 600, 649), (93, 129, 385, 783)]),
+    (
+        "public/grinds-leaves.png",
+        [
+            (187, 305, 683, 150),
+            (128, 410, 132, 502),
+            (139, 373, 446, 344),
+            (132, 290, 139, 138),
+            (261, 263, 600, 649),
+            (93, 129, 385, 783),
+        ],
+    ),
     ("public/grinds-vine.png", [(1024, 1024, 0, 0)]),
 ]
 
@@ -23,7 +32,9 @@ def main():
     p.add_argument("--vine-scale-min", type=float, default=0.15, help="min vine scale (default: 0.15)")
     p.add_argument("--vine-scale-max", type=float, default=0.35, help="max vine scale (default: 0.35)")
     p.add_argument("--darkness", type=int, default=18, help="brightness %% via -modulate (default: 18, lower=darker)")
-    p.add_argument("--vine-ratio", type=float, default=0.15, help="probability of picking vine vs leaf, 0-1 (default: 0.15)")
+    p.add_argument(
+        "--vine-ratio", type=float, default=0.15, help="probability of picking vine vs leaf, 0-1 (default: 0.15)"
+    )
     p.add_argument("--seed", type=int, default=99, help="random seed (default: 99)")
     args = p.parse_args()
 
