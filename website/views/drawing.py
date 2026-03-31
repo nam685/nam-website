@@ -39,12 +39,13 @@ def drawing_upload(request):
 
     try:
         img = PILImage.open(image)
-        img.verify()
-        image.seek(0)
+        fmt = img.format
     except Exception:
         return JsonResponse({"error": "Invalid or corrupted image file"}, status=400)
+    finally:
+        image.seek(0)
 
-    if img.format not in ALLOWED_FORMATS:
+    if fmt not in ALLOWED_FORMATS:
         return JsonResponse({"error": f"Unsupported format. Allowed: {', '.join(sorted(ALLOWED_FORMATS))}"}, status=400)
 
     category = request.POST.get("category", "")
