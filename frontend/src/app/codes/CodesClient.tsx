@@ -523,7 +523,7 @@ export default function CodesClient({
               letterSpacing: "0.04em",
             }}
           >
-            i mass produce spaghetti
+            i make spaghetti
           </p>
         </div>
 
