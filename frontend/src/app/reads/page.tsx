@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 
+import ReadsClient from "./ReadsClient";
+
 export const metadata: Metadata = { title: "reads" };
 
 export default function ReadsPage() {
-  return (
-    <div className="page-narrow">
-      <h1>Reads</h1>
-      <p>News briefings, blog posts, and articles worth sharing.</p>
-    </div>
-  );
+  return <ReadsClient />;
 }
