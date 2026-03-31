@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
 import { getContribColor } from "@/lib/contributions";
+import { formatRelativeDate } from "@/lib/date";
+import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
 
 /* ── Data ──────────────────────────────────────────── */
 
@@ -65,70 +67,7 @@ interface ContributionCalendar {
   weeks: ContributionWeek[];
 }
 
-/* ── Cyberpunk background SVG ────────────────────── */
-
-function CyberGrid() {
-  return (
-    <svg
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        pointerEvents: "none",
-        opacity: 0.06,
-      }}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-          <path
-            d="M 60 0 L 0 0 0 60"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="0.5"
-          />
-        </pattern>
-        <pattern
-          id="diag"
-          width="40"
-          height="40"
-          patternUnits="userSpaceOnUse"
-        >
-          <path
-            d="M-10,10 l20,-20 M0,40 l40,-40 M30,50 l20,-20"
-            stroke={ACCENT}
-            strokeWidth="0.3"
-            fill="none"
-          />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid)" />
-      <rect width="100%" height="100%" fill="url(#diag)" />
-      <circle cx="15%" cy="20%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <circle cx="85%" cy="35%" r="2" fill={ACCENT} opacity="0.4" />
-      <circle cx="10%" cy="60%" r="2" fill={ACCENT} opacity="0.3" />
-      <circle cx="90%" cy="75%" r="3" fill="none" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="12%" y1="20%" x2="18%" y2="20%" stroke={ACCENT} strokeWidth="0.5" />
-      <line x1="82%" y1="35%" x2="88%" y2="35%" stroke={ACCENT} strokeWidth="0.5" />
-    </svg>
-  );
-}
-
 /* ── Project card ────────────────────────────────── */
-
-function formatRelativeDate(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 30) return `${diffDays}d ago`;
-  const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths < 12) return `${diffMonths}mo ago`;
-  return `${Math.floor(diffMonths / 12)}y ago`;
-}
 
 function ProjectCard({
   project,
@@ -493,14 +432,6 @@ export default function CodesClient({
   return (
     <>
       <style>{`
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(1.5rem); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes hexFloat {
-          0%, 100% { opacity: 0.15; transform: rotate(45deg) scale(1); }
-          50%      { opacity: 0.25; transform: rotate(45deg) scale(1.1); }
-        }
         .code-card {
           animation: fadeUp 0.6s ease-out both;
           transition: border-color 0.3s, box-shadow 0.3s;
@@ -528,30 +459,8 @@ export default function CodesClient({
           overflow: "hidden",
         }}
       >
-        <CyberGrid />
-
-        {/* Floating hex decorations */}
-        {[
-          { top: "6%", left: "4%", size: 28, delay: 0 },
-          { top: "20%", left: "90%", size: 20, delay: 1.2 },
-          { top: "50%", left: "2%", size: 22, delay: 0.6 },
-          { top: "65%", left: "93%", size: 18, delay: 1.8 },
-        ].map((h, i) => (
-          <div
-            key={i}
-            style={{
-              position: "absolute",
-              top: h.top,
-              left: h.left,
-              width: `${h.size}px`,
-              height: `${h.size}px`,
-              border: `1px solid color-mix(in srgb, ${ACCENT} 20%, transparent)`,
-              transform: "rotate(45deg)",
-              animation: `hexFloat 6s ${h.delay}s ease-in-out infinite`,
-              pointerEvents: "none",
-            }}
-          />
-        ))}
+        <CyberGrid accent={ACCENT} prefix="codes" />
+        <HexDecorations accent={ACCENT} />
 
         {/* Tagline */}
         <div

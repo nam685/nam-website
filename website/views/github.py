@@ -6,7 +6,7 @@ import urllib.request
 
 from django.http import HttpResponseRedirect, JsonResponse
 
-from ..auth import require_admin
+from ..auth import require_admin, verify_token
 from ..models import GitHubContributions
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
@@ -29,12 +29,13 @@ def contributions(_request):
 
 def github_auth(request):
     """Redirect to GitHub OAuth. Requires admin token as ?token= param."""
+    admin_token = request.GET.get("token", "")
+    if not admin_token or not verify_token(admin_token):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
     client_id = os.environ.get("GITHUB_CLIENT_ID", "")
     if not client_id:
         return JsonResponse({"error": "GitHub OAuth not configured"}, status=500)
-
-    # Pass the admin token through OAuth state so callback can verify
-    admin_token = request.GET.get("token", "")
     params = urllib.parse.urlencode(
         {
             "client_id": client_id,

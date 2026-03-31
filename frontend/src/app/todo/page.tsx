@@ -10,7 +10,7 @@ type Section = { title: string; items: Item[] };
 
 async function getTodo(): Promise<Section[]> {
   const res = await fetch(`${API_INTERNAL}/api/todo/`, {
-    next: { revalidate: 60 },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error("Failed to fetch todo");
   return res.json();

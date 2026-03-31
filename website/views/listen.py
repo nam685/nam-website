@@ -5,6 +5,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from django.core.cache import cache as redis_cache
 from django.db.models import Count
 from django.db.models.functions import TruncDate
 from django.http import HttpResponseRedirect, JsonResponse
@@ -29,8 +30,11 @@ SYNC_COOLDOWN = 300
 @require_admin
 def listen_list(request):
     """Return recently played tracks (paginated)."""
-    limit = min(int(request.GET.get("limit", "50")), 200)
-    offset = int(request.GET.get("offset", "0"))
+    try:
+        limit = min(max(int(request.GET.get("limit", "50")), 1), 200)
+        offset = max(int(request.GET.get("offset", "0")), 0)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
     tracks = ListenTrack.objects.all()[offset : offset + limit]
     data = [
@@ -46,7 +50,7 @@ def listen_list(request):
         }
         for t in tracks
     ]
-    total = ListenTrack.objects.count()
+    total = redis_cache.get_or_set("listen_total_count", ListenTrack.objects.count, 300)
     return JsonResponse({"tracks": data, "total": total})
 
 
@@ -204,7 +208,11 @@ def listen_callback(request):
 
 @require_admin
 def listen_stats(_request):
-    """Return listening statistics."""
+    """Return listening statistics (cached for 5 minutes)."""
+    cached = redis_cache.get("listen_stats")
+    if cached:
+        return JsonResponse(cached)
+
     now = timezone.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timezone.timedelta(days=now.weekday())
@@ -229,15 +237,15 @@ def listen_stats(_request):
         .order_by("date")
     )
 
-    return JsonResponse(
-        {
-            "today": today_count,
-            "week": week_count,
-            "total": total_count,
-            "top_tracks": list(top_tracks),
-            "daily": [{"date": d["date"].isoformat(), "count": d["count"]} for d in daily],
-        }
-    )
+    result = {
+        "today": today_count,
+        "week": week_count,
+        "total": total_count,
+        "top_tracks": list(top_tracks),
+        "daily": [{"date": d["date"].isoformat(), "count": d["count"]} for d in daily],
+    }
+    redis_cache.set("listen_stats", result, 300)
+    return JsonResponse(result)
 
 
 @require_admin
