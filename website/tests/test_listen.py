@@ -157,8 +157,9 @@ class TestListenCallback:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        with patch("website.views.listen.YTMusic") as mock_ytmusic_cls, patch.dict(
-            "os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}
+        with (
+            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
+            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
         ):
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = MOCK_HISTORY
@@ -180,8 +181,9 @@ class TestListenCallback:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        with patch("website.views.listen.YTMusic") as mock_ytmusic_cls, patch.dict(
-            "os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}
+        with (
+            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
+            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
         ):
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = MOCK_HISTORY
@@ -198,8 +200,9 @@ class TestListenCallback:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
-        with patch("website.views.listen.YTMusic") as mock_ytmusic_cls, patch.dict(
-            "os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}
+        with (
+            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
+            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
         ):
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = []
