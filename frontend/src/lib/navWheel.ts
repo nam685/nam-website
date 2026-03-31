@@ -1,5 +1,17 @@
 // Pure nav-wheel logic — extracted so it can be unit-tested without a DOM.
 
+export const NAV_ITEMS = [
+  { label: "thinks", href: "/thinks", accent: "#FF1744" },
+  { label: "draws", href: "/draws", accent: "#a855f7" },
+  { label: "codes", href: "/codes", accent: "#22c55e" },
+  { label: "grinds", href: "/grinds", accent: "#f59e0b" },
+  { label: "listens", href: "/listens", accent: "#f97316" },
+  { label: "reads", href: "/reads", accent: "#94a3b8" },
+  { label: "plays", href: "/plays", accent: "#06b6d4" },
+  { label: "watches", href: "/watches", accent: "#1e40af" },
+  { label: "bets", href: "/bets", accent: "#db2777" },
+] as const;
+
 export const NAV_DEG = 30;
 export const NAV_DEG_MOBILE = 90;
 export const SPRING_FACTOR = 0.18;

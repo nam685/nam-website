@@ -35,6 +35,11 @@ export default function RootLayout({
     <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable}`}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var m={"/thinks":"#FF1744","/draws":"#a855f7","/codes":"#22c55e","/grinds":"#f59e0b","/listens":"#f97316","/reads":"#94a3b8","/plays":"#06b6d4","/watches":"#1e40af","/bets":"#db2777"};var p=location.pathname;var c=m[p]||m["/"+p.split("/")[1]];if(c)document.documentElement.style.setProperty("--accent",c)})()`,
+          }}
+        />
       </head>
       <body>
         <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
