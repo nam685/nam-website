@@ -40,7 +40,7 @@ export default function PageBackground() {
         top: 0,
         left: 0,
         width: "100vw",
-        height: "100dvh",
+        height: "100lvh",
         transform: "translateZ(0)",
         backgroundImage: `url(${loaded})`,
         backgroundSize: "cover",
