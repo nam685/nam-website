@@ -2,30 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { ENTRIES, type GrindEntry, type LeafConfig } from "@/lib/grindsData";
+import { ENTRIES, type GrindEntry } from "@/lib/grindsData";
 
 const ACCENT = "#f59e0b";
-
-/* ── Fluorescent leaf decorations ──────────────────── */
-function FloatingLeaf({ src, top, left, width, opacity, rotate = 0, flipX = false, delay = 0 }: LeafConfig) {
-  return (
-    <img
-      src={src}
-      alt=""
-      style={{
-        position: "absolute",
-        top,
-        left,
-        width,
-        opacity,
-        transform: `rotate(${rotate}deg)${flipX ? " scaleX(-1)" : ""}`,
-        mixBlendMode: "screen",
-        pointerEvents: "none",
-        animation: `leafSway 8s ${delay}s ease-in-out infinite`,
-      }}
-    />
-  );
-}
 
 /* ── Timeline entry card (desktop) ────────────────── */
 function TimelineCard({
@@ -89,8 +68,6 @@ function TimelineCard({
           position: "relative",
         }}
       >
-        {/* Leaf decoration */}
-        <FloatingLeaf {...entry.leaf} />
         {/* Corner bracket — top, trunk-facing side */}
         <div
           style={{
@@ -258,9 +235,6 @@ function MobileTimelineCard({
         }}
       />
 
-      {/* Leaf decoration */}
-      <FloatingLeaf {...entry.leaf} />
-
       {/* Period + city */}
       <div
         style={{
@@ -407,11 +381,7 @@ export default function GrindsPage() {
           from { opacity: 0; transform: translateY(1rem); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes leafSway {
-          0%, 100% { filter: saturate(1.2) brightness(1); }
-          50% { filter: saturate(1.4) brightness(1.15); }
-        }
-        .grind-card {
+.grind-card {
           animation-duration: 0.6s;
           animation-fill-mode: both;
           animation-timing-function: ease-out;
