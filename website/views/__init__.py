@@ -1,6 +1,7 @@
 from .auth import check as auth_check
 from .auth import login as auth_login
 from .drawing import drawing_delete, drawing_list, drawing_upload
+from .feedback import feedback_create
 from .github import contributions as github_contributions
 from .github import github_auth, github_callback
 from .github import refresh_status as github_refresh_status
@@ -16,6 +17,7 @@ __all__ = [
     "drawing_delete",
     "drawing_list",
     "drawing_upload",
+    "feedback_create",
     "github_auth",
     "github_callback",
     "github_contributions",

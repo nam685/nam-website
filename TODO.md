@@ -65,7 +65,7 @@
 - [x] RSS feed for blog (/feed.xml)
 
 ## Social (brainstorming)
-- [ ] Guestbook — visitors leave messages
+- [x] Guestbook — visitors leave messages
 - [ ] Blogroll — links to sites/blogs I follow
 - [ ] Webring — link exchange with friends
 - [ ] Wishlist

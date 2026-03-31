@@ -1,5 +1,9 @@
 # Development Log
 
+## 2026-03-31 — Floating feedback button
+
+Added a site-wide floating feedback button (bottom-right corner) so visitors can leave anonymous messages. Backend: new Feedback model + POST /api/feedback/ endpoint, rate-limited to 1 per hour per IP. Frontend: expandable chat-bubble button styled like the ComposeSprite input, adapts to each page's --accent color.
+
 ## 2026-03-29 — Security hardening + server rebuild after ransomware
 
 Hardened server attack surface after ransomware incident: bound PostgreSQL and Redis to `127.0.0.1` only (previously exposed to internet on `0.0.0.0`), moved postgres credentials to env vars, added Redis-backed rate limiting to the login endpoint (replacing in-memory dict), switched to `hmac.compare_digest` for timing-safe secret comparison. Added CSP header to Caddyfile, `SameSite=Strict` on session/CSRF cookies, fixed an open redirect in the `/sudo` login page, and created the missing `infra/nextjs.service` systemd unit. Updated `docs/infrastructure.md` with first-time server setup steps for the new Hetzner server (IP: 46.224.162.194).
