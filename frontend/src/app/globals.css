@@ -33,7 +33,7 @@
   background: #3a3a3a;
 }
 
-/* Section accent — default crimson, overridden per section via JS */
+/* Section accent — set by inline script in layout.tsx before paint */
 :root {
   --accent: #ff1744;
 }
