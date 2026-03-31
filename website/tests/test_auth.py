@@ -1,11 +1,9 @@
 import json
-import time
 
 import pytest
 from django.core import signing
-from django.test import RequestFactory
 
-from website.auth import TOKEN_MAX_AGE, create_token, verify_token
+from website.auth import create_token, verify_token
 
 
 @pytest.mark.django_db

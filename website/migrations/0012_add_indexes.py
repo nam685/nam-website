@@ -4,24 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0011_listentrack'),
+        ("website", "0011_listentrack"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='drawing',
-            name='created_at',
+            model_name="drawing",
+            name="created_at",
             field=models.DateTimeField(auto_now_add=True, db_index=True),
         ),
         migrations.AlterField(
-            model_name='drawing',
-            name='is_published',
+            model_name="drawing",
+            name="is_published",
             field=models.BooleanField(db_index=True, default=True),
         ),
         migrations.AddIndex(
-            model_name='feedback',
-            index=models.Index(fields=['ip_address', '-created_at'], name='feedback_ip_created_idx'),
+            model_name="feedback",
+            index=models.Index(fields=["ip_address", "-created_at"], name="feedback_ip_created_idx"),
         ),
     ]

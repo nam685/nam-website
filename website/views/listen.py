@@ -5,14 +5,13 @@ import time
 import urllib.parse
 import urllib.request
 
+from django.core.cache import cache as redis_cache
 from django.db.models import Count
 from django.db.models.functions import TruncDate
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from ytmusicapi import YTMusic
 from ytmusicapi.auth.oauth.credentials import OAuthCredentials
-
-from django.core.cache import cache as redis_cache
 
 from ..auth import require_admin, verify_token
 from ..models import ListenTrack
