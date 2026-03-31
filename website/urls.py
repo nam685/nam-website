@@ -10,6 +10,7 @@ urlpatterns = [
     path("projects/", views.project_list),
     path("thoughts/", views.thought_list),
     path("thoughts/create/", views.thought_create),
+    path("feedback/", views.feedback_create),
     path("drawings/", views.drawing_list),
     path("drawings/upload/", views.drawing_upload),
     path("drawings/<int:drawing_id>/delete/", views.drawing_delete),

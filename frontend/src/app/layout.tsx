@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
+import FeedbackButton from "@/components/FeedbackButton";
 import Navbar from "@/components/Navbar";
 import PageBackground from "@/components/PageBackground";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
         <PageBackground />
         <Navbar />
         {children}
+        <FeedbackButton />
       </body>
     </html>
   );
