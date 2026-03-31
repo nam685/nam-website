@@ -4,27 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0009_githubcontributions'),
+        ("website", "0009_githubcontributions"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ListenTrack',
+            name="ListenTrack",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('video_id', models.CharField(max_length=64)),
-                ('title', models.CharField(max_length=500)),
-                ('artist', models.CharField(max_length=500)),
-                ('album', models.CharField(blank=True, default='', max_length=500)),
-                ('thumbnail_url', models.URLField(blank=True, default='', max_length=1000)),
-                ('duration', models.CharField(blank=True, default='', max_length=16)),
-                ('played_at', models.DateTimeField()),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("video_id", models.CharField(max_length=64)),
+                ("title", models.CharField(max_length=500)),
+                ("artist", models.CharField(max_length=500)),
+                ("album", models.CharField(blank=True, default="", max_length=500)),
+                ("thumbnail_url", models.URLField(blank=True, default="", max_length=1000)),
+                ("duration", models.CharField(blank=True, default="", max_length=16)),
+                ("played_at", models.DateTimeField()),
             ],
             options={
-                'ordering': ['-played_at'],
-                'indexes': [models.Index(fields=['-played_at'], name='website_lis_played__c979b3_idx')],
+                "ordering": ["-played_at"],
+                "indexes": [models.Index(fields=["-played_at"], name="website_lis_played__c979b3_idx")],
             },
         ),
     ]
