@@ -117,7 +117,26 @@ function CyberGrid() {
 
 /* ── Project card ────────────────────────────────── */
 
-function ProjectCard({ project }: { project: CodeProject }) {
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 30) return `${diffDays}d ago`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  return `${Math.floor(diffMonths / 12)}y ago`;
+}
+
+function ProjectCard({
+  project,
+  pushedAt,
+}: {
+  project: CodeProject;
+  pushedAt?: string;
+}) {
   return (
     <div
       className="code-card"
@@ -209,6 +228,32 @@ function ProjectCard({ project }: { project: CodeProject }) {
       >
         {project.description}
       </p>
+
+      {/* Updated date + Tags */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.4rem",
+          alignItems: "center",
+          marginBottom: "1rem",
+        }}
+      >
+        {pushedAt && (
+          <span
+            style={{
+              fontFamily: "var(--font-headline)",
+              fontSize: "0.6rem",
+              color: "#555",
+              letterSpacing: "0.08em",
+              marginRight: "0.25rem",
+            }}
+            title={`Last pushed: ${new Date(pushedAt).toLocaleDateString()}`}
+          >
+            updated {formatRelativeDate(pushedAt)}
+          </span>
+        )}
+      </div>
 
       {/* Tags */}
       <div
@@ -440,8 +485,10 @@ function RefreshButton() {
 
 export default function CodesClient({
   calendar,
+  repositoryDates,
 }: {
   calendar: ContributionCalendar | null;
+  repositoryDates: Record<string, string> | null;
 }) {
   return (
     <>
@@ -538,7 +585,11 @@ export default function CodesClient({
           }}
         >
           {PROJECTS.map((project) => (
-            <ProjectCard key={project.slug} project={project} />
+            <ProjectCard
+              key={project.slug}
+              project={project}
+              pushedAt={repositoryDates?.[project.github_url] ?? undefined}
+            />
           ))}
         </div>
 
