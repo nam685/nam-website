@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   NAV_DEG,
   NAV_DEG_MOBILE,
@@ -87,10 +87,12 @@ export default function Navbar() {
   }, [center]);
 
   // Sync wheel position and accent to current route.
+  // useLayoutEffect runs before browser paint, preventing the CSS-default
+  // red accent from flashing during client-side navigation.
   const centerRef = useRef(center);
   centerRef.current = center;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const idx = ITEMS.findIndex(
       (it) => pathname === it.href || pathname.startsWith(it.href + "/"),
     );
