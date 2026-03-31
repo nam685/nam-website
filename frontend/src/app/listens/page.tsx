@@ -419,7 +419,7 @@ export default function ListensPage() {
     <>
       <title>Nam listens</title>
 
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "2rem 1.5rem" }}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "2rem 1.5rem", position: "relative" }}>
         {/* Header */}
         <div
           style={{
@@ -447,6 +447,7 @@ export default function ListensPage() {
           </div>
           <button
             onClick={handleSync}
+            title="Pull your YouTube Music history"
             style={{
               padding: "0.25rem 0.75rem",
               border: `1px solid ${ORANGE}40`,
@@ -592,14 +593,9 @@ export default function ListensPage() {
                   color: "#666",
                   fontFamily: "monospace",
                   fontSize: "0.8rem",
-                  marginBottom: "1rem",
                 }}
               >
                 No listening data yet.
-              </p>
-              <p style={{ color: "#555", fontSize: "0.75rem" }}>
-                Hit <span style={{ color: ORANGE }}>Sync</span> to pull your
-                YouTube Music history.
               </p>
             </div>
           )}
