@@ -95,7 +95,7 @@ def github_callback(request):
     if not access_token:
         return JsonResponse({"error": "No access token received"}, status=502)
 
-    # Fetch contributions
+    # Fetch contributions + repository metadata
     query = (
         """{
       user(login: "%s") {
@@ -108,6 +108,13 @@ def github_callback(request):
                 date
               }
             }
+          }
+        }
+        repositories(first: 100, orderBy: {field: PUSHED_AT, direction: DESC}, ownerAffiliations: OWNER) {
+          nodes {
+            name
+            url
+            pushedAt
           }
         }
       }
@@ -130,14 +137,20 @@ def github_callback(request):
     except Exception:
         return JsonResponse({"error": "Failed to fetch contributions"}, status=502)
 
-    calendar = gql_data.get("data", {}).get("user", {}).get("contributionsCollection", {}).get("contributionCalendar")
+    user_data = gql_data.get("data", {}).get("user", {})
+    calendar = user_data.get("contributionsCollection", {}).get("contributionCalendar")
     if not calendar:
         return JsonResponse({"error": "No contribution data in response"}, status=502)
 
-    # Store (upsert single record)
+    # Extract repo pushed_at dates: {repo_url: pushedAt}
+    repos = user_data.get("repositories", {}).get("nodes", [])
+    repo_dates = {r["url"]: r["pushedAt"] for r in repos if r.get("url") and r.get("pushedAt")}
+
+    # Store (upsert single record) — calendar + repo metadata
+    store_data = {**calendar, "repositoryDates": repo_dates}
     record, _ = GitHubContributions.objects.update_or_create(
         pk=1,
-        defaults={"data": calendar},
+        defaults={"data": store_data},
     )
 
     _last_refresh = now
