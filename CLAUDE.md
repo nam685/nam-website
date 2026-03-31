@@ -148,6 +148,9 @@ Frontend:
 2. Add QA test items to `docs/QA-CHECKLIST.md`
 3. Follow the existing QA checklist when verifying your changes work correctly
 
+## Backlog
+Issue tracker lives in `backlog/` — one `.md` file per ticket with YAML frontmatter (status, priority, labels). See `backlog/README.md` for conventions. Prefer this over TODO.md for anything that spans multiple sessions.
+
 ## Dev Actions
 Common tasks are available via `make`:
 ```bash
