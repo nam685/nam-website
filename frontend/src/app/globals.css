@@ -119,6 +119,17 @@ a {
   to { opacity: 1; }
 }
 
+/* Shared card animations (codes, reads) */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hexFloat {
+  0%, 100% { opacity: 0.15; transform: rotate(45deg) scale(1); }
+  50%      { opacity: 0.25; transform: rotate(45deg) scale(1.1); }
+}
+
 /* Page container */
 .page {
   max-width: 48rem;

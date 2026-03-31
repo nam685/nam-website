@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Thought, API } from "@/lib/api";
 import { store, storeDel, getAdminToken } from "@/lib/auth";
+import { formatDate } from "@/lib/date";
 const COOLDOWN_MS = 18 * 60 * 60 * 1000; // 18h
 
 const FALLBACK: Thought[] = [
@@ -13,10 +14,6 @@ const FALLBACK: Thought[] = [
     created_at: "2026-03-28T00:00:00Z",
   },
 ];
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-CA");
-}
 
 /* Trunk geometry */
 const TRUNK = "1.25rem";

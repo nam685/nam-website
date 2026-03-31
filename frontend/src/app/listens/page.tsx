@@ -3,20 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { type ListenStats, type ListenTrack, API } from "@/lib/api";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminToken, storeDel } from "@/lib/auth";
+import { timeAgo } from "@/lib/date";
 
 const ORANGE = "#f97316";
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 function formatTotal(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -366,7 +356,7 @@ export default function ListensPage() {
       ]);
 
       if (tracksRes.status === 401 || statsRes.status === 401) {
-        localStorage.removeItem("adminToken");
+        storeDel("adminToken");
         window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
         return;
       }

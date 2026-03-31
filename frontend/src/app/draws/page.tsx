@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Drawing, API } from "@/lib/api";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminToken, store } from "@/lib/auth";
 
 const PURPLE = "#a855f7";
 
@@ -117,7 +117,7 @@ function Lightbox({
   const d = drawings[index];
   const hasPrev = index > 0;
   const hasNext = index < drawings.length - 1;
-  const isAdmin = typeof window !== "undefined" && !!localStorage.getItem("adminToken");
+  const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

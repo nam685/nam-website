@@ -10,7 +10,7 @@ ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
 
 
 def drawing_list(request):  # noqa: ARG001
-    drawings = Drawing.objects.filter(is_published=True)
+    drawings = Drawing.objects.filter(is_published=True)[:200]
     data = [
         {
             "id": d.id,
@@ -25,11 +25,9 @@ def drawing_list(request):  # noqa: ARG001
 
 
 @csrf_exempt
+@require_POST
 @require_admin
 def drawing_upload(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=405)
-
     image = request.FILES.get("image")
     if not image:
         return JsonResponse({"error": "No image provided"}, status=400)

@@ -40,7 +40,6 @@ frontend/.vercel
 .DS_Store
 
 # UV
-uv.lock
 
 # Testing
 .coverage

@@ -295,7 +295,7 @@ export default function SudoPage() {
   return (
     <>
       <title>Nam sudo</title>
-      <Suspense>
+      <Suspense fallback={<div style={{ minHeight: "200px" }} />}>
         <SudoForm />
       </Suspense>
     </>

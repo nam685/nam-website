@@ -1,3 +1,12 @@
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 const posts = [
   {
     slug: "hello-world",
@@ -13,10 +22,10 @@ export function GET() {
     .map(
       (post) => `
     <item>
-      <title>${post.title}</title>
+      <title>${escapeXml(post.title)}</title>
       <link>https://nam685.de/blog/${post.slug}</link>
       <pubDate>${new Date(post.date).toUTCString()}</pubDate>
-      <description>${post.excerpt}</description>
+      <description>${escapeXml(post.excerpt)}</description>
     </item>`,
     )
     .join("");

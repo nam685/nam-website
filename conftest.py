@@ -1,6 +1,15 @@
 import pytest
+from django.core.cache import cache
 
 from website.auth import create_token
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Clear Django cache between tests to avoid stale cached values."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)

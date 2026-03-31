@@ -4,12 +4,13 @@ version = "0.1.0"
 description = "Personal website"
 requires-python = ">=3.12"
 dependencies = [
-    "django>=5.1",
+    "django>=6.0",
     "django-cors-headers>=4.6",
     "django-environ>=0.11",
     "psycopg[binary]>=3.2",
     "gunicorn>=23.0",
     "pillow>=12.1.1",
+    "django-redis>=5.4.0",
     "redis>=5.0",
     "ytmusicapi>=1.9",
 ]
@@ -20,6 +21,7 @@ dev-dependencies = [
     "ruff>=0.9",
     "pytest>=8.0",
     "pytest-django>=4.9",
+    "pytest-cov>=6.0",
 ]
 
 [tool.ruff]
@@ -32,3 +34,4 @@ select = ["E4", "E7", "E9", "F", "I", "N", "ARG"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = "tests.py test_*.py"
+addopts = "--tb=short --cov=website --cov-report=term-missing"

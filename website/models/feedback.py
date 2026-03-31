@@ -8,6 +8,9 @@ class Feedback(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["ip_address", "-created_at"], name="feedback_ip_created_idx"),
+        ]
 
     def __str__(self):
         return self.message[:80]

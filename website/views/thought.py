@@ -1,4 +1,3 @@
-import json
 from datetime import timedelta
 
 from django.core.paginator import Paginator
@@ -8,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin
 from ..models import Thought
+from ..utils import parse_json_body
 
 COOLDOWN = timedelta(hours=18)
 
@@ -39,15 +39,14 @@ def thought_create(request):
         return JsonResponse({"error": "POST required"}, status=405)
 
     # Cooldown: 18h since last thought
-    latest = Thought.objects.filter(is_published=True).first()
+    latest = Thought.objects.filter(is_published=True).order_by("-created_at").first()
     if latest and timezone.now() - latest.created_at < COOLDOWN:
         return JsonResponse({"error": "Chill. Too much thinking for today."}, status=429)
 
-    try:
-        body = json.loads(request.body)
-        content = body.get("content", "").strip()
-    except (json.JSONDecodeError, AttributeError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
+    content = body.get("content", "").strip()
 
     if not content:
         return JsonResponse({"error": "Content required"}, status=400)
