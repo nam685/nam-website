@@ -36,3 +36,28 @@ export interface Project {
   extra_links: ExtraLink[];
   status: "active" | "wip" | "archived";
 }
+
+export interface ListenTrack {
+  id: number;
+  video_id: string;
+  title: string;
+  artist: string;
+  album: string;
+  thumbnail_url: string;
+  duration: string;
+  played_at: string;
+}
+
+export interface ListenStats {
+  today: number;
+  week: number;
+  total: number;
+  top_tracks: {
+    video_id: string;
+    title: string;
+    artist: string;
+    thumbnail_url: string;
+    play_count: number;
+  }[];
+  daily: { date: string; count: number }[];
+}

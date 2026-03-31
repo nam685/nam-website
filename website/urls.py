@@ -17,4 +17,9 @@ urlpatterns = [
     path("github/auth/", views.github_auth),
     path("github/callback/", views.github_callback),
     path("github/refresh-status/", views.github_refresh_status),
+    path("listens/", views.listen_list),
+    path("listens/auth/", views.listen_auth),
+    path("listens/callback/", views.listen_callback),
+    path("listens/stats/", views.listen_stats),
+    path("listens/sync-status/", views.listen_sync_status),
 ]
