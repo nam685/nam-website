@@ -1,8 +1,10 @@
 import json
+from unittest.mock import MagicMock, patch  # noqa: F401
 
 import pytest
 
 from website.models import WatchChannel, WatchVideo
+from website.views import watch as watch_views
 
 
 @pytest.mark.django_db
@@ -244,3 +246,128 @@ class TestWatchVideoDelete:
         resp = client.post(f"/api/watches/videos/{v.id}/delete/", **auth_headers)
         assert resp.status_code == 200
         assert WatchVideo.objects.count() == 0
+
+
+@pytest.fixture(autouse=True)
+def _reset_watch_rate_limit():
+    watch_views._last_sync = 0
+    yield
+    watch_views._last_sync = 0
+
+
+@pytest.mark.django_db
+class TestWatchAuth:
+    def test_no_google_client_id(self, client, admin_token):
+        with patch.dict("os.environ", {"GOOGLE_CLIENT_ID": ""}, clear=False):
+            resp = client.get(f"/api/watches/auth/?token={admin_token}")
+            assert resp.status_code == 500
+
+    @patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-client-id"})
+    def test_redirects_to_google(self, client, admin_token):
+        resp = client.get(f"/api/watches/auth/?token={admin_token}")
+        assert resp.status_code == 302
+        assert "accounts.google.com" in resp["Location"]
+        assert "test-client-id" in resp["Location"]
+        assert "youtube.readonly" in resp["Location"]
+
+    def test_requires_token(self, client):
+        with patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-id"}):
+            assert client.get("/api/watches/auth/").status_code == 401
+
+
+@pytest.mark.django_db
+class TestWatchCallback:
+    def test_missing_code(self, client):
+        resp = client.get("/api/watches/callback/")
+        assert resp.status_code == 400
+
+    def test_bad_state(self, client):
+        resp = client.get("/api/watches/callback/?code=test&state=bad")
+        assert resp.status_code == 401
+
+    def test_error_redirects(self, client):
+        resp = client.get("/api/watches/callback/?error=access_denied")
+        assert resp.status_code == 302
+        assert "/watches?error=" in resp["Location"]
+
+
+@pytest.mark.django_db
+class TestWatchSync:
+    def test_requires_auth(self, client):
+        assert client.post("/api/watches/sync/").status_code == 401
+
+    def test_no_refresh_token(self, client, auth_headers):
+        resp = client.post("/api/watches/sync/", **auth_headers)
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["error"].lower()
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_sync_creates_channels_and_videos(self, mock_api_get, client, auth_headers):
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        mock_api_get.side_effect = [
+            {
+                "items": [
+                    {
+                        "snippet": {
+                            "resourceId": {"channelId": "UC_test"},
+                            "title": "Test Channel",
+                            "description": "Desc",
+                            "thumbnails": {"default": {"url": "https://thumb.jpg"}},
+                        }
+                    }
+                ],
+            },
+            {
+                "items": [
+                    {
+                        "id": "vid_test",
+                        "snippet": {
+                            "title": "Test Video",
+                            "channelId": "UC_test",
+                            "thumbnails": {"high": {"url": "https://vthumb.jpg"}},
+                        },
+                    }
+                ],
+            },
+        ]
+
+        resp = client.post("/api/watches/sync/", **auth_headers)
+        assert resp.status_code == 200
+
+        assert WatchChannel.objects.filter(youtube_channel_id="UC_test").exists()
+        ch = WatchChannel.objects.get(youtube_channel_id="UC_test")
+        assert ch.name == "Test Channel"
+        assert ch.tier == "hidden"
+
+        assert WatchVideo.objects.filter(youtube_video_id="vid_test").exists()
+        v = WatchVideo.objects.get(youtube_video_id="vid_test")
+        assert v.channel == ch
+        assert v.visible is False
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_sync_rate_limited(self, mock_api_get, client, auth_headers):
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+        mock_api_get.return_value = {"items": []}
+
+        client.post("/api/watches/sync/", **auth_headers)
+        resp = client.post("/api/watches/sync/", **auth_headers)
+        assert resp.status_code == 429
+
+
+@pytest.mark.django_db
+class TestWatchSyncStatus:
+    def test_requires_auth(self, client):
+        assert client.get("/api/watches/sync-status/").status_code == 401
+
+    def test_returns_status(self, client, auth_headers):
+        data = client.get("/api/watches/sync-status/", **auth_headers).json()
+        assert data["available"] is True
+        assert data["cooldown_remaining"] == 0
+        assert data["connected"] is False
