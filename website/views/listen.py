@@ -15,6 +15,7 @@ from ytmusicapi.auth.oauth.credentials import OAuthCredentials
 
 from ..auth import require_admin, verify_token
 from ..models import ListenTrack
+from ..utils import create_oauth_nonce, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ def listen_auth(request):
             "scope": "https://www.googleapis.com/auth/youtube.readonly",
             "access_type": "offline",
             "prompt": "consent",
-            "state": admin_token,
+            "state": create_oauth_nonce(),
         }
     )
     return HttpResponseRedirect(f"{GOOGLE_AUTHORIZE_URL}?{params}")
@@ -97,8 +98,8 @@ def listen_callback(request):
     if not code:
         return JsonResponse({"error": "Missing code"}, status=400)
 
-    # Verify admin via state param
-    if not state or not verify_token(state):
+    # Verify OAuth nonce (one-time use, not the admin token)
+    if not verify_oauth_nonce(state):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     # Rate limit
