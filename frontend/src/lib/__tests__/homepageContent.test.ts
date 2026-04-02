@@ -25,20 +25,20 @@ describe("angleFromCenter", () => {
 
 describe("lerpDotColor", () => {
   it("returns first dot color at its exact angle", () => {
-    // DOTS[0] is thinks at 0°, color #FF1744 = rgb(255, 23, 68)
-    expect(lerpDotColor(0)).toEqual([255, 23, 68]);
+    // DOTS[0] is listens at 0°, color #f97316 = rgb(249, 115, 22)
+    expect(lerpDotColor(0)).toEqual([249, 115, 22]);
   });
 
   it("returns second dot color at its exact angle", () => {
-    // DOTS[1] is draws at 40°, color #a855f7 = rgb(168, 85, 247)
-    expect(lerpDotColor(40)).toEqual([168, 85, 247]);
+    // DOTS[1] is grinds at 40°, color #f59e0b = rgb(245, 158, 11)
+    expect(lerpDotColor(40)).toEqual([245, 158, 11]);
   });
 
   it("returns interpolated color at midpoint between two dots", () => {
     const [r, g, b] = lerpDotColor(20);
     // Should be a blend — not equal to either endpoint
-    expect([r, g, b]).not.toEqual([255, 23, 68]);
-    expect([r, g, b]).not.toEqual([168, 85, 247]);
+    expect([r, g, b]).not.toEqual([249, 115, 22]);
+    expect([r, g, b]).not.toEqual([245, 158, 11]);
     // Each channel should be between the two endpoints
     expect(r).toBeGreaterThanOrEqual(168);
     expect(r).toBeLessThanOrEqual(255);

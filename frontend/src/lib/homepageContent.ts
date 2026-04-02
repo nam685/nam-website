@@ -14,15 +14,16 @@ export interface Dot {
 }
 
 export const DOTS: Dot[] = [
-  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 0, desc: "diary & thoughts", breatheDur: 3.2, breatheDelay: 0 },
-  { label: "draws", href: "/draws", color: "#a855f7", size: 10, angle: 40, desc: "pencil & camera", breatheDur: 3.8, breatheDelay: 0.4 },
+  // Ordered by color wavelength (hue angle) — creates a smooth rainbow around the orbit
+  { label: "listens", href: "/listens", color: "#f97316", size: 7, angle: 0, desc: "music & audio", breatheDur: 4.4, breatheDelay: 0.6 },
+  { label: "grinds", href: "/grinds", color: "#f59e0b", size: 8, angle: 40, desc: "work & experience", breatheDur: 3.5, breatheDelay: 1.2 },
   { label: "codes", href: "/codes", color: "#22c55e", size: 9, angle: 80, desc: "demos & experiments", breatheDur: 4.1, breatheDelay: 0.8 },
-  { label: "grinds", href: "/grinds", color: "#f59e0b", size: 8, angle: 120, desc: "work & experience", breatheDur: 3.5, breatheDelay: 1.2 },
-  { label: "listens", href: "/listens", color: "#f97316", size: 7, angle: 160, desc: "music & audio", breatheDur: 4.4, breatheDelay: 0.6 },
-  { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 200, desc: "books & articles", breatheDur: 3.9, breatheDelay: 1.5 },
-  { label: "plays", href: "/plays", color: "#06b6d4", size: 9, angle: 240, desc: "games & fun", breatheDur: 3.6, breatheDelay: 0.3 },
-  { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 280, desc: "film & tv", breatheDur: 4.2, breatheDelay: 1.0 },
-  { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 320, desc: "predictions", breatheDur: 3.4, breatheDelay: 0.7 },
+  { label: "plays", href: "/plays", color: "#06b6d4", size: 9, angle: 120, desc: "games & fun", breatheDur: 3.6, breatheDelay: 0.3 },
+  { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 160, desc: "books & articles", breatheDur: 3.9, breatheDelay: 1.5 },
+  { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 200, desc: "film & tv", breatheDur: 4.2, breatheDelay: 1.0 },
+  { label: "draws", href: "/draws", color: "#a855f7", size: 10, angle: 240, desc: "pencil & camera", breatheDur: 3.8, breatheDelay: 0.4 },
+  { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 280, desc: "predictions", breatheDur: 3.4, breatheDelay: 0.7 },
+  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 320, desc: "diary & thoughts", breatheDur: 3.2, breatheDelay: 0 },
 ];
 
 /* ── Angle + color math ───────────────────────────────── */
