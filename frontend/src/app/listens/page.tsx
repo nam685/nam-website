@@ -386,11 +386,28 @@ export default function ListensPage() {
     }
   }, [fetchData]);
 
-  function handleSync() {
+  const [syncing, setSyncing] = useState(false);
+
+  async function handleSync() {
     const token = getAdminToken();
     if (!token) return;
-    // Redirect to Google OAuth flow — backend handles the rest
-    window.location.href = `${API}/api/listens/auth/?token=${encodeURIComponent(token)}`;
+    setSyncing(true);
+    try {
+      const res = await fetch(`${API}/api/listens/sync/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Sync failed");
+      } else {
+        fetchData();
+      }
+    } catch {
+      setError("Sync request failed");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const nowPlaying = tracks[0] ?? null;
@@ -447,6 +464,7 @@ export default function ListensPage() {
           </div>
           <button
             onClick={handleSync}
+            disabled={syncing}
             title="Pull your YouTube Music history"
             style={{
               padding: "0.25rem 0.75rem",
@@ -457,20 +475,23 @@ export default function ListensPage() {
               fontSize: "0.6875rem",
               textTransform: "uppercase",
               letterSpacing: "0.15em",
-              cursor: "pointer",
+              cursor: syncing ? "wait" : "pointer",
               transition: "border-color 0.2s, background 0.2s",
               borderRadius: 2,
+              opacity: syncing ? 0.5 : 1,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = ORANGE;
-              e.currentTarget.style.background = `${ORANGE}15`;
+              if (!syncing) {
+                e.currentTarget.style.borderColor = ORANGE;
+                e.currentTarget.style.background = `${ORANGE}15`;
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = `${ORANGE}40`;
               e.currentTarget.style.background = "none";
             }}
           >
-            Sync
+            {syncing ? "Syncing..." : "Sync"}
           </button>
         </div>
 

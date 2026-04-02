@@ -1,27 +1,20 @@
-import json
 import logging
 import os
 import time
-import urllib.parse
-import urllib.request
 
 from django.core.cache import cache as redis_cache
 from django.db.models import Count
 from django.db.models.functions import TruncDate
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import JsonResponse
 from django.utils import timezone
-from ytmusicapi import YTMusic
-from ytmusicapi.auth.oauth.credentials import OAuthCredentials
+from django.views.decorators.csrf import csrf_exempt
 
-from ..auth import require_admin, verify_token
+from ..auth import require_admin
 from ..models import ListenTrack
-from ..utils import create_oauth_nonce, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-YTM_HISTORY_URL = "https://www.googleapis.com/youtube/v3"
+OAUTH_JSON_PATH = os.environ.get("YTM_OAUTH_JSON", os.path.join(os.path.dirname(__file__), "..", "..", "oauth.json"))
 
 # Rate limit: 1 sync per 5 minutes
 _last_sync: float = 0
@@ -55,112 +48,28 @@ def listen_list(request):
     return JsonResponse({"tracks": data, "total": total})
 
 
-def listen_auth(request):
-    """Redirect to Google OAuth. Requires admin token as ?token= param."""
-    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
-    if not client_id:
-        return JsonResponse({"error": "Google OAuth not configured"}, status=500)
-
-    admin_token = request.GET.get("token", "")
-    if not admin_token or not verify_token(admin_token):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
-
-    # Build the redirect URI from the request
-    scheme = "https" if request.is_secure() else "http"
-    host = request.get_host()
-    redirect_uri = f"{scheme}://{host}/api/listens/callback/"
-
-    params = urllib.parse.urlencode(
-        {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": "https://www.googleapis.com/auth/youtube",
-            "access_type": "offline",
-            "prompt": "consent",
-            "state": create_oauth_nonce(),
-        }
-    )
-    return HttpResponseRedirect(f"{GOOGLE_AUTHORIZE_URL}?{params}")
-
-
-def listen_callback(request):
-    """Google OAuth callback: exchange code, fetch YTM history via ytmusicapi, store, redirect."""
+@csrf_exempt
+@require_admin
+def listen_sync(_request):
+    """Sync YouTube Music history using file-based ytmusicapi OAuth."""
     global _last_sync
 
-    code = request.GET.get("code", "")
-    state = request.GET.get("state", "")
-    error = request.GET.get("error", "")
+    if not os.path.exists(OAUTH_JSON_PATH):
+        return JsonResponse({"error": "ytmusicapi not configured. Run: uv run ytmusicapi oauth"}, status=500)
 
-    if error:
-        return HttpResponseRedirect(f"/listens?error={urllib.parse.quote(error)}")
-
-    if not code:
-        return JsonResponse({"error": "Missing code"}, status=400)
-
-    # Verify OAuth nonce (one-time use, not the admin token)
-    if not verify_oauth_nonce(state):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
-
-    # Rate limit
     now = time.time()
     if now - _last_sync < SYNC_COOLDOWN:
         remaining = int(SYNC_COOLDOWN - (now - _last_sync))
-        return HttpResponseRedirect(f"/listens?error={urllib.parse.quote(f'Rate limited. Try again in {remaining}s')}")
-
-    # Exchange code for access token
-    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-
-    scheme = "https" if request.is_secure() else "http"
-    host = request.get_host()
-    redirect_uri = f"{scheme}://{host}/api/listens/callback/"
-
-    token_data = urllib.parse.urlencode(
-        {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-        }
-    ).encode()
-
-    token_req = urllib.request.Request(
-        GOOGLE_TOKEN_URL,
-        data=token_data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
+        return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     try:
-        with urllib.request.urlopen(token_req, timeout=10) as resp:
-            token_resp = json.loads(resp.read())
-    except Exception:
-        logger.exception("Failed to exchange Google OAuth code")
-        return HttpResponseRedirect(f"/listens?error={urllib.parse.quote('Failed to exchange OAuth code')}")
+        from ytmusicapi import YTMusic
 
-    access_token = token_resp.get("access_token")
-    if not access_token:
-        return HttpResponseRedirect(f"/listens?error={urllib.parse.quote('No access token received')}")
-
-    # Use ytmusicapi with the short-lived access token to fetch history
-    try:
-        import time as _time
-
-        oauth_creds = OAuthCredentials(client_id=client_id, client_secret=client_secret)
-        token_dict = {
-            "access_token": access_token,
-            "refresh_token": "unused",
-            "scope": "https://www.googleapis.com/auth/youtube",
-            "token_type": "Bearer",
-            "expires_at": int(_time.time()) + token_resp.get("expires_in", 3600),
-            "expires_in": token_resp.get("expires_in", 3600),
-        }
-        yt = YTMusic(auth=token_dict, oauth_credentials=oauth_creds)
+        yt = YTMusic(OAUTH_JSON_PATH)
         history = yt.get_history()
     except Exception:
         logger.exception("Failed to fetch YouTube Music history")
-        return HttpResponseRedirect(f"/listens?error={urllib.parse.quote('Failed to fetch YTM history')}")
+        return JsonResponse({"error": "Failed to fetch YTM history"}, status=500)
 
     # Deduplicate against last 24h
     cutoff = timezone.now() - timezone.timedelta(hours=24)
@@ -203,8 +112,7 @@ def listen_callback(request):
 
     _last_sync = now
 
-    # Token is discarded — never stored
-    return HttpResponseRedirect("/listens")
+    return JsonResponse({"ok": True, "new_tracks": len(new_tracks), "total_history": len(history)})
 
 
 @require_admin
@@ -260,11 +168,13 @@ def listen_sync_status(_request):
 
     last_track = ListenTrack.objects.first()
     last_updated = last_track.played_at.isoformat() if last_track else None
+    configured = os.path.exists(OAUTH_JSON_PATH)
 
     return JsonResponse(
         {
             "available": available,
             "cooldown_remaining": remaining,
             "last_updated": last_updated,
+            "configured": configured,
         }
     )

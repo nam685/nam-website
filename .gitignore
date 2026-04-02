@@ -22,6 +22,9 @@ media/
 .env.local
 .env.*.local
 
+# ytmusicapi OAuth tokens
+oauth.json
+
 # Node / Next.js
 node_modules/
 frontend/.next/
