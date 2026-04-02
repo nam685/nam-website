@@ -73,7 +73,7 @@ def watch_list(request):
 
 
 @require_admin
-def watch_staging(request):
+def watch_staging(_request):
     """Admin: return hidden channels and non-visible videos."""
     hidden_channels = WatchChannel.objects.filter(tier="hidden").order_by("name")
     non_visible_videos = WatchVideo.objects.filter(visible=False).order_by("-created_at")
@@ -154,7 +154,7 @@ def watch_channel_order(request, channel_id):
 
 
 @require_admin
-def watch_channel_delete(request, channel_id):
+def watch_channel_delete(_request, channel_id):
     """Admin: hard delete a channel (videos get SET_NULL)."""
     try:
         channel = WatchChannel.objects.get(pk=channel_id)
@@ -166,7 +166,7 @@ def watch_channel_delete(request, channel_id):
 
 
 @require_admin
-def watch_video_pin(request, video_id):
+def watch_video_pin(_request, video_id):
     """Admin: toggle pinned on a video; if pinning, also set visible=True."""
     try:
         video = WatchVideo.objects.get(pk=video_id)
@@ -199,7 +199,7 @@ def watch_video_note(request, video_id):
 
 
 @require_admin
-def watch_video_delete(request, video_id):
+def watch_video_delete(_request, video_id):
     """Admin: hard delete a video."""
     try:
         video = WatchVideo.objects.get(pk=video_id)
@@ -465,7 +465,7 @@ def watch_callback(request):
 
 
 @require_admin
-def watch_sync(request):
+def watch_sync(_request):
     """Trigger a YouTube subscription + liked video sync."""
     global _last_sync
 
@@ -492,7 +492,7 @@ def watch_sync(request):
 
 
 @require_admin
-def watch_sync_status(request):
+def watch_sync_status(_request):
     """Check sync availability and connection status."""
     now = time.time()
     elapsed = now - _last_sync

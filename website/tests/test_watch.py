@@ -123,7 +123,7 @@ class TestWatchList:
         tiers = [c["tier"] for c in data["channels"]]
         assert tiers == ["never_miss", "regular"]
 
-    def test_pagination(self, client, db):  # noqa: ARG001
+    def test_pagination(self, client, db):  # noqa: ARG002
         for i in range(35):
             WatchChannel.objects.create(youtube_channel_id=f"UC_{i}", name=f"Channel {i}", tier="regular")
         data = client.get("/api/watches/?limit=10&offset=0").json()
@@ -151,7 +151,7 @@ class TestWatchTier:
     def test_requires_auth(self, client):
         assert client.post("/api/watches/channels/1/tier/").status_code == 401
 
-    def test_set_tier(self, client, auth_headers, db):  # noqa: ARG001
+    def test_set_tier(self, client, auth_headers, db):  # noqa: ARG002
         ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch", tier="hidden")
         resp = client.post(
             f"/api/watches/channels/{ch.id}/tier/",
@@ -163,7 +163,7 @@ class TestWatchTier:
         ch.refresh_from_db()
         assert ch.tier == "never_miss"
 
-    def test_invalid_tier(self, client, auth_headers, db):  # noqa: ARG001
+    def test_invalid_tier(self, client, auth_headers, db):  # noqa: ARG002
         ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
         resp = client.post(
             f"/api/watches/channels/{ch.id}/tier/",
@@ -185,7 +185,7 @@ class TestWatchTier:
 
 @pytest.mark.django_db
 class TestWatchOrder:
-    def test_set_order(self, client, auth_headers, db):  # noqa: ARG001
+    def test_set_order(self, client, auth_headers, db):  # noqa: ARG002
         ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
         resp = client.post(
             f"/api/watches/channels/{ch.id}/order/",
@@ -200,7 +200,7 @@ class TestWatchOrder:
 
 @pytest.mark.django_db
 class TestWatchChannelDelete:
-    def test_delete_channel_nullifies_videos(self, client, auth_headers, db):  # noqa: ARG001
+    def test_delete_channel_nullifies_videos(self, client, auth_headers, db):  # noqa: ARG002
         ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
         WatchVideo.objects.create(youtube_video_id="v1", title="V", channel=ch)
         resp = client.post(f"/api/watches/channels/{ch.id}/delete/", **auth_headers)
@@ -212,7 +212,7 @@ class TestWatchChannelDelete:
 
 @pytest.mark.django_db
 class TestWatchVideoPin:
-    def test_toggle_pin(self, client, auth_headers, db):  # noqa: ARG001
+    def test_toggle_pin(self, client, auth_headers, db):  # noqa: ARG002
         v = WatchVideo.objects.create(youtube_video_id="v1", title="V", pinned=False, visible=False)
         resp = client.post(f"/api/watches/videos/{v.id}/pin/", **auth_headers)
         assert resp.status_code == 200
@@ -226,7 +226,7 @@ class TestWatchVideoPin:
 
 @pytest.mark.django_db
 class TestWatchVideoNote:
-    def test_set_note(self, client, auth_headers, db):  # noqa: ARG001
+    def test_set_note(self, client, auth_headers, db):  # noqa: ARG002
         v = WatchVideo.objects.create(youtube_video_id="v1", title="V")
         resp = client.post(
             f"/api/watches/videos/{v.id}/note/",
@@ -241,7 +241,7 @@ class TestWatchVideoNote:
 
 @pytest.mark.django_db
 class TestWatchVideoDelete:
-    def test_delete_video(self, client, auth_headers, db):  # noqa: ARG001
+    def test_delete_video(self, client, auth_headers, db):  # noqa: ARG002
         v = WatchVideo.objects.create(youtube_video_id="v1", title="V")
         resp = client.post(f"/api/watches/videos/{v.id}/delete/", **auth_headers)
         assert resp.status_code == 200
