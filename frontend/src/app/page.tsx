@@ -1,163 +1,268 @@
-import Link from "next/link";
+"use client";
 
-const cards = [
-  {
-    sector: "SECTOR_01",
-    href: "/thinks",
-    title: "Thinks",
-    desc: "Thoughts, diary entries, and random text",
-    icon: "▤",
-  },
-  {
-    sector: "SECTOR_02",
-    href: "/draws",
-    title: "Draws",
-    desc: "Drawings, photos of cats, fish, trees, and more",
-    icon: "◈",
-  },
-  {
-    sector: "SECTOR_03",
-    href: "/codes",
-    title: "Codes",
-    desc: "Demos and experiments from GitHub",
-    icon: "⌨",
-  },
-  {
-    sector: "SECTOR_04",
-    href: "/grinds",
-    title: "Grinds",
-    desc: "Professional experience and skills",
-    icon: "◉",
-  },
-];
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import {
+  DOTS,
+  angleFromCenter,
+  lerpDotColor,
+  fetchRandomContent,
+  type ContentItem,
+} from "@/lib/homepageContent";
 
 export default function Home() {
+  const [content, setContent] = useState<ContentItem | null>(null);
+  const ambientRef = useRef<HTMLDivElement>(null);
+  const orbitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchRandomContent().then(setContent);
+  }, []);
+
+  useEffect(() => {
+    const orbit = orbitRef.current;
+    const ambient = ambientRef.current;
+    if (!orbit || !ambient) return;
+
+    function onMove(e: MouseEvent) {
+      const rect = orbit!.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = e.clientX - cx;
+      const dy = e.clientY - cy;
+      const angle = angleFromCenter(dx, dy);
+      const [r, g, b] = lerpDotColor(angle);
+      ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.12) 0%, transparent 70%)`;
+    }
+
+    document.addEventListener("mousemove", onMove);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+    };
+  }, []);
+
   return (
-    <main className="min-h-screen">
-      {/* Hero */}
-      <section className="relative px-6 pt-16 pb-12 md:px-12 md:pt-24 md:pb-20 max-w-7xl mx-auto overflow-hidden">
-        {/* Decorative geometric */}
+    <main
+      style={{
+        position: "fixed",
+        top: "3.5rem",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {/* Ambient glow */}
+      <div
+        ref={ambientRef}
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(75vw, 75vh, 420px)",
+          height: "min(75vw, 75vh, 420px)",
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 70%)",
+          pointerEvents: "none",
+          transition: "background 0.2s",
+          zIndex: 0,
+        }}
+      />
+
+      {/* Orbit */}
+      <div
+        ref={orbitRef}
+        className="orbit-container"
+        style={{
+          position: "relative",
+          width: "min(75vw, 75vh, 420px)",
+          height: "min(75vw, 75vh, 420px)",
+        }}
+      >
+        {/* Faint ring */}
         <div
-          className="absolute top-0 right-0 w-64 h-64 md:w-96 md:h-96 opacity-5 pointer-events-none"
           style={{
-            background:
-              "linear-gradient(135deg, var(--accent) 0%, transparent 70%)",
-            clipPath: "polygon(100% 0, 100% 100%, 0 0)",
+            position: "absolute",
+            inset: 0,
+            border: "1px solid rgba(255,255,255,0.025)",
+            borderRadius: "50%",
+            pointerEvents: "none",
           }}
         />
 
-        <div className="relative z-10">
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1 mb-6"
-            style={{
-              borderLeft: "4px solid var(--accent)",
-              background: "color-mix(in srgb, var(--accent) 5%, transparent)",
-            }}
-          >
-            <span
-              className="text-xs tracking-[0.3em] uppercase font-bold"
-              style={{
-                fontFamily: "var(--font-headline)",
-                color: "var(--accent)",
-              }}
-            >
-              Identity Verified // Access Granted
-            </span>
-          </div>
-
-          <h1
-            className="text-6xl md:text-8xl lg:text-9xl font-black uppercase tracking-tighter text-white mb-6"
-            style={{
-              fontFamily: "var(--font-headline)",
-              textShadow:
-                "0 0 40px color-mix(in srgb, var(--accent) 25%, transparent)",
-            }}
-          >
-            Hi, I&apos;m{" "}
-            <span style={{ color: "var(--accent)", transition: "color 0.4s" }}>
-              Nam
-            </span>
-          </h1>
-
-          <p className="max-w-xl text-lg md:text-xl text-[#888] leading-relaxed">
-            I build things, draw pictures, and write about whatever catches my
-            attention.
-          </p>
-        </div>
-      </section>
-
-      {/* Card grid */}
-      <section className="px-6 pb-16 md:px-12 md:pb-24 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-          {cards.map((card) => (
-            <Link key={card.href} href={card.href}>
-              <div
-                className="group relative h-40 sm:h-52 md:h-64 flex flex-col justify-between p-5 md:p-8 transition-colors bg-[#1a1a1a] hover:bg-[#2a2a2a]"
+        {/* Center content */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            maxWidth: "65%",
+            textAlign: "center",
+            zIndex: 2,
+          }}
+        >
+          {content?.type === "thought" && (
+            <div style={{ animation: "fadeIn 0.8s ease-out" }}>
+              <p
                 style={{
-                  borderLeft: "3px solid var(--accent)",
-                  transition: "background 0.15s, border-color 0.4s",
+                  fontSize: "clamp(0.9rem, 2.5vw, 1.1rem)",
+                  lineHeight: 1.7,
+                  color: "#e5e2e1",
+                  fontWeight: 300,
+                  fontStyle: "italic",
                 }}
               >
-                <div className="flex justify-between items-start">
-                  <span
-                    className="text-xs tracking-widest"
-                    style={{
-                      fontFamily: "var(--font-headline)",
-                      color: "var(--accent)",
-                      transition: "color 0.4s",
-                    }}
-                  >
-                    [ {card.sector} ]
-                  </span>
-                  <span
-                    className="text-lg opacity-60 group-hover:opacity-100 transition-opacity"
-                    style={{
-                      color: "var(--accent)",
-                      transition: "color 0.4s, opacity 0.15s",
-                    }}
-                  >
-                    ↗
-                  </span>
-                </div>
-
-                <div>
-                  <h3
-                    className="text-2xl md:text-3xl font-bold text-white uppercase mb-2"
-                    style={{ fontFamily: "var(--font-headline)" }}
-                  >
-                    {card.title}
-                  </h3>
-                  <p className="text-sm text-[#888] leading-relaxed hidden sm:block">
-                    {card.desc}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Status strip */}
-      <div
-        className="w-full py-3 px-6 border-y"
-        style={{ borderColor: "#27272a", background: "#131313" }}
-      >
-        <div className="flex gap-8 md:gap-16 max-w-7xl mx-auto overflow-hidden">
-          {[
-            "System Status: Optimal",
-            "Protocol: HUD_V1",
-            "Location: [REDACTED]",
-          ].map((item) => (
-            <span
-              key={item}
-              className="text-[10px] tracking-[0.3em] uppercase whitespace-nowrap"
-              style={{ color: "#444", fontFamily: "var(--font-headline)" }}
+                &ldquo;{content.text}&rdquo;
+              </p>
+              <span
+                style={{
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.6rem",
+                  color: "#333",
+                  marginTop: "0.75rem",
+                  display: "block",
+                  letterSpacing: "0.15em",
+                }}
+              >
+                {content.date}
+              </span>
+            </div>
+          )}
+          {content?.type === "drawing" && (
+            <div style={{ animation: "fadeIn 0.8s ease-out" }}>
+              <img
+                src={content.src}
+                alt={content.alt}
+                style={{
+                  maxHeight: 200,
+                  maxWidth: "100%",
+                  borderRadius: 6,
+                  border: "1px solid #1a1a1a",
+                  objectFit: "contain",
+                }}
+              />
+            </div>
+          )}
+          {content?.type === "greeting" && (
+            <p
+              style={{
+                fontSize: "clamp(1.2rem, 3vw, 1.6rem)",
+                fontWeight: 300,
+                color: "#e5e2e1",
+                animation: "fadeIn 0.8s ease-out",
+              }}
             >
-              {item}
-            </span>
-          ))}
+              {content.text}
+            </p>
+          )}
         </div>
+
+        {/* Dots */}
+        {DOTS.map((dot) => {
+          const rad = (dot.angle * Math.PI) / 180;
+          const x = Math.sin(rad) * 50;
+          const y = -Math.cos(rad) * 50;
+
+          return (
+            <Link
+              key={dot.href}
+              href={dot.href}
+              className="constellation-dot"
+              style={
+                {
+                  position: "absolute",
+                  top: `calc(50% + ${y}%)`,
+                  left: `calc(50% + ${x}%)`,
+                  transform: "translate(-50%, -50%)",
+                  zIndex: 10,
+                  "--pill-color": dot.color,
+                } as React.CSSProperties
+              }
+            >
+              <span
+                className="constellation-dot-circle"
+                style={{
+                  display: "block",
+                  width: dot.size,
+                  height: dot.size,
+                  borderRadius: "50%",
+                  background: dot.color,
+                  boxShadow: `0 0 ${dot.size * 1.5}px ${dot.color}`,
+                  animation: `breathe ${dot.breatheDur}s ${dot.breatheDelay}s ease-in-out infinite`,
+                }}
+              />
+              {/* Pill tooltip */}
+              <span className="constellation-pill">
+                <span
+                  style={{
+                    fontFamily: "var(--font-headline)",
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: dot.color,
+                  }}
+                >
+                  {dot.label}
+                </span>
+                <span style={{ fontSize: "0.55rem", color: "#666" }}>
+                  {dot.desc}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
       </div>
+
+      <style>{`
+        @keyframes breathe {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .constellation-dot-circle { animation: none !important; opacity: 1; }
+        }
+        .constellation-dot {
+          text-decoration: none;
+        }
+        .constellation-dot:hover .constellation-dot-circle {
+          transform: scale(1.6);
+          transition: transform 0.2s;
+        }
+        .constellation-pill {
+          position: absolute;
+          left: 50%;
+          bottom: calc(100% + 8px);
+          transform: translateX(-50%);
+          background: #131313;
+          border: 1px solid color-mix(in srgb, var(--pill-color, #1a1a1a) 30%, #1a1a1a);
+          border-radius: 6px;
+          padding: 0.3rem 0.6rem;
+          white-space: nowrap;
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.25s;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.1rem;
+        }
+        .constellation-dot:hover .constellation-pill {
+          opacity: 1;
+        }
+        @media (max-width: 480px) {
+          .orbit-container {
+            width: 85vw !important;
+            height: 85vw !important;
+          }
+          .constellation-pill { display: none !important; }
+        }
+      `}</style>
     </main>
   );
 }
