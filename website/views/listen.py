@@ -75,7 +75,7 @@ def listen_auth(request):
             "client_id": client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
-            "scope": "https://www.googleapis.com/auth/youtube.readonly",
+            "scope": "https://www.googleapis.com/auth/youtube",
             "access_type": "offline",
             "prompt": "consent",
             "state": create_oauth_nonce(),
