@@ -431,24 +431,6 @@ export default function CodesClient({
 }) {
   return (
     <>
-      <style>{`
-        .code-card {
-          animation: fadeUp 0.6s ease-out both;
-          transition: border-color 0.3s, box-shadow 0.3s;
-        }
-        .code-card:nth-child(2) { animation-delay: 0.15s; }
-        .code-card:hover {
-          border-color: color-mix(in srgb, ${ACCENT} 50%, #1a1a1a) !important;
-          box-shadow: 0 0 24px color-mix(in srgb, ${ACCENT} 15%, transparent);
-        }
-        .code-link {
-          transition: color 0.2s, text-shadow 0.2s;
-        }
-        .code-link:hover {
-          text-shadow: 0 0 8px color-mix(in srgb, ${ACCENT} 50%, transparent);
-        }
-      `}</style>
-
       <div
         style={{
           maxWidth: "56rem",
