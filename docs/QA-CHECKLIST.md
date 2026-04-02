@@ -68,6 +68,28 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Sync cooldown (5 min) is enforced
 - [ ] Deduplication works (no duplicate tracks after re-sync)
 
+## Watches
+
+- [ ] Page loads and shows glow grid of channels (if any exist)
+- [ ] Channels are sorted by tier (never_miss first, then regular, then check_out)
+- [ ] Tier visual intensity differs (glow, border, opacity, avatar size)
+- [ ] Clicking a channel expands it in-place showing pinned videos
+- [ ] Clicking again collapses the expanded card
+- [ ] Video thumbnails link to YouTube in a new tab
+- [ ] Channel avatars link to YouTube channel in a new tab
+- [ ] "Show more" button appears when total > page size
+- [ ] Show more loads additional channels without duplicates
+- [ ] Mobile: grid collapses to fewer columns, expanded cards span full width
+- [ ] Admin: "connect youtube" button visible when logged in and not connected
+- [ ] Admin: "sync" button visible when connected
+- [ ] Admin: sync rate limiting shows cooldown
+- [ ] Admin: staging link navigates to /watches/staging
+- [ ] Staging: hidden channels shown with tier promote buttons
+- [ ] Staging: hidden videos shown with pin and delete buttons
+- [ ] Staging: promoting a channel removes it from staging
+- [ ] Staging: pinning a video removes it from staging
+- [ ] Staging: requires auth (redirects to /sudo if not logged in)
+
 ## Reads
 
 - [ ] Page loads (content may be placeholder/coming soon)
