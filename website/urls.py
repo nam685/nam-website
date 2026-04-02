@@ -23,4 +23,12 @@ urlpatterns = [
     path("listens/callback/", views.listen_callback),
     path("listens/stats/", views.listen_stats),
     path("listens/sync-status/", views.listen_sync_status),
+    path("watches/", views.watch_list),
+    path("watches/staging/", views.watch_staging),
+    path("watches/channels/<int:channel_id>/tier/", views.watch_channel_tier),
+    path("watches/channels/<int:channel_id>/order/", views.watch_channel_order),
+    path("watches/channels/<int:channel_id>/delete/", views.watch_channel_delete),
+    path("watches/videos/<int:video_id>/pin/", views.watch_video_pin),
+    path("watches/videos/<int:video_id>/note/", views.watch_video_note),
+    path("watches/videos/<int:video_id>/delete/", views.watch_video_delete),
 ]

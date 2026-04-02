@@ -10,6 +10,16 @@ from .listen import listen_auth, listen_callback, listen_list, listen_stats, lis
 from .project import project_list
 from .thought import thought_create, thought_list
 from .todo import todo_list
+from .watch import (
+    watch_channel_delete,
+    watch_channel_order,
+    watch_channel_tier,
+    watch_list,
+    watch_staging,
+    watch_video_delete,
+    watch_video_note,
+    watch_video_pin,
+)
 
 __all__ = [
     "auth_check",
@@ -32,4 +42,12 @@ __all__ = [
     "thought_create",
     "thought_list",
     "todo_list",
+    "watch_channel_delete",
+    "watch_channel_order",
+    "watch_channel_tier",
+    "watch_list",
+    "watch_staging",
+    "watch_video_delete",
+    "watch_video_note",
+    "watch_video_pin",
 ]
