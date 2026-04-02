@@ -35,16 +35,9 @@ export default function Home() {
       ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.12) 0%, transparent 70%)`;
     }
 
-    function onLeave() {
-      ambient!.style.background =
-        "radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 70%)";
-    }
-
-    orbit.addEventListener("mousemove", onMove);
-    orbit.addEventListener("mouseleave", onLeave);
+    document.addEventListener("mousemove", onMove);
     return () => {
-      orbit.removeEventListener("mousemove", onMove);
-      orbit.removeEventListener("mouseleave", onLeave);
+      document.removeEventListener("mousemove", onMove);
     };
   }, []);
 
