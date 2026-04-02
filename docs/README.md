@@ -26,8 +26,11 @@ A private listening dashboard (admin-only) that syncs with YouTube Music via Goo
 ### Reads
 A curated reading list (coming soon).
 
-### Plays / Watches / Bets
-Future sections — placeholders for gaming, media, and prediction content.
+### Plays
+A chess opening trainer. Practice openings by playing moves on an interactive board — the app shows the current opening name (ECO code), available book moves, and auto-plays opponent responses from a built-in database of 50+ common openings. Supports playing as white or black.
+
+### Watches / Bets
+Future sections — placeholders for media and prediction content.
 
 ## Feedback
 

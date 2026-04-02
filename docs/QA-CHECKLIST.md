@@ -77,6 +77,21 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] `/feed.xml` returns valid RSS XML
 - [ ] Feed contains thought entries with correct titles and dates
 
+## Plays
+
+- [ ] Chessboard renders with starting position
+- [ ] Book moves panel shows available moves (e4, d4, Nf3, c4, f4 at start)
+- [ ] Clicking a book move plays it on the board
+- [ ] Opponent auto-responds with a book move
+- [ ] Opening name and ECO code update as moves are played
+- [ ] Move history displays correctly below the board
+- [ ] Reset button returns to starting position
+- [ ] Takeback undoes two moves (yours + opponent's)
+- [ ] Flip button switches side and resets the board
+- [ ] Drag-and-drop moves work on the board
+- [ ] "Out of book" message shows when deviating from known lines
+- [ ] Board renders on mobile viewport
+
 ## Performance
 
 - [ ] Pages load within 3 seconds on first visit
