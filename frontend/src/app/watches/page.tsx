@@ -343,6 +343,8 @@ export default function WatchesPage() {
           maxWidth: 900,
           margin: "0 auto",
           padding: "2rem 1.5rem 6rem",
+          position: "relative",
+          zIndex: 1,
         }}
       >
         {/* Header */}

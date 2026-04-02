@@ -419,6 +419,8 @@ export default function WatchesStagingPage() {
           maxWidth: 800,
           margin: "0 auto",
           padding: "2rem 1.5rem 6rem",
+          position: "relative" as const,
+          zIndex: 1,
         }}
       >
         {/* Header */}
