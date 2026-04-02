@@ -4,6 +4,7 @@ import pytest
 from django.utils import timezone
 
 from website.models import ListenTrack
+from website.utils import create_oauth_nonce
 from website.views import listen
 
 
@@ -150,13 +151,14 @@ class TestListenCallback:
         assert "/listens?error=" in resp["Location"]
 
     @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_syncs_tracks(self, mock_urlopen, client, admin_token):
+    def test_callback_syncs_tracks(self, mock_urlopen, client):
         mock_resp = MagicMock()
         mock_resp.read.return_value = b'{"access_token":"fake","expires_in":3600}'
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
+        nonce = create_oauth_nonce()
         with (
             patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
             patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
@@ -164,7 +166,7 @@ class TestListenCallback:
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = MOCK_HISTORY
             mock_ytmusic_cls.return_value = mock_yt
-            resp = client.get(f"/api/listens/callback/?code=authcode&state={admin_token}")
+            resp = client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
 
         assert resp.status_code == 302
         assert resp["Location"] == "/listens"
@@ -172,7 +174,7 @@ class TestListenCallback:
         assert ListenTrack.objects.get(video_id="abc123").artist == "Test Artist"
 
     @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_deduplicates(self, mock_urlopen, client, admin_token):
+    def test_callback_deduplicates(self, mock_urlopen, client):
         ListenTrack.objects.create(video_id="abc123", title="Old", artist="Old", played_at=timezone.now())
 
         mock_resp = MagicMock()
@@ -181,6 +183,7 @@ class TestListenCallback:
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
+        nonce = create_oauth_nonce()
         with (
             patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
             patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
@@ -188,18 +191,19 @@ class TestListenCallback:
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = MOCK_HISTORY
             mock_ytmusic_cls.return_value = mock_yt
-            client.get(f"/api/listens/callback/?code=authcode&state={admin_token}")
+            client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
 
         assert ListenTrack.objects.count() == 2
 
     @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_rate_limited(self, mock_urlopen, client, admin_token):
+    def test_callback_rate_limited(self, mock_urlopen, client):
         mock_resp = MagicMock()
         mock_resp.read.return_value = b'{"access_token":"fake","expires_in":3600}'
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
+        nonce = create_oauth_nonce()
         with (
             patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
             patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
@@ -207,9 +211,10 @@ class TestListenCallback:
             mock_yt = MagicMock()
             mock_yt.get_history.return_value = []
             mock_ytmusic_cls.return_value = mock_yt
-            client.get(f"/api/listens/callback/?code=authcode&state={admin_token}")
+            client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
 
-        resp = client.get(f"/api/listens/callback/?code=authcode2&state={admin_token}")
+        nonce2 = create_oauth_nonce()
+        resp = client.get(f"/api/listens/callback/?code=authcode2&state={nonce2}")
         assert resp.status_code == 302
         assert "error=" in resp["Location"]
 

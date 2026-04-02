@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from ..auth import require_admin, verify_token
 from ..models import WatchChannel, WatchVideo
-from ..utils import parse_json_body
+from ..utils import create_oauth_nonce, parse_json_body, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -391,6 +391,7 @@ def watch_auth(request):
     host = request.get_host()
     redirect_uri = f"{scheme}://{host}/api/watches/callback/"
 
+    nonce = create_oauth_nonce()
     params = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -399,7 +400,7 @@ def watch_auth(request):
             "scope": "https://www.googleapis.com/auth/youtube.readonly",
             "access_type": "offline",
             "prompt": "consent",
-            "state": admin_token,
+            "state": nonce,
         }
     )
     return HttpResponseRedirect(f"{GOOGLE_AUTHORIZE_URL}?{params}")
@@ -416,7 +417,7 @@ def watch_callback(request):
         return JsonResponse({"error": "Missing code"}, status=400)
 
     state = request.GET.get("state", "")
-    if not state or not verify_token(state):
+    if not verify_oauth_nonce(state):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     client_id = os.environ.get("GOOGLE_CLIENT_ID", "")

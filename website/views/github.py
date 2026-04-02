@@ -8,6 +8,7 @@ from django.http import HttpResponseRedirect, JsonResponse
 
 from ..auth import require_admin, verify_token
 from ..models import GitHubContributions
+from ..utils import create_oauth_nonce, verify_oauth_nonce
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
@@ -40,7 +41,7 @@ def github_auth(request):
         {
             "client_id": client_id,
             "scope": "read:user",
-            "state": admin_token,
+            "state": create_oauth_nonce(),
         }
     )
     return HttpResponseRedirect(f"{GITHUB_AUTHORIZE_URL}?{params}")
@@ -51,15 +52,13 @@ def github_callback(request):
     global _last_refresh
 
     code = request.GET.get("code", "")
-    state = request.GET.get("state", "")  # admin token passed via state
+    state = request.GET.get("state", "")
 
     if not code:
         return JsonResponse({"error": "Missing code"}, status=400)
 
-    # Verify admin via state param
-    from ..auth import verify_token
-
-    if not state or not verify_token(state):
+    # Verify OAuth nonce (one-time use, not the admin token)
+    if not verify_oauth_nonce(state):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     # Rate limit
