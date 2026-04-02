@@ -32,7 +32,7 @@ export default function Home() {
       const dy = e.clientY - cy;
       const angle = angleFromCenter(dx, dy);
       const [r, g, b] = lerpDotColor(angle);
-      ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.06) 0%, transparent 70%)`;
+      ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.12) 0%, transparent 70%)`;
     }
 
     function onLeave() {
@@ -69,8 +69,8 @@ export default function Home() {
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: 300,
-          height: 300,
+          width: "min(75vw, 75vh, 420px)",
+          height: "min(75vw, 75vh, 420px)",
           borderRadius: "50%",
           background:
             "radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 70%)",
