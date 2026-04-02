@@ -151,7 +151,7 @@ def listen_callback(request):
         token_dict = {
             "access_token": access_token,
             "refresh_token": "unused",
-            "scope": "https://www.googleapis.com/auth/youtube.readonly",
+            "scope": "https://www.googleapis.com/auth/youtube",
             "token_type": "Bearer",
             "expires_at": int(_time.time()) + token_resp.get("expires_in", 3600),
             "expires_in": token_resp.get("expires_in", 3600),
