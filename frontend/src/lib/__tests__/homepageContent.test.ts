@@ -25,25 +25,33 @@ describe("angleFromCenter", () => {
 
 describe("lerpDotColor", () => {
   it("returns first dot color at its exact angle", () => {
-    const c = lerpDotColor(0);
-    expect(c).toBe("rgb(255,23,68)");
+    // DOTS[0] is thinks at 0°, color #FF1744 = rgb(255, 23, 68)
+    expect(lerpDotColor(0)).toEqual([255, 23, 68]);
   });
 
   it("returns second dot color at its exact angle", () => {
-    const c = lerpDotColor(40);
-    expect(c).toBe("rgb(168,85,247)");
+    // DOTS[1] is draws at 40°, color #a855f7 = rgb(168, 85, 247)
+    expect(lerpDotColor(40)).toEqual([168, 85, 247]);
   });
 
   it("returns interpolated color at midpoint between two dots", () => {
-    const c = lerpDotColor(20);
-    expect(c).toMatch(/^rgb\(\d+,\d+,\d+\)$/);
-    expect(c).not.toBe("rgb(255,23,68)");
-    expect(c).not.toBe("rgb(168,85,247)");
+    const [r, g, b] = lerpDotColor(20);
+    // Should be a blend — not equal to either endpoint
+    expect([r, g, b]).not.toEqual([255, 23, 68]);
+    expect([r, g, b]).not.toEqual([168, 85, 247]);
+    // Each channel should be between the two endpoints
+    expect(r).toBeGreaterThanOrEqual(168);
+    expect(r).toBeLessThanOrEqual(255);
   });
 
   it("wraps correctly between last dot and first dot", () => {
-    const c = lerpDotColor(340);
-    expect(c).toMatch(/^rgb\(\d+,\d+,\d+\)$/);
+    const [r, g, b] = lerpDotColor(340);
+    // 340° is between bets (320°, #db2777) and thinks (0°, #FF1744)
+    // Should be valid channel values
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(255);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(b).toBeGreaterThanOrEqual(0);
   });
 });
 

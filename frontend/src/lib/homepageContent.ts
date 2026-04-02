@@ -42,8 +42,8 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-/** Interpolate between dot colors based on angle (0–360°). */
-export function lerpDotColor(angle: number): string {
+/** Interpolate between dot colors based on angle (0–360°). Returns [r, g, b]. */
+export function lerpDotColor(angle: number): [number, number, number] {
   const a = ((angle % 360) + 360) % 360;
   const sectorSize = 360 / DOTS.length;
   const sector = a / sectorSize;
@@ -54,11 +54,11 @@ export function lerpDotColor(angle: number): string {
   const [r1, g1, b1] = hexToRgb(DOTS[i].color);
   const [r2, g2, b2] = hexToRgb(DOTS[j].color);
 
-  const r = Math.round(r1 + (r2 - r1) * t);
-  const g = Math.round(g1 + (g2 - g1) * t);
-  const b = Math.round(b1 + (b2 - b1) * t);
-
-  return `rgb(${r},${g},${b})`;
+  return [
+    Math.round(r1 + (r2 - r1) * t),
+    Math.round(g1 + (g2 - g1) * t),
+    Math.round(b1 + (b2 - b1) * t),
+  ];
 }
 
 /* ── Random center content ────────────────────────────── */

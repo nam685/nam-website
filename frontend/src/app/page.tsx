@@ -31,8 +31,8 @@ export default function Home() {
       const dx = e.clientX - cx;
       const dy = e.clientY - cy;
       const angle = angleFromCenter(dx, dy);
-      const color = lerpDotColor(angle);
-      ambient!.style.background = `radial-gradient(circle, ${color}10 0%, transparent 70%)`;
+      const [r, g, b] = lerpDotColor(angle);
+      ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.06) 0%, transparent 70%)`;
     }
 
     function onLeave() {
