@@ -50,12 +50,11 @@ Flow:
 2. `GET /api/watches/auth/?token=<admin_token>` → redirects to Google OAuth
 3. Google redirects to `/api/watches/callback/?code=...&state=<admin_token>`
 4. Callback exchanges code for access token
-5. **Proactive sync** — immediately syncs subscriptions + liked videos on successful OAuth
-6. Redirects to `/watches`
+5. Redirects to `/watches`
 
 ### Sync Logic
 
-Triggered by: OAuth callback (proactive), or manual trigger via `/api/watches/sync/`. Cron/scheduled sync deferred to a future iteration.
+Triggered by: admin clicking the "Sync" button (`POST /api/watches/sync/`). No automatic/cron sync — the admin is proactive about when to sync.
 
 **Subscriptions sync:**
 - YouTube Data API: `GET /youtube/v3/subscriptions?mine=true&part=snippet&maxResults=50`
@@ -176,4 +175,4 @@ Use the existing `#1e40af` accent. No custom background image for v1 — match t
 - No watch history tracking — only subscriptions and liked videos
 - No automatic tier assignment — all curation is manual
 - No comments or social features on videos
-- No background/cron sync in v1 — manual trigger only (cron can be added later)
+- No automatic/cron sync — admin clicks sync manually
