@@ -129,7 +129,7 @@ class TestListenAuth:
         assert resp.status_code == 302
         assert "accounts.google.com" in resp["Location"]
         assert "test-client-id" in resp["Location"]
-        assert "youtube.readonly" in resp["Location"]
+        assert "auth%2Fyoutube" in resp["Location"]
 
 
 # ── OAuth callback ────────────────────────────────────
