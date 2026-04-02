@@ -45,9 +45,10 @@ function hexToRgb(hex: string): [number, number, number] {
 /** Interpolate between dot colors based on angle (0–360°). */
 export function lerpDotColor(angle: number): string {
   const a = ((angle % 360) + 360) % 360;
-  const sector = a / 40;
-  const i = Math.floor(sector) % 9;
-  const j = (i + 1) % 9;
+  const sectorSize = 360 / DOTS.length;
+  const sector = a / sectorSize;
+  const i = Math.floor(sector) % DOTS.length;
+  const j = (i + 1) % DOTS.length;
   const t = sector - Math.floor(sector);
 
   const [r1, g1, b1] = hexToRgb(DOTS[i].color);
