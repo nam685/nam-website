@@ -61,3 +61,59 @@ export interface ListenStats {
   }[];
   daily: { date: string; count: number }[];
 }
+
+export interface WatchVideo {
+  id: number;
+  youtube_video_id: string;
+  title: string;
+  thumbnail_url: string;
+  note: string;
+}
+
+export interface WatchChannel {
+  id: number;
+  youtube_channel_id: string;
+  name: string;
+  description: string;
+  thumbnail_url: string;
+  tier: "never_miss" | "regular" | "check_out";
+  display_order: number;
+  videos: WatchVideo[];
+}
+
+export interface WatchListResponse {
+  channels: WatchChannel[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface StagingChannel {
+  id: number;
+  youtube_channel_id: string;
+  name: string;
+  description: string;
+  thumbnail_url: string;
+  tier: string;
+}
+
+export interface StagingVideo {
+  id: number;
+  youtube_video_id: string;
+  title: string;
+  thumbnail_url: string;
+  channel_name: string | null;
+  pinned: boolean;
+}
+
+export interface WatchStagingResponse {
+  channels: StagingChannel[];
+  videos: StagingVideo[];
+}
+
+export interface WatchSyncStatus {
+  available: boolean;
+  cooldown_remaining: number;
+  connected: boolean;
+  last_synced: string | null;
+}
