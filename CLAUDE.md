@@ -69,6 +69,18 @@ GET  /api/listens/auth/         auth required, initiates Google OAuth
 GET  /api/listens/callback/
 GET  /api/listens/stats/
 GET  /api/listens/sync-status/  auth required
+GET  /api/watches/?limit=N&offset=N
+GET  /api/watches/staging/      auth required
+POST /api/watches/channels/<id>/tier/   auth required, body: {"tier": "..."}
+POST /api/watches/channels/<id>/order/  auth required, body: {"display_order": N}
+POST /api/watches/channels/<id>/delete/ auth required
+POST /api/watches/videos/<id>/pin/      auth required, toggles pin+visible
+POST /api/watches/videos/<id>/note/     auth required, body: {"note": "..."}
+POST /api/watches/videos/<id>/delete/   auth required
+GET  /api/watches/auth/         auth required, initiates Google OAuth
+GET  /api/watches/callback/     Google OAuth callback
+POST /api/watches/sync/         auth required, triggers YouTube sync
+GET  /api/watches/sync-status/  auth required
 ```
 
 ## Auth

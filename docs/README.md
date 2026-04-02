@@ -29,8 +29,11 @@ A curated reading list (coming soon).
 ### Plays
 A chess opening trainer. Practice openings by playing moves on an interactive board — the app shows the current opening name (ECO code), available book moves, and auto-plays opponent responses from a built-in database of 50+ common openings. Supports playing as white or black.
 
-### Watches / Bets
-Future sections — placeholders for media and prediction content.
+### Watches
+A curated "taste map" of YouTube channels and standout videos. Channels are organized into three tiers — "never miss", "regular rotation", and "worth checking out" — displayed as a glow grid where visual intensity reflects how much Nam cares about each channel. Click a channel to see pinned standout videos. Content is synced from YouTube subscriptions and liked videos, then hand-curated by the admin (hidden by default, promoted to tiers manually).
+
+### Bets
+Future section — placeholder for prediction content.
 
 ## Feedback
 
