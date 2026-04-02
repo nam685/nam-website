@@ -8,6 +8,7 @@ import urllib.request
 from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin, verify_token
 from ..models import WatchChannel, WatchVideo
@@ -109,6 +110,7 @@ def watch_staging(_request):
     )
 
 
+@csrf_exempt
 @require_admin
 def watch_channel_tier(request, channel_id):
     """Admin: set tier for a channel."""
@@ -131,6 +133,7 @@ def watch_channel_tier(request, channel_id):
     return JsonResponse({"ok": True, "tier": tier})
 
 
+@csrf_exempt
 @require_admin
 def watch_channel_order(request, channel_id):
     """Admin: set display_order for a channel."""
@@ -153,6 +156,7 @@ def watch_channel_order(request, channel_id):
     return JsonResponse({"ok": True, "display_order": display_order})
 
 
+@csrf_exempt
 @require_admin
 def watch_channel_delete(_request, channel_id):
     """Admin: hard delete a channel (videos get SET_NULL)."""
@@ -165,6 +169,7 @@ def watch_channel_delete(_request, channel_id):
     return JsonResponse({"ok": True})
 
 
+@csrf_exempt
 @require_admin
 def watch_video_pin(_request, video_id):
     """Admin: toggle pinned on a video; if pinning, also set visible=True."""
@@ -180,6 +185,7 @@ def watch_video_pin(_request, video_id):
     return JsonResponse({"ok": True, "pinned": video.pinned, "visible": video.visible})
 
 
+@csrf_exempt
 @require_admin
 def watch_video_note(request, video_id):
     """Admin: set note on a video (capped at 200 chars)."""
@@ -198,6 +204,7 @@ def watch_video_note(request, video_id):
     return JsonResponse({"ok": True, "note": note})
 
 
+@csrf_exempt
 @require_admin
 def watch_video_delete(_request, video_id):
     """Admin: hard delete a video."""
@@ -465,6 +472,7 @@ def watch_callback(request):
     return HttpResponseRedirect("/watches")
 
 
+@csrf_exempt
 @require_admin
 def watch_sync(_request):
     """Trigger a YouTube subscription + liked video sync."""
