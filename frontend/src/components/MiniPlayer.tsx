@@ -1,6 +1,7 @@
 "use client";
 
 import { usePlayer } from "@/lib/player";
+import { useBreakpoint } from "@/lib/useBreakpoint";
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return "0:00";
@@ -30,6 +31,8 @@ export default function MiniPlayer() {
     toggleMinimize,
     close,
   } = usePlayer();
+  const bp = useBreakpoint();
+  const isMobile = bp === "mobile";
 
   if (!visible) return null;
 
@@ -102,15 +105,16 @@ export default function MiniPlayer() {
     <div
       style={{
         position: "fixed",
-        bottom: "5rem",
-        right: "1.5rem",
+        bottom: isMobile ? 0 : "5rem",
+        right: isMobile ? 0 : "1.5rem",
+        left: isMobile ? 0 : "auto",
         zIndex: 140,
-        width: "280px",
+        width: isMobile ? "100%" : 280,
         background: "rgba(14, 14, 14, 0.85)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         border: "1px solid #2a2a2a",
-        borderRadius: "12px",
+        borderRadius: isMobile ? 0 : 12,
         padding: "12px",
         fontFamily: "var(--font-body)",
         animation: "fadeIn 0.2s ease-out",

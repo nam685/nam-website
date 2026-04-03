@@ -5,6 +5,7 @@ import { API, type ListenTrack } from "@/lib/api";
 import { store } from "@/lib/auth";
 import { timeAgo } from "@/lib/date";
 import { usePlayer } from "@/lib/player";
+import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
 const PANEL_BG = "rgba(14, 14, 14, 0.5)";
@@ -12,6 +13,7 @@ const PAGE_SIZE = 50;
 
 export default function ListensHistoryPage() {
   const player = usePlayer();
+  const bp = useBreakpoint();
   const [tracks, setTracks] = useState<ListenTrack[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -79,7 +81,7 @@ export default function ListensHistoryPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: bp === "mobile" ? "1fr" : "1fr 1fr", gap: "4px 24px" }}>
         {tracks.map((track, i) => (
           <div
             key={`${track.id}-${i}`}
