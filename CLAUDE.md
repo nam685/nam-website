@@ -82,6 +82,12 @@ GET  /api/watches/auth/         auth required, initiates Google OAuth
 GET  /api/watches/callback/     Google OAuth callback
 POST /api/watches/sync/         auth required, triggers YouTube sync
 GET  /api/watches/sync-status/  auth required
+GET  /api/bets/                    all tickers with latest price + sparkline
+GET  /api/bets/<id>/history/       price history, ?period=1W|1M|3M|1Y|ALL
+POST /api/bets/create/             auth required, body: {symbol, name, asset_type, provider, provider_id, currency}
+POST /api/bets/<id>/delete/        auth required
+POST /api/bets/sync/               auth required, triggers price fetch
+GET  /api/bets/sync-status/        auth required
 GET  /api/lichess/auth/         auth required, initiates Lichess OAuth (PKCE)
 GET  /api/lichess/callback/     Lichess OAuth callback
 GET  /api/lichess/token/        auth required, returns stored Lichess token
