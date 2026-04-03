@@ -105,7 +105,7 @@ export default function ListensArtistsPage() {
                   {artist.name}
                 </div>
                 <div style={{ color: "#666", fontSize: 10, fontFamily: "monospace" }}>
-                  {artist.play_count}× · {artist.track_count} tracks
+                  {artist.play_count}× · {artist.track_count} {artist.track_count === 1 ? "track" : "tracks"}
                 </div>
               </div>
               {isAdmin && (
