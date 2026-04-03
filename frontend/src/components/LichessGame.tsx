@@ -88,7 +88,7 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
 
     (async () => {
       try {
-        const resp = await streamBoardGame(token, gameId, controller.signal);
+        const resp = await streamBoardGame(token, gameId);
         if (!resp.body) return;
 
         await parseNdJsonStream(resp.body, (event: Record<string, unknown>) => {
@@ -284,7 +284,7 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
               color: "#aaa",
               fontFamily: "var(--font-headline)",
               lineHeight: 1.8,
-              maxHeight: "200px",
+              maxHeight: "calc(7 * 0.75rem * 1.8 + 1rem)",
               overflowY: "auto",
             }}
           >
