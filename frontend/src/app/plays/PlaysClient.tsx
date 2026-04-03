@@ -17,7 +17,7 @@ const LichessGameCreator = dynamic(
   { ssr: false },
 );
 
-const ACCENT = "#06b6d4";
+const ACCENT = "var(--accent)";
 
 type Tab = "explorer" | "play";
 
@@ -261,7 +261,7 @@ const connectBtnStyle: React.CSSProperties = {
   letterSpacing: "0.1em",
   textTransform: "uppercase",
   padding: "0.4rem 0.8rem",
-  background: "#06b6d4",
+  background: "var(--accent)",
   color: "#0e0e0e",
   border: "none",
   borderRadius: "3px",

@@ -9,7 +9,7 @@ import {
   streamEvents,
 } from "@/lib/lichessApi";
 
-const ACCENT = "#06b6d4";
+const ACCENT = "var(--accent)";
 
 type GameMode = "challenge" | "open" | "seek";
 
@@ -46,7 +46,10 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
 
   const clock = useCustomTime
     ? { limit: customLimit, increment: customIncrement }
-    : { limit: TIME_PRESETS[timePreset].limit, increment: TIME_PRESETS[timePreset].increment };
+    : {
+        limit: TIME_PRESETS[timePreset].limit,
+        increment: TIME_PRESETS[timePreset].increment,
+      };
 
   async function waitForGameStart(signal: AbortSignal): Promise<void> {
     const resp = await streamEvents(token, signal);
@@ -67,7 +70,8 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           resolve();
         }
       }).catch((err) => {
-        if (signal.aborted) resolve(); // swallow abort errors
+        if (signal.aborted)
+          resolve(); // swallow abort errors
         else reject(err);
       });
     });
@@ -190,7 +194,9 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
       {/* Time control */}
       <div style={{ marginBottom: "1rem" }}>
         <label style={labelStyle}>Time control</label>
-        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.5rem" }}>
+        <div
+          style={{ display: "flex", gap: "0.25rem", marginBottom: "0.5rem" }}
+        >
           {TIME_PRESETS.map((p, i) => (
             <button
               key={p.label}
@@ -200,7 +206,8 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
               }}
               style={{
                 ...tabStyle,
-                borderColor: !useCustomTime && timePreset === i ? ACCENT : "#1a1a1a",
+                borderColor:
+                  !useCustomTime && timePreset === i ? ACCENT : "#1a1a1a",
                 color: !useCustomTime && timePreset === i ? ACCENT : "#777",
               }}
             >
@@ -221,7 +228,9 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         {useCustomTime && (
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <div>
-              <label style={{ ...labelStyle, fontSize: "0.55rem" }}>Minutes</label>
+              <label style={{ ...labelStyle, fontSize: "0.55rem" }}>
+                Minutes
+              </label>
               <input
                 type="number"
                 min={1}
@@ -232,7 +241,9 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
               />
             </div>
             <div>
-              <label style={{ ...labelStyle, fontSize: "0.55rem" }}>Increment (s)</label>
+              <label style={{ ...labelStyle, fontSize: "0.55rem" }}>
+                Increment (s)
+              </label>
               <input
                 type="number"
                 min={0}
@@ -348,7 +359,11 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
 
       {/* Error */}
       {error && (
-        <p style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#ef4444" }}>{error}</p>
+        <p
+          style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#ef4444" }}
+        >
+          {error}
+        </p>
       )}
     </div>
   );
