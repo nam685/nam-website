@@ -1,6 +1,8 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from website.models import ListenTrack
@@ -30,6 +32,33 @@ def sample_tracks(db):  # noqa: ARG001
         for i in range(5)
     ]
 
+
+TAKEOUT_SAMPLE = [
+    {
+        "header": "YouTube Music",
+        "title": "Watched Cool Song",
+        "titleUrl": "https://www.youtube.com/watch?v=takeout1",
+        "subtitles": [{"name": "Cool Artist", "url": "https://youtube.com/channel/123"}],
+        "time": "2024-06-15T10:30:00.000Z",
+        "products": ["YouTube Music"],
+    },
+    {
+        "header": "YouTube Music",
+        "title": "Watched Another Track",
+        "titleUrl": "https://www.youtube.com/watch?v=takeout2",
+        "subtitles": [{"name": "Another Artist"}],
+        "time": "2024-06-14T08:00:00.000Z",
+        "products": ["YouTube Music"],
+    },
+    {
+        "header": "YouTube",
+        "title": "Watched Some Video",
+        "titleUrl": "https://www.youtube.com/watch?v=nomusic",
+        "subtitles": [{"name": "Youtuber"}],
+        "time": "2024-06-13T12:00:00.000Z",
+        "products": ["YouTube"],
+    },
+]
 
 MOCK_HISTORY = [
     {
@@ -171,6 +200,36 @@ class TestListenSync:
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 502
 
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_filters_view_counts_from_artist(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = [
+            {
+                "videoId": "grissini1",
+                "title": "Some Song",
+                "artists": [{"name": "Grissini Project"}, {"name": "89M views"}],
+                "album": {"name": "Album"},
+                "thumbnails": [{"url": "https://example.com/thumb.jpg", "width": 226}],
+                "duration": "3:00",
+            },
+            {
+                "videoId": "grissini2",
+                "title": "Another Song",
+                "artists": [{"name": "Grissini Project"}, {"name": "1.9M views"}],
+                "album": None,
+                "thumbnails": [],
+                "duration": "4:00",
+            },
+        ]
+        mock_ytmusic_cls.return_value = mock_yt
+
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 2
+        assert ListenTrack.objects.get(video_id="grissini1").artist == "Grissini Project"
+        assert ListenTrack.objects.get(video_id="grissini2").artist == "Grissini Project"
+
 
 # ── Sync status ───────────────────────────────────────
 
@@ -251,6 +310,33 @@ class TestListenTopArtists:
         assert len(data["artists"]) == 2
         assert data["total"] == 5
 
+    def test_splits_collab_artists(self, client, db):  # noqa: ARG002
+        """Collab tracks should credit each artist independently."""
+        now = timezone.now()
+        # 3 solo plays for Artist A
+        for i in range(3):
+            ListenTrack.objects.create(
+                video_id=f"solo_a_{i}",
+                title=f"Solo A {i}",
+                artist="Artist A",
+                played_at=now - timezone.timedelta(hours=i),
+            )
+        # 2 collab plays crediting both Artist A and Artist B
+        for i in range(2):
+            ListenTrack.objects.create(
+                video_id=f"collab_{i}",
+                title=f"Collab {i}",
+                artist="Artist A, Artist B",
+                played_at=now - timezone.timedelta(hours=10 + i),
+            )
+        resp = client.get("/api/listens/artists/")
+        data = resp.json()
+        artist_map = {a["name"]: a for a in data["artists"]}
+        # Artist A: 3 solo + 2 collab = 5 plays
+        assert artist_map["Artist A"]["play_count"] == 5
+        # Artist B: 2 collab = 2 plays
+        assert artist_map["Artist B"]["play_count"] == 2
+
 
 @pytest.mark.django_db
 class TestListenTopAlbums:
@@ -283,11 +369,50 @@ class TestListenTopAlbums:
             album="Album Two",
             played_at=timezone.now(),
         )
+        ListenTrack.objects.create(
+            video_id="alb4",
+            title="Song D",
+            artist="Band Y",
+            album="Album Two",
+            played_at=timezone.now(),
+        )
         resp = client.get("/api/listens/albums/")
         data = resp.json()
         assert data["albums"][0]["name"] == "Album One"
         assert data["albums"][0]["play_count"] == 2
         assert data["albums"][0]["artist"] == "Band X"
+
+    def test_excludes_single_track_albums(self, client, db):  # noqa: ARG002
+        """Albums with only 1 unique track should be excluded."""
+        now = timezone.now()
+        # Album with 2 tracks — should be included
+        ListenTrack.objects.create(
+            video_id="multi1",
+            title="Song 1",
+            artist="Band",
+            album="Multi Album",
+            played_at=now,
+        )
+        ListenTrack.objects.create(
+            video_id="multi2",
+            title="Song 2",
+            artist="Band",
+            album="Multi Album",
+            played_at=now - timezone.timedelta(hours=1),
+        )
+        # Album with 1 track — should be excluded
+        ListenTrack.objects.create(
+            video_id="single1",
+            title="Only Song",
+            artist="Solo",
+            album="Single Album",
+            played_at=now - timezone.timedelta(hours=2),
+        )
+        resp = client.get("/api/listens/albums/")
+        data = resp.json()
+        album_names = [a["name"] for a in data["albums"]]
+        assert "Multi Album" in album_names
+        assert "Single Album" not in album_names
 
     def test_excludes_empty_album(self, client, sample_tracks):  # noqa: ARG002
         """Tracks with empty album field are excluded."""
@@ -304,3 +429,101 @@ class TestListenTopAlbums:
         data = resp.json()
         for album in data["albums"]:
             assert album["name"] != ""
+
+
+@pytest.mark.django_db
+class TestListenRecommended:
+    def test_empty_db(self, client):
+        resp = client.get("/api/listens/recommended/")
+        assert resp.status_code == 200
+        assert resp.json()["track"] is None
+
+    def test_returns_rediscovery_track(self, client, db):  # noqa: ARG002
+        """Tracks played often but not recently should be recommended."""
+        now = timezone.now()
+        # Track played 10 times, last play 20 days ago — good candidate
+        for i in range(10):
+            ListenTrack.objects.create(
+                video_id="rediscover",
+                title="Old Favorite",
+                artist="Artist A",
+                album="Album A",
+                thumbnail_url="https://example.com/thumb.jpg",
+                played_at=now - timezone.timedelta(days=20 + i),
+            )
+        # Track played 2 times, last play 1 day ago — too recent
+        for i in range(2):
+            ListenTrack.objects.create(
+                video_id="recent",
+                title="Recent Song",
+                artist="Artist B",
+                played_at=now - timezone.timedelta(days=i),
+            )
+        resp = client.get("/api/listens/recommended/")
+        data = resp.json()
+        assert data["track"] is not None
+        assert data["track"]["video_id"] == "rediscover"
+
+    def test_fallback_to_most_played(self, client, db):  # noqa: ARG002
+        """When no tracks qualify for rediscovery, return most played."""
+        now = timezone.now()
+        # All tracks are recent — none qualify for 14-day rediscovery
+        for i in range(5):
+            ListenTrack.objects.create(
+                video_id="popular",
+                title="Popular Song",
+                artist="Artist",
+                played_at=now - timezone.timedelta(hours=i),
+            )
+        ListenTrack.objects.create(
+            video_id="less_popular",
+            title="Less Popular",
+            artist="Artist",
+            played_at=now - timezone.timedelta(hours=10),
+        )
+        resp = client.get("/api/listens/recommended/")
+        data = resp.json()
+        assert data["track"] is not None
+        assert data["track"]["video_id"] == "popular"
+
+
+@pytest.mark.django_db
+class TestListenImport:
+    def test_requires_auth(self, client):
+        resp = client.post("/api/listens/import/")
+        assert resp.status_code == 401
+
+    def test_imports_takeout(self, client, auth_headers):
+        data = json.dumps(TAKEOUT_SAMPLE).encode()
+        file = SimpleUploadedFile("watch-history.json", data, content_type="application/json")
+        resp = client.post("/api/listens/import/", {"file": file}, **auth_headers)
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["imported"] == 2  # only YouTube Music entries
+        assert result["skipped"] == 0
+        assert ListenTrack.objects.count() == 2
+        t = ListenTrack.objects.get(video_id="takeout1")
+        assert t.title == "Cool Song"
+        assert t.artist == "Cool Artist"
+        assert "nomusic" not in ListenTrack.objects.values_list("video_id", flat=True)
+
+    def test_deduplicates(self, client, auth_headers):
+        from django.utils.dateparse import parse_datetime
+
+        ListenTrack.objects.create(
+            video_id="takeout1",
+            title="Cool Song",
+            artist="Cool Artist",
+            played_at=parse_datetime("2024-06-15T10:30:00+00:00"),
+        )
+        data = json.dumps(TAKEOUT_SAMPLE).encode()
+        file = SimpleUploadedFile("watch-history.json", data, content_type="application/json")
+        resp = client.post("/api/listens/import/", {"file": file}, **auth_headers)
+        result = resp.json()
+        assert result["imported"] == 1
+        assert result["skipped"] == 1
+        assert ListenTrack.objects.count() == 2
+
+    def test_no_file(self, client, auth_headers):
+        resp = client.post("/api/listens/import/", **auth_headers)
+        assert resp.status_code == 400

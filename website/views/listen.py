@@ -1,11 +1,16 @@
+import json
 import logging
+import random
+import re
 import time
+from datetime import timedelta as td
 
 from django.core.cache import cache as redis_cache
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
@@ -15,6 +20,7 @@ from ..models import ListenTrack
 logger = logging.getLogger(__name__)
 
 BROWSER_JSON_PATH = "browser.json"
+VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Rate limit: 1 sync per 5 minutes
 _last_sync: float = 0
@@ -90,7 +96,10 @@ def listen_sync(request):
             continue
 
         artists = item.get("artists", [])
-        artist_name = ", ".join(a.get("name", "") for a in artists) if artists else "Unknown"
+        artist_names = [
+            a.get("name", "") for a in artists if a.get("name") and not VIEW_COUNT_RE.match(a.get("name", ""))
+        ]
+        artist_name = ", ".join(artist_names) if artist_names else "Unknown"
 
         album_info = item.get("album")
         album_name = album_info.get("name", "") if album_info else ""
@@ -164,6 +173,81 @@ def listen_stats(_request):
 
 
 @require_GET
+def listen_recommended(_request):
+    """Return a single recommended track using rediscovery algorithm."""
+    cached = redis_cache.get("listen_recommended")
+    if cached:
+        return JsonResponse(cached)
+
+    total_tracks = ListenTrack.objects.values("video_id").annotate(play_count=Count("id")).count()
+    if total_tracks == 0:
+        result = {"track": None}
+        redis_cache.set("listen_recommended", result, 3600)
+        return JsonResponse(result)
+
+    # Find tracks in top 25% by play count not played in last 14 days
+    cutoff = timezone.now() - timezone.timedelta(days=14)
+
+    candidates = (
+        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+        .annotate(
+            play_count=Count("id"),
+            last_played=Max("played_at"),
+        )
+        .filter(last_played__lt=cutoff)
+        .order_by("-play_count")
+    )
+
+    # Determine top-25% threshold
+    all_play_counts = list(
+        ListenTrack.objects.values("video_id")
+        .annotate(play_count=Count("id"))
+        .order_by("-play_count")
+        .values_list("play_count", flat=True)
+    )
+    if all_play_counts:
+        threshold_idx = max(0, len(all_play_counts) // 4 - 1)
+        threshold = all_play_counts[threshold_idx]
+        candidates = candidates.filter(play_count__gte=threshold)
+
+    candidates = list(candidates[:50])
+
+    if candidates:
+        # Weighted random: play_count * days_since_last_play
+        now = timezone.now()
+        weights = []
+        for c in candidates:
+            days_since = (now - c["last_played"]).days
+            weights.append(c["play_count"] * max(days_since, 1))
+        pick = random.choices(candidates, weights=weights, k=1)[0]
+    else:
+        # Fallback: most played track overall
+        pick = (
+            ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+            .annotate(play_count=Count("id"), last_played=Max("played_at"))
+            .order_by("-play_count")
+            .first()
+        )
+
+    if pick:
+        track = {
+            "video_id": pick["video_id"],
+            "title": pick["title"],
+            "artist": pick["artist"],
+            "album": pick["album"],
+            "thumbnail_url": pick["thumbnail_url"],
+            "play_count": pick["play_count"],
+            "last_played": pick["last_played"].isoformat() if pick["last_played"] else None,
+        }
+    else:
+        track = None
+
+    result = {"track": track}
+    redis_cache.set("listen_recommended", result, 3600)
+    return JsonResponse(result)
+
+
+@require_GET
 def listen_top_tracks(request):
     """Return tracks ranked by play count (public)."""
     limit = min(int(request.GET.get("limit", 50)), 200)
@@ -182,32 +266,58 @@ def listen_top_tracks(request):
 
 @require_GET
 def listen_top_artists(request):
-    """Return artists ranked by play count (public)."""
+    """Return artists ranked by play count (public).
+
+    Collab tracks stored as "Artist A, Artist B" are split and each artist
+    is credited independently.
+    """
     limit = min(int(request.GET.get("limit", 50)), 200)
     offset = int(request.GET.get("offset", 0))
 
-    artists = (
-        ListenTrack.objects.values("artist")
-        .annotate(
-            play_count=Count("id"),
-            track_count=Count("video_id", distinct=True),
-        )
-        .order_by("-play_count")
-    )
-    total = artists.count()
-    page = list(artists[offset : offset + limit])
+    # Fetch all tracks — personal site, at most a few thousand rows
+    all_tracks = list(ListenTrack.objects.values_list("id", "video_id", "title", "artist", "thumbnail_url"))
 
-    for entry in page:
-        top = (
-            ListenTrack.objects.filter(artist=entry["artist"])
-            .values("video_id", "title", "thumbnail_url")
-            .annotate(pc=Count("id"))
-            .order_by("-pc")[:3]
+    # Aggregate per individual artist name
+    artist_play_counts: dict[str, int] = {}
+    artist_video_ids: dict[str, set[str]] = {}
+    artist_track_refs: dict[str, list[tuple[str, str, str]]] = {}  # name → [(video_id, title, thumbnail_url)]
+
+    for _id, video_id, title, artist_field, thumbnail_url in all_tracks:
+        names = [n.strip() for n in artist_field.split(",") if n.strip()]
+        for name in names:
+            artist_play_counts[name] = artist_play_counts.get(name, 0) + 1
+            if name not in artist_video_ids:
+                artist_video_ids[name] = set()
+                artist_track_refs[name] = []
+            artist_video_ids[name].add(video_id)
+            artist_track_refs[name].append((video_id, title, thumbnail_url))
+
+    # Sort by play count descending
+    sorted_names = sorted(artist_play_counts.keys(), key=lambda n: -artist_play_counts[n])
+    total = len(sorted_names)
+
+    page_names = sorted_names[offset : offset + limit]
+
+    page = []
+    for name in page_names:
+        # Top 3 tracks for this artist by play count (count occurrences across all refs)
+        track_play_counts: dict[str, tuple[int, str, str, str]] = {}
+        for video_id, title, thumbnail_url in artist_track_refs[name]:
+            if video_id not in track_play_counts:
+                track_play_counts[video_id] = (0, title, thumbnail_url, video_id)
+            prev = track_play_counts[video_id]
+            track_play_counts[video_id] = (prev[0] + 1, prev[1], prev[2], prev[3])
+
+        top_tracks_sorted = sorted(track_play_counts.values(), key=lambda t: -t[0])[:3]
+
+        page.append(
+            {
+                "name": name,
+                "play_count": artist_play_counts[name],
+                "track_count": len(artist_video_ids[name]),
+                "top_tracks": [{"video_id": t[3], "title": t[1], "thumbnail_url": t[2]} for t in top_tracks_sorted],
+            }
         )
-        entry["name"] = entry.pop("artist")
-        entry["top_tracks"] = [
-            {"video_id": t["video_id"], "title": t["title"], "thumbnail_url": t["thumbnail_url"]} for t in top
-        ]
 
     return JsonResponse({"artists": page, "total": total})
 
@@ -225,6 +335,7 @@ def listen_top_albums(request):
             play_count=Count("id"),
             track_count=Count("video_id", distinct=True),
         )
+        .filter(track_count__gte=2)
         .order_by("-play_count")
     )
     total = albums.count()
@@ -262,3 +373,84 @@ def listen_sync_status(_request):
             "last_updated": last_updated,
         }
     )
+
+
+@csrf_exempt
+@require_admin
+def listen_import(request):
+    """Import listening history from Google Takeout watch-history.json."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        return JsonResponse({"error": "No file uploaded. Send as multipart with field name 'file'."}, status=400)
+
+    try:
+        raw = json.loads(uploaded.read().decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid JSON file"}, status=400)
+
+    if not isinstance(raw, list):
+        return JsonResponse({"error": "Expected a JSON array"}, status=400)
+
+    # Filter to YouTube Music entries only
+    entries = [e for e in raw if "YouTube Music" in (e.get("products") or [])]
+
+    imported = 0
+    skipped = 0
+    batch = []
+
+    for entry in entries:
+        title_url = entry.get("titleUrl", "")
+        if "watch?v=" not in title_url:
+            skipped += 1
+            continue
+
+        video_id = title_url.split("watch?v=")[-1].split("&")[0]
+        title = entry.get("title", "")
+        if title.startswith("Watched "):
+            title = title[8:]
+
+        subtitles = entry.get("subtitles") or []
+        artist = subtitles[0].get("name", "Unknown") if subtitles else "Unknown"
+
+        time_str = entry.get("time", "")
+        played_at = parse_datetime(time_str)
+        if not played_at or not video_id:
+            skipped += 1
+            continue
+
+        # Dedup: check if (video_id, played_at) exists within 60s tolerance
+        exists = ListenTrack.objects.filter(
+            video_id=video_id,
+            played_at__gte=played_at - td(seconds=60),
+            played_at__lte=played_at + td(seconds=60),
+        ).exists()
+
+        if exists:
+            skipped += 1
+            continue
+
+        batch.append(
+            ListenTrack(
+                video_id=video_id,
+                title=title,
+                artist=artist,
+                album="",
+                thumbnail_url="",
+                duration="",
+                played_at=played_at,
+            )
+        )
+
+        if len(batch) >= 500:
+            ListenTrack.objects.bulk_create(batch)
+            imported += len(batch)
+            batch = []
+
+    if batch:
+        ListenTrack.objects.bulk_create(batch)
+        imported += len(batch)
+
+    return JsonResponse({"imported": imported, "skipped": skipped})

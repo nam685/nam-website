@@ -34,6 +34,8 @@ urlpatterns = [
     path("listens/artists/", views.listen_top_artists),
     path("listens/albums/", views.listen_top_albums),
     path("listens/tracks/", views.listen_top_tracks),
+    path("listens/recommended/", views.listen_recommended),
+    path("listens/import/", views.listen_import),
     path("listens/", views.listen_list),
     path("listens/sync/", views.listen_sync),
     path("listens/stats/", views.listen_stats),

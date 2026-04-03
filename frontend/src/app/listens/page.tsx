@@ -9,7 +9,7 @@ import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
 const PANEL_BG = "rgba(14, 14, 14, 0.5)";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 export default function ListensHistoryPage() {
   const player = usePlayer();
@@ -103,7 +103,7 @@ export default function ListensHistoryPage() {
               <div style={{ color: "#ddd", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {track.title}
               </div>
-              <div style={{ color: "#666", fontSize: 10 }}>{track.artist}</div>
+              <div style={{ color: "#666", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</div>
             </div>
             <div style={{ color: "#444", fontSize: 10, fontFamily: "monospace", flexShrink: 0 }}>
               {timeAgo(track.played_at)}

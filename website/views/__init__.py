@@ -17,7 +17,9 @@ from .github import refresh_status as github_refresh_status
 from .health import health
 from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess_explorer, lichess_status, lichess_token
 from .listen import (
+    listen_import,
     listen_list,
+    listen_recommended,
     listen_stats,
     listen_sync,
     listen_sync_status,
@@ -68,7 +70,9 @@ __all__ = [
     "lichess_explorer",
     "lichess_status",
     "lichess_token",
+    "listen_import",
     "listen_list",
+    "listen_recommended",
     "listen_stats",
     "listen_sync",
     "listen_sync_status",
