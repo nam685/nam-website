@@ -39,9 +39,10 @@ export function lichessHeaders(token: string): HeadersInit {
 }
 
 /** Stream account events (gameStart, gameFinish, challenge) */
-export function streamEvents(token: string): Promise<Response> {
+export function streamEvents(token: string, signal?: AbortSignal): Promise<Response> {
   return fetch(`${LICHESS}/api/stream/event`, {
     headers: lichessHeaders(token),
+    signal,
   });
 }
 
@@ -49,9 +50,11 @@ export function streamEvents(token: string): Promise<Response> {
 export function streamBoardGame(
   token: string,
   gameId: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`${LICHESS}/api/board/game/stream/${gameId}`, {
     headers: lichessHeaders(token),
+    signal,
   });
 }
 
@@ -158,6 +161,7 @@ export function createOpenChallenge(
 export function seekOpponent(
   token: string,
   opts: { time: number; increment: number; rated?: boolean },
+  signal?: AbortSignal,
 ): Promise<Response> {
   const body: Record<string, string> = {
     time: String(opts.time / 60), // Lichess expects minutes
@@ -172,6 +176,7 @@ export function seekOpponent(
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(body),
+    signal,
   });
 }
 

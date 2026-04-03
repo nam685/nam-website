@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   challengePlayer,
   createOpenChallenge,
@@ -35,13 +35,21 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openChallengeUrl, setOpenChallengeUrl] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any open streams on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const clock = useCustomTime
     ? { limit: customLimit, increment: customIncrement }
     : { limit: TIME_PRESETS[timePreset].limit, increment: TIME_PRESETS[timePreset].increment };
 
-  async function waitForGameStart(): Promise<void> {
-    const resp = await streamEvents(token);
+  async function waitForGameStart(signal: AbortSignal): Promise<void> {
+    const resp = await streamEvents(token, signal);
     if (!resp.ok) {
       throw new Error(`Event stream failed (${resp.status})`);
     }
@@ -58,11 +66,18 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           onGameStart(gameId as string, myColor);
           resolve();
         }
-      }).catch(reject);
+      }).catch((err) => {
+        if (signal.aborted) resolve(); // swallow abort errors
+        else reject(err);
+      });
     });
   }
 
   async function handleCreate() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError("");
     setOpenChallengeUrl("");
@@ -85,7 +100,7 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           setLoading(false);
           return;
         }
-        await waitForGameStart();
+        await waitForGameStart(controller.signal);
       } else if (mode === "open") {
         const resp = await createOpenChallenge(token, { clock, rated: false });
         if (!resp.ok) {
@@ -95,15 +110,19 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         }
         const data = await resp.json();
         setOpenChallengeUrl(data.challenge?.url ?? data.url ?? "");
-        await waitForGameStart();
+        await waitForGameStart(controller.signal);
       } else {
         // Seek is a streaming endpoint — read game start from the seek response
         // rather than opening a separate event stream
-        const seekResp = await seekOpponent(token, {
-          time: clock.limit,
-          increment: clock.increment,
-          rated: false,
-        });
+        const seekResp = await seekOpponent(
+          token,
+          {
+            time: clock.limit,
+            increment: clock.increment,
+            rated: false,
+          },
+          controller.signal,
+        );
         if (!seekResp.ok) {
           const body = await seekResp.json().catch(() => null);
           setError(body?.error ?? `Seek failed (${seekResp.status})`);
@@ -124,11 +143,16 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
               onGameStart(gameId, myColor);
               resolve();
             }
-          }).catch(reject);
+          }).catch((err) => {
+            if (controller.signal.aborted) resolve();
+            else reject(err);
+          });
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection failed");
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : "Connection failed");
+      }
     } finally {
       setLoading(false);
     }
