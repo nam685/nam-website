@@ -58,15 +58,33 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Tags display correctly
 - [ ] External links work
 
-## Listens (admin only)
+## Listens
 
-- [ ] Track list loads with pagination
-- [ ] Stats dashboard shows today/week/total counts
-- [ ] Top tracks chart renders
-- [ ] Daily listening graph renders
-- [ ] Google OAuth sync flow works
+### Public (no auth)
+- [ ] `/listens` loads with hero panel (latest track, top this month, stats, sparkline)
+- [ ] History feed shows two-column grid on desktop, single column on mobile
+- [ ] Pagination ("Load More") works
+- [ ] Tab navigation works: History / Tracks / Artists / Albums
+- [ ] `/listens/tracks` shows ranked track list with play counts
+- [ ] `/listens/artists` shows artist cards in responsive grid (3/2/1 cols)
+- [ ] `/listens/albums` shows album cards with cover art
+- [ ] No play buttons or sync button visible when logged out
+
+### Admin
+- [ ] Sync button appears and triggers OAuth flow
 - [ ] Sync cooldown (5 min) is enforced
 - [ ] Deduplication works (no duplicate tracks after re-sync)
+- [ ] Play buttons appear on tracks, artist cards, album cards
+- [ ] Clicking play opens the mini player
+- [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek
+- [ ] Mini player persists when navigating to other pages (/watches, /thinks, etc.)
+- [ ] Mini player minimize/close work
+- [ ] Playing a list (top this month, artist, album) builds correct queue
+
+### Responsive
+- [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
+- [ ] Tablet: two-column grids, floating player
+- [ ] Desktop: full magazine layout, floating player
 
 ## Watches
 
