@@ -130,6 +130,75 @@ class TestAlphaVantageAdapter:
         assert result[0] == (date(2026, 4, 2), Decimal("2298.2000"))
 
 
+class TestAlphaVantageSearch:
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_returns_mapped_results(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "bestMatches": [
+                    {
+                        "1. symbol": "VWCE.DE",
+                        "2. name": "Vanguard FTSE All-World UCITS ETF USD Acc",
+                        "3. type": "ETF",
+                        "4. region": "Frankfurt",
+                        "8. currency": "EUR",
+                        "9. matchScore": "1.0000",
+                    },
+                    {
+                        "1. symbol": "VWC.L",
+                        "2. name": "Vanguard FTSE 100 UCITS ETF",
+                        "3. type": "ETF",
+                        "4. region": "London",
+                        "8. currency": "GBP",
+                        "9. matchScore": "0.6000",
+                    },
+                ]
+            },
+        )
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("vwce")
+        assert len(results) == 2
+        assert results[0]["symbol"] == "VWCE.DE"
+        assert results[0]["name"] == "Vanguard FTSE All-World UCITS ETF USD Acc"
+        assert results[0]["asset_type"] == "stock"
+        assert results[0]["provider"] == "alpha_vantage"
+        assert results[0]["provider_id"] == "VWCE.DE"
+        assert results[0]["currency"] == "EUR"
+        assert results[0]["match_score"] == 1.0
+
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_skips_crypto_type(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "bestMatches": [
+                    {
+                        "1. symbol": "BTC",
+                        "2. name": "Bitcoin",
+                        "3. type": "Cryptocurrency",
+                        "4. region": "United States",
+                        "8. currency": "USD",
+                        "9. matchScore": "1.0000",
+                    },
+                ]
+            },
+        )
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("btc")
+        assert len(results) == 0
+
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_handles_api_failure(self, mock_get):
+        mock_get.side_effect = Exception("API down")
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("vwce")
+        assert results == []
+
+
 class TestCoinGeckoAdapter:
     @patch("website.services.coingecko.httpx.get")
     def test_fetch_crypto_history(self, mock_get):

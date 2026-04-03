@@ -47,3 +47,45 @@ def fetch_alpha_vantage(provider_id: str, days: int = 365) -> list[tuple[date, D
 
     results.sort(key=lambda x: x[0])
     return results
+
+
+_AV_TYPE_MAP = {
+    "Equity": "stock",
+    "ETF": "stock",
+    "Mutual Fund": "stock",
+}
+
+
+def search_alpha_vantage(query: str) -> list[dict]:
+    """Search Alpha Vantage SYMBOL_SEARCH for stocks/ETFs. Returns unified result dicts."""
+    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+    try:
+        resp = httpx.get(
+            BASE_URL,
+            params={"function": "SYMBOL_SEARCH", "keywords": query, "apikey": api_key},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return []
+
+    results = []
+    for match in data.get("bestMatches", []):
+        av_type = match.get("3. type", "")
+        asset_type = _AV_TYPE_MAP.get(av_type)
+        if asset_type is None:
+            continue
+        symbol = match.get("1. symbol", "")
+        results.append(
+            {
+                "symbol": symbol,
+                "name": match.get("2. name", ""),
+                "asset_type": asset_type,
+                "provider": "alpha_vantage",
+                "provider_id": symbol,
+                "currency": match.get("8. currency", "USD"),
+                "match_score": float(match.get("9. matchScore", "0")),
+            }
+        )
+    return results
