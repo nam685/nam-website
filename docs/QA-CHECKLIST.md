@@ -61,18 +61,25 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 ## Listens
 
 ### Public (no auth)
-- [ ] `/listens` loads with hero panel (latest track, top this month, stats, sparkline)
-- [ ] History feed shows two-column grid on desktop, single column on mobile
-- [ ] Pagination ("Load More") works
+- [ ] `/listens` loads with hero panel (recommended track, top this month, stats, sparkline)
+- [ ] Hero shows "RECOMMENDED" label with rediscovery track (not "LATEST")
+- [ ] Top This Month carousel constrained to max 6 cards with square thumbnails
+- [ ] History feed shows 20 items initially, two-column grid desktop, single column mobile
+- [ ] "Load More" fetches next 20 items
 - [ ] Tab navigation works: History / Tracks / Artists / Albums
-- [ ] `/listens/tracks` shows ranked track list with play counts
-- [ ] `/listens/artists` shows artist cards in responsive grid (3/2/1 cols)
-- [ ] `/listens/albums` shows album cards with cover art
+- [ ] `/listens/tracks` shows ranked track list with play counts, artist names truncated
+- [ ] `/listens/artists` shows artist cards — collab artists credited independently
+- [ ] `/listens/artists` — no view count strings in artist names (e.g., "89M views")
+- [ ] `/listens/albums` shows only albums with 2+ tracks, square cover art
+- [ ] All text truncated with ellipsis (no overflow)
+- [ ] Content area has semi-transparent background (background visible through)
+- [ ] Feedback button at bottom-left (not bottom-right)
 - [ ] No play buttons or sync button visible when logged out
 
 ### Admin
-- [ ] Sync button appears and triggers OAuth flow
+- [ ] Sync button appears and triggers sync
 - [ ] Sync cooldown (5 min) is enforced
+- [ ] Google Takeout import works via POST /api/listens/import/
 - [ ] Deduplication works (no duplicate tracks after re-sync)
 - [ ] Play buttons appear on tracks, artist cards, album cards
 - [ ] Clicking play opens the mini player

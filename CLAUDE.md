@@ -67,9 +67,11 @@ GET  /api/listens/?limit=N&offset=N
 GET  /api/listens/tracks/       top tracks by play count
 GET  /api/listens/artists/      top artists by play count
 GET  /api/listens/albums/       top albums by play count
+GET  /api/listens/recommended/   recommended track (rediscovery algorithm)
 GET  /api/listens/stats/
 POST /api/listens/sync/         auth required, triggers YTM history sync
 GET  /api/listens/sync-status/  auth required
+POST /api/listens/import/       auth required, Google Takeout file upload
 GET  /api/watches/?limit=N&offset=N
 GET  /api/watches/staging/      auth required
 POST /api/watches/channels/<id>/tier/   auth required, body: {"tier": "..."}
