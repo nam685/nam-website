@@ -3,9 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { API, type ListenTrack, type ListenStats } from "@/lib/api";
+import { API, type ListenTrack, type ListenStats, type ListenRecommended } from "@/lib/api";
 import { store } from "@/lib/auth";
-import { timeAgo } from "@/lib/date";
 import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
@@ -24,21 +23,20 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
   const player = usePlayer();
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
-  const [tracks, setTracks] = useState<ListenTrack[]>([]);
+  const [recommended, setRecommended] = useState<ListenRecommended | null>(null);
   const [stats, setStats] = useState<ListenStats | null>(null);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/listens/?limit=1`).then((r) => r.json()),
+      fetch(`${API}/api/listens/recommended/`).then((r) => r.json()),
       fetch(`${API}/api/listens/stats/`).then((r) => r.json()),
-    ]).then(([listData, statsData]) => {
-      setTracks(listData.tracks || []);
+    ]).then(([recData, statsData]) => {
+      setRecommended(recData.track || null);
       setStats(statsData);
     });
   }, []);
 
-  const latest = tracks[0];
   const topTracks = stats?.top_tracks || [];
   const daily = stats?.daily || [];
   const maxDaily = Math.max(...daily.map((d) => d.count), 1);
@@ -48,7 +46,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
       style={{
         maxWidth: 1200,
         margin: "0 auto",
-        padding: "1rem 1.5rem 2rem",
+        padding: "0.5rem 1.5rem 2rem",
       }}
     >
       {/* ---- Mobile compact stats bar ---- */}
@@ -98,7 +96,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             borderRadius: isMobile && stats ? 0 : "8px 0 0 8px",
           }}
         >
-          {/* Latest */}
+          {/* Recommended */}
           <div
             style={{
               color: ACCENT,
@@ -108,9 +106,9 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
               marginBottom: 12,
             }}
           >
-            LATEST
+            RECOMMENDED
           </div>
-          {latest ? (
+          {recommended ? (
             <div
               style={{
                 display: "flex",
@@ -119,15 +117,16 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 marginBottom: 24,
               }}
             >
-              {latest.thumbnail_url ? (
+              {recommended.thumbnail_url ? (
                 <img
-                  src={latest.thumbnail_url}
+                  src={recommended.thumbnail_url}
                   alt=""
                   style={{
                     width: 72,
                     height: 72,
                     borderRadius: 6,
                     objectFit: "cover",
+                    aspectRatio: "1/1",
                     flexShrink: 0,
                   }}
                 />
@@ -143,19 +142,31 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                   }}
                 />
               )}
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div
                   style={{
                     color: "#eee",
                     fontSize: 18,
                     fontFamily: "var(--font-headline)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
-                  {latest.title}
+                  {recommended.title}
                 </div>
-                <div style={{ color: "#999", fontSize: 13, marginTop: 2 }}>
-                  {latest.artist}
-                  {latest.album ? ` — ${latest.album}` : ""}
+                <div
+                  style={{
+                    color: "#999",
+                    fontSize: 13,
+                    marginTop: 2,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {recommended.artist}
+                  {recommended.album ? ` — ${recommended.album}` : ""}
                 </div>
                 <div
                   style={{
@@ -165,14 +176,24 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     fontFamily: "monospace",
                   }}
                 >
-                  {timeAgo(latest.played_at)}
+                  {recommended.play_count}× played
                 </div>
               </div>
               {isAdmin && (
                 <button
-                  onClick={() => player.play(latest)}
+                  onClick={() =>
+                    player.play({
+                      id: 0,
+                      video_id: recommended.video_id,
+                      title: recommended.title,
+                      artist: recommended.artist,
+                      album: recommended.album,
+                      thumbnail_url: recommended.thumbnail_url,
+                      duration: "",
+                      played_at: "",
+                    })
+                  }
                   style={{
-                    marginLeft: "auto",
                     background: "none",
                     border: `1px solid ${ACCENT}`,
                     color: ACCENT,
@@ -189,7 +210,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             </div>
           ) : (
             <div style={{ color: "#555", marginBottom: 24 }}>
-              No listening data yet.
+              Not enough data for recommendations yet.
             </div>
           )}
 
@@ -211,24 +232,25 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 style={{
                   display: "flex",
                   gap: 10,
-                  overflowX: "auto",
+                  flexWrap: "wrap",
                   paddingBottom: 4,
                 }}
               >
-                {topTracks.map((t, i) => (
+                {topTracks.slice(0, 6).map((t, i) => (
                   <div
                     key={t.video_id}
                     style={{
-                      flex: "0 0 100px",
+                      width: 96,
                       background: "rgba(20,20,20,0.6)",
                       borderRadius: 6,
                       padding: 8,
                       border: "1px solid rgba(255,255,255,0.05)",
                       cursor: isAdmin ? "pointer" : "default",
+                      overflow: "hidden",
                     }}
                     onClick={() => {
                       if (!isAdmin) return;
-                      const queue: ListenTrack[] = topTracks.map((tt) => ({
+                      const queue: ListenTrack[] = topTracks.slice(0, 6).map((tt) => ({
                         id: 0,
                         video_id: tt.video_id,
                         title: tt.title,
@@ -246,8 +268,9 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                         src={t.thumbnail_url}
                         alt=""
                         style={{
-                          width: 84,
-                          height: 84,
+                          width: 80,
+                          height: 80,
+                          aspectRatio: "1/1",
                           borderRadius: 4,
                           objectFit: "cover",
                           marginBottom: 6,
@@ -256,8 +279,8 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     ) : (
                       <div
                         style={{
-                          width: 84,
-                          height: 84,
+                          width: 80,
+                          height: 80,
                           borderRadius: 4,
                           background: "#1a1a1a",
                           marginBottom: 6,
@@ -275,7 +298,15 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     >
                       {t.title}
                     </div>
-                    <div style={{ color: "#666", fontSize: 9 }}>
+                    <div
+                      style={{
+                        color: "#666",
+                        fontSize: 9,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
                       {t.artist} · {t.play_count}×
                     </div>
                   </div>
