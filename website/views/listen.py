@@ -7,6 +7,7 @@ from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
@@ -20,9 +21,8 @@ _last_sync: float = 0
 SYNC_COOLDOWN = 300
 
 
-@require_admin
 def listen_list(request):
-    """Return recently played tracks (paginated)."""
+    """Return recently played tracks (paginated, public)."""
     try:
         limit = min(max(int(request.GET.get("limit", "50")), 1), 200)
         offset = max(int(request.GET.get("offset", "0")), 0)
@@ -122,9 +122,8 @@ def listen_sync(request):
     return JsonResponse({"synced": len(new_tracks)})
 
 
-@require_admin
 def listen_stats(_request):
-    """Return listening statistics (cached for 5 minutes)."""
+    """Return listening statistics (cached for 5 minutes, public)."""
     cached = redis_cache.get("listen_stats")
     if cached:
         return JsonResponse(cached)
@@ -162,6 +161,86 @@ def listen_stats(_request):
     }
     redis_cache.set("listen_stats", result, 300)
     return JsonResponse(result)
+
+
+@require_GET
+def listen_top_tracks(request):
+    """Return tracks ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    tracks = (
+        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+        .annotate(play_count=Count("id"))
+        .order_by("-play_count")
+    )
+    total = tracks.count()
+    page = list(tracks[offset : offset + limit])
+
+    return JsonResponse({"tracks": page, "total": total})
+
+
+@require_GET
+def listen_top_artists(request):
+    """Return artists ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    artists = (
+        ListenTrack.objects.values("artist")
+        .annotate(
+            play_count=Count("id"),
+            track_count=Count("video_id", distinct=True),
+        )
+        .order_by("-play_count")
+    )
+    total = artists.count()
+    page = list(artists[offset : offset + limit])
+
+    for entry in page:
+        top = (
+            ListenTrack.objects.filter(artist=entry["artist"])
+            .values("video_id", "title", "thumbnail_url")
+            .annotate(pc=Count("id"))
+            .order_by("-pc")[:3]
+        )
+        entry["name"] = entry.pop("artist")
+        entry["top_tracks"] = [
+            {"video_id": t["video_id"], "title": t["title"], "thumbnail_url": t["thumbnail_url"]} for t in top
+        ]
+
+    return JsonResponse({"artists": page, "total": total})
+
+
+@require_GET
+def listen_top_albums(request):
+    """Return albums ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    albums = (
+        ListenTrack.objects.exclude(album="")
+        .values("album", "artist")
+        .annotate(
+            play_count=Count("id"),
+            track_count=Count("video_id", distinct=True),
+        )
+        .order_by("-play_count")
+    )
+    total = albums.count()
+    page = list(albums[offset : offset + limit])
+
+    for entry in page:
+        track = (
+            ListenTrack.objects.filter(album=entry["album"], artist=entry["artist"])
+            .exclude(thumbnail_url="")
+            .values_list("thumbnail_url", flat=True)
+            .first()
+        )
+        entry["name"] = entry.pop("album")
+        entry["thumbnail_url"] = track or ""
+
+    return JsonResponse({"albums": page, "total": total})
 
 
 @require_admin

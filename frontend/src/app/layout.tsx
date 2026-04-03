@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import FeedbackButton from "@/components/FeedbackButton";
+import MiniPlayer from "@/components/MiniPlayer";
 import Navbar from "@/components/Navbar";
 import PageBackground from "@/components/PageBackground";
+import { PlayerProvider } from "@/lib/player";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -43,11 +45,14 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
-        <PageBackground />
-        <Navbar />
-        {children}
-        <FeedbackButton />
+        <PlayerProvider>
+          <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
+          <PageBackground />
+          <Navbar />
+          {children}
+          <MiniPlayer />
+          <FeedbackButton />
+        </PlayerProvider>
       </body>
     </html>
   );

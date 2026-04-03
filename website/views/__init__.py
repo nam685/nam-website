@@ -7,7 +7,15 @@ from .github import github_auth, github_callback
 from .github import refresh_status as github_refresh_status
 from .health import health
 from .lichess import lichess_auth, lichess_callback, lichess_status, lichess_token
-from .listen import listen_list, listen_stats, listen_sync, listen_sync_status
+from .listen import (
+    listen_list,
+    listen_stats,
+    listen_sync,
+    listen_sync_status,
+    listen_top_albums,
+    listen_top_artists,
+    listen_top_tracks,
+)
 from .project import project_list
 from .thought import thought_create, thought_list
 from .todo import todo_list
@@ -46,6 +54,9 @@ __all__ = [
     "listen_stats",
     "listen_sync",
     "listen_sync_status",
+    "listen_top_albums",
+    "listen_top_artists",
+    "listen_top_tracks",
     "project_list",
     "thought_create",
     "thought_list",

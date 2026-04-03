@@ -21,7 +21,7 @@ A showcase of software projects with links to GitHub repos and live demos. Inclu
 A visual timeline of professional experience, education, and side projects. Each entry is tagged and linked to relevant organizations.
 
 ### Listens
-A private listening dashboard (admin-only) that syncs with YouTube Music via Google OAuth. Shows recently played tracks, listening stats, top tracks, and daily listening patterns.
+A public music listening dashboard that syncs with YouTube Music. Features a magazine-style layout with a hero panel showing the latest track, top tracks this month, listening stats, and a 30-day activity sparkline. Four sub-pages: chronological history feed, top tracks ranked by play count, top artists with monogram avatars, and top albums with cover art. Admin users can sync new data and play tracks via an embedded mini music player that persists site-wide with queue management, shuffle, and repeat controls.
 
 ### Reads
 A curated reading list (coming soon).
