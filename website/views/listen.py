@@ -1,13 +1,16 @@
+import json
 import logging
 import random
 import re
 import time
+from datetime import timedelta as td
 
 from django.core.cache import cache as redis_cache
 from django.db.models import Count, Max
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
@@ -344,3 +347,84 @@ def listen_sync_status(_request):
             "last_updated": last_updated,
         }
     )
+
+
+@csrf_exempt
+@require_admin
+def listen_import(request):
+    """Import listening history from Google Takeout watch-history.json."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    uploaded = request.FILES.get("file")
+    if not uploaded:
+        return JsonResponse({"error": "No file uploaded. Send as multipart with field name 'file'."}, status=400)
+
+    try:
+        raw = json.loads(uploaded.read().decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid JSON file"}, status=400)
+
+    if not isinstance(raw, list):
+        return JsonResponse({"error": "Expected a JSON array"}, status=400)
+
+    # Filter to YouTube Music entries only
+    entries = [e for e in raw if "YouTube Music" in (e.get("products") or [])]
+
+    imported = 0
+    skipped = 0
+    batch = []
+
+    for entry in entries:
+        title_url = entry.get("titleUrl", "")
+        if "watch?v=" not in title_url:
+            skipped += 1
+            continue
+
+        video_id = title_url.split("watch?v=")[-1].split("&")[0]
+        title = entry.get("title", "")
+        if title.startswith("Watched "):
+            title = title[8:]
+
+        subtitles = entry.get("subtitles") or []
+        artist = subtitles[0].get("name", "Unknown") if subtitles else "Unknown"
+
+        time_str = entry.get("time", "")
+        played_at = parse_datetime(time_str)
+        if not played_at or not video_id:
+            skipped += 1
+            continue
+
+        # Dedup: check if (video_id, played_at) exists within 60s tolerance
+        exists = ListenTrack.objects.filter(
+            video_id=video_id,
+            played_at__gte=played_at - td(seconds=60),
+            played_at__lte=played_at + td(seconds=60),
+        ).exists()
+
+        if exists:
+            skipped += 1
+            continue
+
+        batch.append(
+            ListenTrack(
+                video_id=video_id,
+                title=title,
+                artist=artist,
+                album="",
+                thumbnail_url="",
+                duration="",
+                played_at=played_at,
+            )
+        )
+
+        if len(batch) >= 500:
+            ListenTrack.objects.bulk_create(batch)
+            imported += len(batch)
+            batch = []
+
+    if batch:
+        ListenTrack.objects.bulk_create(batch)
+        imported += len(batch)
+
+    return JsonResponse({"imported": imported, "skipped": skipped})

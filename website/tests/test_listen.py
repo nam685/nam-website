@@ -1,6 +1,8 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from website.models import ListenTrack
@@ -30,6 +32,33 @@ def sample_tracks(db):  # noqa: ARG001
         for i in range(5)
     ]
 
+
+TAKEOUT_SAMPLE = [
+    {
+        "header": "YouTube Music",
+        "title": "Watched Cool Song",
+        "titleUrl": "https://www.youtube.com/watch?v=takeout1",
+        "subtitles": [{"name": "Cool Artist", "url": "https://youtube.com/channel/123"}],
+        "time": "2024-06-15T10:30:00.000Z",
+        "products": ["YouTube Music"],
+    },
+    {
+        "header": "YouTube Music",
+        "title": "Watched Another Track",
+        "titleUrl": "https://www.youtube.com/watch?v=takeout2",
+        "subtitles": [{"name": "Another Artist"}],
+        "time": "2024-06-14T08:00:00.000Z",
+        "products": ["YouTube Music"],
+    },
+    {
+        "header": "YouTube",
+        "title": "Watched Some Video",
+        "titleUrl": "https://www.youtube.com/watch?v=nomusic",
+        "subtitles": [{"name": "Youtuber"}],
+        "time": "2024-06-13T12:00:00.000Z",
+        "products": ["YouTube"],
+    },
+]
 
 MOCK_HISTORY = [
     {
@@ -420,3 +449,45 @@ class TestListenRecommended:
         data = resp.json()
         assert data["track"] is not None
         assert data["track"]["video_id"] == "popular"
+
+
+@pytest.mark.django_db
+class TestListenImport:
+    def test_requires_auth(self, client):
+        resp = client.post("/api/listens/import/")
+        assert resp.status_code == 401
+
+    def test_imports_takeout(self, client, auth_headers):
+        data = json.dumps(TAKEOUT_SAMPLE).encode()
+        file = SimpleUploadedFile("watch-history.json", data, content_type="application/json")
+        resp = client.post("/api/listens/import/", {"file": file}, **auth_headers)
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["imported"] == 2  # only YouTube Music entries
+        assert result["skipped"] == 0
+        assert ListenTrack.objects.count() == 2
+        t = ListenTrack.objects.get(video_id="takeout1")
+        assert t.title == "Cool Song"
+        assert t.artist == "Cool Artist"
+        assert "nomusic" not in ListenTrack.objects.values_list("video_id", flat=True)
+
+    def test_deduplicates(self, client, auth_headers):
+        from django.utils.dateparse import parse_datetime
+
+        ListenTrack.objects.create(
+            video_id="takeout1",
+            title="Cool Song",
+            artist="Cool Artist",
+            played_at=parse_datetime("2024-06-15T10:30:00+00:00"),
+        )
+        data = json.dumps(TAKEOUT_SAMPLE).encode()
+        file = SimpleUploadedFile("watch-history.json", data, content_type="application/json")
+        resp = client.post("/api/listens/import/", {"file": file}, **auth_headers)
+        result = resp.json()
+        assert result["imported"] == 1
+        assert result["skipped"] == 1
+        assert ListenTrack.objects.count() == 2
+
+    def test_no_file(self, client, auth_headers):
+        resp = client.post("/api/listens/import/", **auth_headers)
+        assert resp.status_code == 400
