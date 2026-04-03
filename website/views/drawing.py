@@ -1,3 +1,6 @@
+import io
+
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -7,6 +10,35 @@ from ..auth import require_admin
 from ..models import Drawing
 
 ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
+MIN_RATIO = 0.8
+MAX_RATIO = 1.2
+
+
+def _normalize_image(img):
+    """Crop to aspect ratio [0.8, 1.2], then pad to square."""
+    w, h = img.size
+    ratio = w / h
+
+    # Crop center if aspect ratio is too extreme
+    if ratio < MIN_RATIO:
+        new_h = int(w / MIN_RATIO)
+        top = (h - new_h) // 2
+        img = img.crop((0, top, w, top + new_h))
+    elif ratio > MAX_RATIO:
+        new_w = int(h * MAX_RATIO)
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+
+    # Pad to square
+    w, h = img.size
+    if w != h:
+        size = max(w, h)
+        fill = (255, 255, 255, 0) if img.mode == "RGBA" else (255, 255, 255)
+        padded = PILImage.new(img.mode, (size, size), fill)
+        padded.paste(img, ((size - w) // 2, (size - h) // 2))
+        img = padded
+
+    return img
 
 
 def drawing_list(request):  # noqa: ARG001
@@ -52,7 +84,18 @@ def drawing_upload(request):
 
     caption = request.POST.get("caption", "").strip()[:200]
 
-    drawing = Drawing.objects.create(image=image, category=category, caption=caption)
+    # Normalize: crop extreme aspect ratios, pad to square
+
+    img = _normalize_image(img)
+    buf = io.BytesIO()
+    save_fmt = fmt if fmt != "BMP" else "PNG"
+    img.save(buf, format=save_fmt)
+    ext = save_fmt.lower()
+    if ext == "jpeg":
+        ext = "jpg"
+    processed = SimpleUploadedFile(f"drawing.{ext}", buf.getvalue(), content_type=f"image/{save_fmt.lower()}")
+
+    drawing = Drawing.objects.create(image=processed, category=category, caption=caption)
     return JsonResponse(
         {
             "id": drawing.id,
