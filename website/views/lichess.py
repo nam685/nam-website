@@ -10,6 +10,7 @@ import urllib.request
 from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin, verify_token
 from ..models import LichessToken
@@ -166,6 +167,27 @@ def lichess_token(request):  # noqa: ARG001
             "expires_at": token.expires_at.isoformat(),
         }
     )
+
+
+@csrf_exempt
+@require_admin
+def lichess_disconnect(request):  # noqa: ARG001
+    """Revoke stored Lichess token and delete from DB."""
+    token = LichessToken.objects.first()
+    if not token:
+        return JsonResponse({"error": "Not connected"}, status=404)
+
+    # Revoke token at Lichess
+    try:
+        revoke_req = urllib.request.Request(
+            LICHESS_TOKEN_URL, method="DELETE", headers={"Authorization": f"Bearer {token.access_token}"}
+        )
+        urllib.request.urlopen(revoke_req, timeout=10)
+    except Exception:
+        logger.warning("Failed to revoke Lichess token (may already be expired)")
+
+    token.delete()
+    return JsonResponse({"ok": True})
 
 
 def lichess_status(request):  # noqa: ARG001

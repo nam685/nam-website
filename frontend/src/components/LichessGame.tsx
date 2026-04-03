@@ -88,7 +88,7 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
 
     (async () => {
       try {
-        const resp = await streamBoardGame(token, gameId);
+        const resp = await streamBoardGame(token, gameId, controller.signal);
         if (!resp.body) return;
 
         await parseNdJsonStream(resp.body, (event: Record<string, unknown>) => {

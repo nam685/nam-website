@@ -79,6 +79,19 @@ export default function PlaysClient() {
     }
   }
 
+  async function handleDisconnect() {
+    const adminToken = store("adminToken");
+    if (!adminToken) return;
+    const resp = await fetch(`${API}/api/lichess/disconnect/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    if (resp.ok) {
+      setLichessStatus({ connected: false, username: null });
+      setLichessToken(null);
+    }
+  }
+
   function handleGameStart(gameId: string, color: "white" | "black") {
     setActiveGameId(gameId);
     setMyColor(color);
@@ -170,6 +183,24 @@ export default function PlaysClient() {
                 />
                 Connected as{" "}
                 <span style={{ color: ACCENT }}>{lichessStatus.username}</span>
+                <button
+                  onClick={handleDisconnect}
+                  style={{
+                    marginLeft: "0.75rem",
+                    fontFamily: "var(--font-headline)",
+                    fontSize: "0.6rem",
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "#555",
+                    background: "none",
+                    border: "1px solid #333",
+                    borderRadius: "3px",
+                    padding: "0.2rem 0.5rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  disconnect
+                </button>
               </span>
             ) : (
               <button onClick={handleConnect} style={connectBtnStyle}>
