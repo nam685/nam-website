@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { store } from "@/lib/auth";
 import { API } from "@/lib/api";
-import type { BetsTicker, BetsHistory } from "@/lib/api";
+import type { BetsTicker, BetsHistory, BetsSearchResult } from "@/lib/api";
 
 const ACCENT = "#db2777";
 const GREEN = "#22c55e";
@@ -306,15 +306,10 @@ export default function BetsPage() {
   const [historyPeriod, setHistoryPeriod] = useState("1M");
   const [isAdmin, setIsAdmin] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState({
-    symbol: "",
-    name: "",
-    asset_type: "stock",
-    provider: "alpha_vantage",
-    provider_id: "",
-    currency: "USD",
-  });
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<BetsSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -345,6 +340,27 @@ export default function BetsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(() => {
+      const token = store("adminToken");
+      fetch(`${API}/api/bets/search/?q=${encodeURIComponent(searchQuery)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setSearchResults(data);
+        })
+        .catch(console.error)
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -362,7 +378,7 @@ export default function BetsPage() {
     }
   };
 
-  const handleAdd = async () => {
+  const handleSelect = async (result: BetsSearchResult) => {
     const token = store("adminToken");
     const resp = await fetch(`${API}/api/bets/create/`, {
       method: "POST",
@@ -370,18 +386,12 @@ export default function BetsPage() {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(addForm),
+      body: JSON.stringify(result),
     });
     if (resp.ok) {
-      setShowAddForm(false);
-      setAddForm({
-        symbol: "",
-        name: "",
-        asset_type: "stock",
-        provider: "alpha_vantage",
-        provider_id: "",
-        currency: "USD",
-      });
+      setShowSearch(false);
+      setSearchQuery("");
+      setSearchResults([]);
       const r = await fetch(`${API}/api/bets/`);
       setTickers(await r.json());
     }
@@ -465,7 +475,7 @@ export default function BetsPage() {
         {isAdmin && (
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => setShowSearch(!showSearch)}
               style={{
                 padding: "4px 10px",
                 border: `1px solid ${ACCENT}44`,
@@ -497,137 +507,106 @@ export default function BetsPage() {
         )}
       </div>
 
-      {/* Add ticker form */}
-      {showAddForm && (
+      {/* Search typeahead */}
+      {showSearch && (
         <div
           style={{
             border: `1px solid ${ACCENT}33`,
-            padding: 16,
+            padding: 12,
             marginBottom: 16,
+            position: "relative",
           }}
         >
-          <div
+          <input
+            autoFocus
+            placeholder="Search ticker (e.g. VWCE, Bitcoin)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              gap: 8,
-              marginBottom: 8,
+              background: "#111",
+              border: "1px solid #333",
+              color: "#eee",
+              padding: "8px 12px",
+              fontSize: 14,
+              width: "100%",
+              boxSizing: "border-box",
             }}
-          >
-            <input
-              placeholder="Symbol"
-              value={addForm.symbol}
-              onChange={(e) =>
-                setAddForm({ ...addForm, symbol: e.target.value })
-              }
+          />
+          {searching && (
+            <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
+              Searching...
+            </div>
+          )}
+          {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
+            <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
+              No results
+            </div>
+          )}
+          {searchResults.length > 0 && (
+            <div
               style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
-              }}
-            />
-            <input
-              placeholder="Name"
-              value={addForm.name}
-              onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-              style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
-              }}
-            />
-            <input
-              placeholder="Provider ID"
-              value={addForm.provider_id}
-              onChange={(e) =>
-                setAddForm({ ...addForm, provider_id: e.target.value })
-              }
-              style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <select
-              value={addForm.asset_type}
-              onChange={(e) =>
-                setAddForm({ ...addForm, asset_type: e.target.value })
-              }
-              style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
+                marginTop: 4,
+                maxHeight: 240,
+                overflowY: "auto",
+                border: "1px solid #222",
+                background: "#0a0a0a",
               }}
             >
-              <option value="stock">Stock</option>
-              <option value="commodity">Commodity</option>
-              <option value="crypto">Crypto</option>
-              <option value="bond">Bond</option>
-            </select>
-            <select
-              value={addForm.provider}
-              onChange={(e) =>
-                setAddForm({ ...addForm, provider: e.target.value })
-              }
-              style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
-              }}
-            >
-              <option value="alpha_vantage">Alpha Vantage</option>
-              <option value="coingecko">CoinGecko</option>
-              <option value="ecb">ECB</option>
-            </select>
-            <input
-              placeholder="Currency"
-              value={addForm.currency}
-              onChange={(e) =>
-                setAddForm({ ...addForm, currency: e.target.value })
-              }
-              style={{
-                background: "#111",
-                border: "1px solid #333",
-                color: "#eee",
-                padding: "6px 8px",
-                fontSize: 13,
-                width: 60,
-              }}
-            />
-            <button
-              onClick={handleAdd}
-              style={{
-                padding: "6px 16px",
-                background: ACCENT,
-                color: "#fff",
-                border: "none",
-                fontSize: 13,
-                cursor: "pointer",
-                borderRadius: 2,
-              }}
-            >
-              Add
-            </button>
-          </div>
+              {searchResults.map((r) => (
+                <div
+                  key={`${r.provider}-${r.symbol}`}
+                  onClick={() => handleSelect(r)}
+                  style={{
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderBottom: "1px solid #1a1a1a",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = "#151515")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  <div>
+                    <span
+                      style={{
+                        fontWeight: 600,
+                        color: "#eee",
+                        fontSize: 14,
+                      }}
+                    >
+                      {r.symbol}
+                    </span>
+                    <span
+                      style={{
+                        color: "#666",
+                        fontSize: 12,
+                        marginLeft: 8,
+                      }}
+                    >
+                      {r.name}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "#555",
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                      border: "1px solid #333",
+                      padding: "2px 6px",
+                    }}
+                  >
+                    {r.asset_type}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -176,3 +176,13 @@ export interface BetsHistory {
   prices: BetsHistoryPrice[];
   change_periods: Record<string, string | null>;
 }
+
+export interface BetsSearchResult {
+  symbol: string;
+  name: string;
+  asset_type: "stock" | "commodity" | "crypto" | "bond";
+  provider: string;
+  provider_id: string;
+  currency: string;
+  match_score: number;
+}
