@@ -21,7 +21,7 @@ SEEDED_MODELS = [
 class Command(BaseCommand):
     help = "Load seed fixture data into empty tables"
 
-    def handle(self, *args, **options):
+    def handle(self, *_args, **_options):
         fixture_path = SEED_FILE if SEED_FILE.exists() else EXAMPLE_FILE
         if not fixture_path.exists():
             self.stdout.write("No seed fixture found. Skipping. (Run 'make dumpseed' to create one)")

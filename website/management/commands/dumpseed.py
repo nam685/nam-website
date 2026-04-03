@@ -19,7 +19,7 @@ SEEDED_MODELS = [
 class Command(BaseCommand):
     help = "Export seeded models to fixtures/seed.json"
 
-    def handle(self, *args, **options):
+    def handle(self, *_args, **_options):
         all_objects = []
         for name, model in SEEDED_MODELS:
             qs = model.objects.all()
