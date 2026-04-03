@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime
 from decimal import Decimal
 
@@ -15,8 +16,12 @@ class Command(BaseCommand):
     def handle(self, *_args, **_options):
         tickers = Ticker.objects.all()
         errors = []
+        last_provider = None
 
         for ticker in tickers:
+            # Rate-limit: 1 req/sec for free API keys (Alpha Vantage)
+            if last_provider == "alpha_vantage" and ticker.provider == "alpha_vantage":
+                time.sleep(1.5)
             adapter = PROVIDER_ADAPTERS.get(ticker.provider)
             if not adapter:
                 errors.append({"symbol": ticker.symbol, "message": f"Unknown provider: {ticker.provider}"})
@@ -29,6 +34,8 @@ class Command(BaseCommand):
             except Exception as e:
                 errors.append({"symbol": ticker.symbol, "message": str(e)})
                 self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
+
+            last_provider = ticker.provider
 
         status = {
             "last_sync": datetime.now().isoformat(),
