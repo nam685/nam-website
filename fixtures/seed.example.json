@@ -111,11 +111,11 @@
     "model": "website.ticker",
     "pk": 1,
     "fields": {
-      "symbol": "VWCE.DE",
+      "symbol": "VWCE.DEX",
       "name": "Vanguard FTSE All-World",
       "asset_type": "stock",
       "provider": "alpha_vantage",
-      "provider_id": "VWCE.DE",
+      "provider_id": "VWCE.DEX",
       "currency": "EUR",
       "display_order": 0,
       "created_at": "2026-04-03T00:00:00Z"
@@ -167,11 +167,11 @@
     "model": "website.ticker",
     "pk": 5,
     "fields": {
-      "symbol": "IBGL.DE",
+      "symbol": "IBGL.AMS",
       "name": "iShares EUR Govt Bond 15-30yr",
       "asset_type": "bond",
       "provider": "alpha_vantage",
-      "provider_id": "IBGL.DE",
+      "provider_id": "IBGL.AMS",
       "currency": "EUR",
       "display_order": 4,
       "created_at": "2026-04-03T00:00:00Z"
@@ -181,11 +181,11 @@
     "model": "website.ticker",
     "pk": 6,
     "fields": {
-      "symbol": "VGEA.DE",
+      "symbol": "VGEA.DEX",
       "name": "Vanguard EUR Eurozone Govt Bond",
       "asset_type": "bond",
       "provider": "alpha_vantage",
-      "provider_id": "VGEA.DE",
+      "provider_id": "VGEA.DEX",
       "currency": "EUR",
       "display_order": 5,
       "created_at": "2026-04-03T00:00:00Z"
