@@ -196,3 +196,57 @@ def lichess_status(request):  # noqa: ARG001
     if token:
         return JsonResponse({"connected": True, "username": token.lichess_username})
     return JsonResponse({"connected": False, "username": None})
+
+
+EXPLORER_BASE = "https://explorer.lichess.org"
+EXPLORER_CACHE_TTL = 300  # 5 min
+
+
+def lichess_explorer(request, db):
+    """Proxy Opening Explorer requests, adding the stored Lichess Bearer token.
+
+    Lichess now requires authentication for explorer.lichess.org (since Feb 2026).
+    This endpoint proxies the request server-side so the token stays private.
+    """
+    if db not in ("masters", "lichess"):
+        return JsonResponse({"error": "Invalid database"}, status=400)
+
+    fen = request.GET.get("fen", "")
+    if not fen:
+        return JsonResponse({"error": "Missing fen parameter"}, status=400)
+
+    # Build upstream URL with same query params
+    params = {"fen": fen}
+    ratings = request.GET.get("ratings", "")
+    if ratings:
+        params["ratings"] = ratings
+    speeds = request.GET.get("speeds", "")
+    if speeds:
+        params["speeds"] = speeds
+
+    upstream_url = f"{EXPLORER_BASE}/{db}?{urllib.parse.urlencode(params)}"
+
+    # Check cache first
+    cache_key = f"lichess_explorer:{db}:{fen}:{ratings}:{speeds}"
+    cached = redis_cache.get(cache_key)
+    if cached:
+        return JsonResponse(json.loads(cached), safe=False)
+
+    # Get stored Lichess token for auth
+    stored = LichessToken.objects.first()
+    headers = {"Accept": "application/json"}
+    if stored:
+        headers["Authorization"] = f"Bearer {stored.access_token}"
+
+    req = urllib.request.Request(upstream_url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode()
+            redis_cache.set(cache_key, data, EXPLORER_CACHE_TTL)
+            return JsonResponse(json.loads(data), safe=False)
+    except urllib.error.HTTPError as e:
+        logger.warning("Lichess explorer returned %s for %s", e.code, db)
+        return JsonResponse({"error": f"Lichess explorer returned {e.code}"}, status=502)
+    except Exception:
+        logger.exception("Failed to fetch Lichess explorer data")
+        return JsonResponse({"error": "Failed to fetch explorer data"}, status=502)
