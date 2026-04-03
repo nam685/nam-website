@@ -5,6 +5,7 @@ from .bets import (
     bets_delete,
     bets_history,
     bets_list,
+    bets_search,
     bets_sync,
     bets_sync_status,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "bets_delete",
     "bets_history",
     "bets_list",
+    "bets_search",
     "bets_sync",
     "bets_sync_status",
     "drawing_delete",

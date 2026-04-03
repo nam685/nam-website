@@ -159,7 +159,12 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Clicking a card expands it with a larger chart and period toggles
 - [ ] Period toggles (1W/1M/3M/1Y/ALL) update the chart
 - [ ] Pressing Escape or clicking expanded card collapses it
-- [ ] Admin: "+ Add Ticker" form works and new ticker appears
+- [ ] Admin: "+ Add Ticker" opens search input
+- [ ] Typing "vwce" shows stock results from Alpha Vantage
+- [ ] Typing "bitcoin" shows crypto results from CoinGecko
+- [ ] Clicking a search result adds the ticker immediately
+- [ ] Already-tracked tickers are excluded from search results
+- [ ] Search shows "No results" for gibberish input
 - [ ] Admin: "×" delete button removes ticker
 - [ ] Admin: "↻ Refresh" triggers sync and updates prices
 - [ ] Non-admin: admin controls are hidden

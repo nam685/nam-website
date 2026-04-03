@@ -130,6 +130,75 @@ class TestAlphaVantageAdapter:
         assert result[0] == (date(2026, 4, 2), Decimal("2298.2000"))
 
 
+class TestAlphaVantageSearch:
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_returns_mapped_results(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "bestMatches": [
+                    {
+                        "1. symbol": "VWCE.DE",
+                        "2. name": "Vanguard FTSE All-World UCITS ETF USD Acc",
+                        "3. type": "ETF",
+                        "4. region": "Frankfurt",
+                        "8. currency": "EUR",
+                        "9. matchScore": "1.0000",
+                    },
+                    {
+                        "1. symbol": "VWC.L",
+                        "2. name": "Vanguard FTSE 100 UCITS ETF",
+                        "3. type": "ETF",
+                        "4. region": "London",
+                        "8. currency": "GBP",
+                        "9. matchScore": "0.6000",
+                    },
+                ]
+            },
+        )
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("vwce")
+        assert len(results) == 2
+        assert results[0]["symbol"] == "VWCE.DE"
+        assert results[0]["name"] == "Vanguard FTSE All-World UCITS ETF USD Acc"
+        assert results[0]["asset_type"] == "stock"
+        assert results[0]["provider"] == "alpha_vantage"
+        assert results[0]["provider_id"] == "VWCE.DE"
+        assert results[0]["currency"] == "EUR"
+        assert results[0]["match_score"] == 1.0
+
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_skips_crypto_type(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "bestMatches": [
+                    {
+                        "1. symbol": "BTC",
+                        "2. name": "Bitcoin",
+                        "3. type": "Cryptocurrency",
+                        "4. region": "United States",
+                        "8. currency": "USD",
+                        "9. matchScore": "1.0000",
+                    },
+                ]
+            },
+        )
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("btc")
+        assert len(results) == 0
+
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_handles_api_failure(self, mock_get):
+        mock_get.side_effect = Exception("API down")
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("vwce")
+        assert results == []
+
+
 class TestCoinGeckoAdapter:
     @patch("website.services.coingecko.httpx.get")
     def test_fetch_crypto_history(self, mock_get):
@@ -146,6 +215,52 @@ class TestCoinGeckoAdapter:
         result = fetch_coingecko("bitcoin", days=30)
         assert len(result) == 3
         assert result[0][1] == Decimal("84000.50")
+
+
+class TestCoinGeckoSearch:
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_returns_mapped_results(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "coins": [
+                    {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+                    {"id": "ethereum", "name": "Ethereum", "symbol": "eth"},
+                    {"id": "bitcoin-cash", "name": "Bitcoin Cash", "symbol": "bch"},
+                ]
+            },
+        )
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("bitcoin")
+        assert len(results) == 3
+        assert results[0]["symbol"] == "BTC"
+        assert results[0]["name"] == "Bitcoin"
+        assert results[0]["asset_type"] == "crypto"
+        assert results[0]["provider"] == "coingecko"
+        assert results[0]["provider_id"] == "bitcoin"
+        assert results[0]["currency"] == "USD"
+        assert results[0]["match_score"] == 1.0
+        assert results[2]["match_score"] < 1.0
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_limits_to_five(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"coins": [{"id": f"coin-{i}", "name": f"Coin {i}", "symbol": f"C{i}"} for i in range(10)]},
+        )
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("coin")
+        assert len(results) == 5
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_handles_api_failure(self, mock_get):
+        mock_get.side_effect = Exception("API down")
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("bitcoin")
+        assert results == []
 
 
 class TestECBAdapter:
@@ -455,3 +570,99 @@ class TestBetsSyncStatusEndpoint:
     def test_returns_empty_when_never_synced(self, client, auth_headers):
         data = client.get("/api/bets/sync-status/", **auth_headers).json()
         assert data["last_sync"] is None
+
+
+@pytest.mark.django_db
+class TestBetsSearchEndpoint:
+    def test_requires_auth(self, client):
+        resp = client.get("/api/bets/search/?q=vwce")
+        assert resp.status_code == 401
+
+    def test_rejects_short_query(self, client, auth_headers):
+        resp = client.get("/api/bets/search/?q=a", **auth_headers)
+        assert resp.status_code == 400
+        assert "least 2" in resp.json()["error"]
+
+    @patch("website.views.bets.search_alpha_vantage")
+    @patch("website.views.bets.search_coingecko")
+    def test_returns_merged_results(self, mock_cg, mock_av, client, auth_headers):
+        mock_av.return_value = [
+            {
+                "symbol": "VWCE.DE",
+                "name": "Vanguard FTSE All-World",
+                "asset_type": "stock",
+                "provider": "alpha_vantage",
+                "provider_id": "VWCE.DE",
+                "currency": "EUR",
+                "match_score": 1.0,
+            }
+        ]
+        mock_cg.return_value = [
+            {
+                "symbol": "VGX",
+                "name": "Voyager Token",
+                "asset_type": "crypto",
+                "provider": "coingecko",
+                "provider_id": "ethos",
+                "currency": "USD",
+                "match_score": 0.5,
+            }
+        ]
+        data = client.get("/api/bets/search/?q=vwce", **auth_headers).json()
+        assert len(data) == 2
+        assert data[0]["symbol"] == "VWCE.DE"
+        assert data[1]["symbol"] == "VGX"
+
+    @patch("website.views.bets.search_alpha_vantage")
+    @patch("website.views.bets.search_coingecko")
+    def test_excludes_existing_tickers(self, mock_cg, mock_av, client, auth_headers):
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        mock_av.return_value = []
+        mock_cg.return_value = [
+            {
+                "symbol": "BTC",
+                "name": "Bitcoin",
+                "asset_type": "crypto",
+                "provider": "coingecko",
+                "provider_id": "bitcoin",
+                "currency": "USD",
+                "match_score": 1.0,
+            },
+            {
+                "symbol": "ETH",
+                "name": "Ethereum",
+                "asset_type": "crypto",
+                "provider": "coingecko",
+                "provider_id": "ethereum",
+                "currency": "USD",
+                "match_score": 0.85,
+            },
+        ]
+        data = client.get("/api/bets/search/?q=btc", **auth_headers).json()
+        assert len(data) == 1
+        assert data[0]["symbol"] == "ETH"
+
+    @patch("website.views.bets.search_alpha_vantage")
+    @patch("website.views.bets.search_coingecko")
+    def test_handles_provider_failure(self, mock_cg, mock_av, client, auth_headers):
+        mock_av.side_effect = Exception("AV down")
+        mock_cg.return_value = [
+            {
+                "symbol": "BTC",
+                "name": "Bitcoin",
+                "asset_type": "crypto",
+                "provider": "coingecko",
+                "provider_id": "bitcoin",
+                "currency": "USD",
+                "match_score": 1.0,
+            }
+        ]
+        data = client.get("/api/bets/search/?q=btc", **auth_headers).json()
+        assert len(data) == 1
+        assert data[0]["symbol"] == "BTC"

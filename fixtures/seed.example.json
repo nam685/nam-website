@@ -162,5 +162,33 @@
       "display_order": 3,
       "created_at": "2026-04-03T00:00:00Z"
     }
+  },
+  {
+    "model": "website.ticker",
+    "pk": 5,
+    "fields": {
+      "symbol": "IBGL.DE",
+      "name": "iShares EUR Govt Bond 15-30yr",
+      "asset_type": "bond",
+      "provider": "alpha_vantage",
+      "provider_id": "IBGL.DE",
+      "currency": "EUR",
+      "display_order": 4,
+      "created_at": "2026-04-03T00:00:00Z"
+    }
+  },
+  {
+    "model": "website.ticker",
+    "pk": 6,
+    "fields": {
+      "symbol": "VGEA.DE",
+      "name": "Vanguard EUR Eurozone Govt Bond",
+      "asset_type": "bond",
+      "provider": "alpha_vantage",
+      "provider_id": "VGEA.DE",
+      "currency": "EUR",
+      "display_order": 5,
+      "created_at": "2026-04-03T00:00:00Z"
+    }
   }
 ]
