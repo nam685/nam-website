@@ -119,7 +119,7 @@ export default function ListensTracksPage() {
               >
                 {track.title}
               </div>
-              <div style={{ color: "#666", fontSize: 10 }}>{track.artist}</div>
+              <div style={{ color: "#666", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</div>
             </div>
             <div style={{ color: ACCENT, fontSize: 12, fontFamily: "monospace", flexShrink: 0 }}>
               {track.play_count}×
