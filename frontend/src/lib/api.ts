@@ -117,3 +117,8 @@ export interface WatchSyncStatus {
   connected: boolean;
   last_synced: string | null;
 }
+
+export interface LichessStatus {
+  connected: boolean;
+  username: string | null;
+}

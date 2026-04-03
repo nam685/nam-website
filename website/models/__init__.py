@@ -1,6 +1,7 @@
 from .drawing import Drawing
 from .feedback import Feedback
 from .github import GitHubContributions
+from .lichess import LichessToken
 from .listen import ListenTrack
 from .project import Project
 from .thought import Thought
@@ -11,6 +12,7 @@ __all__ = [
     "Drawing",
     "Feedback",
     "GitHubContributions",
+    "LichessToken",
     "ListenTrack",
     "Project",
     "Thought",

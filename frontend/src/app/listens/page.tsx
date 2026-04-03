@@ -339,6 +339,7 @@ export default function ListensPage() {
   const [tracks, setTracks] = useState<ListenTrack[]>([]);
   const [stats, setStats] = useState<ListenStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -377,20 +378,34 @@ export default function ListensPage() {
 
   useEffect(() => {
     fetchData();
-    // Check URL for error/success from OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    const oauthError = params.get("error");
-    if (oauthError) {
-      setError(oauthError);
-      window.history.replaceState({}, "", "/listens");
-    }
   }, [fetchData]);
 
-  function handleSync() {
+  async function handleSync() {
     const token = getAdminToken();
     if (!token) return;
-    // Redirect to Google OAuth flow — backend handles the rest
-    window.location.href = `${API}/api/listens/auth/?token=${encodeURIComponent(token)}`;
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/api/listens/sync/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        storeDel("adminToken");
+        window.location.href = `/sudo?from=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Sync failed");
+        return;
+      }
+      await fetchData();
+    } catch {
+      setError("Sync failed");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const nowPlaying = tracks[0] ?? null;
@@ -447,6 +462,7 @@ export default function ListensPage() {
           </div>
           <button
             onClick={handleSync}
+            disabled={syncing}
             title="Pull your YouTube Music history"
             style={{
               padding: "0.25rem 0.75rem",
@@ -457,20 +473,23 @@ export default function ListensPage() {
               fontSize: "0.6875rem",
               textTransform: "uppercase",
               letterSpacing: "0.15em",
-              cursor: "pointer",
+              cursor: syncing ? "wait" : "pointer",
               transition: "border-color 0.2s, background 0.2s",
               borderRadius: 2,
+              opacity: syncing ? 0.5 : 1,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = ORANGE;
-              e.currentTarget.style.background = `${ORANGE}15`;
+              if (!syncing) {
+                e.currentTarget.style.borderColor = ORANGE;
+                e.currentTarget.style.background = `${ORANGE}15`;
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = `${ORANGE}40`;
               e.currentTarget.style.background = "none";
             }}
           >
-            Sync
+            {syncing ? "Syncing..." : "Sync"}
           </button>
         </div>
 

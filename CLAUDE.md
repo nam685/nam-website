@@ -64,8 +64,7 @@ GET  /api/github/auth/          auth required, initiates GitHub OAuth
 GET  /api/github/callback/
 GET  /api/github/refresh-status/ auth required
 GET  /api/listens/?limit=N&offset=N
-GET  /api/listens/auth/         auth required, initiates Google OAuth
-GET  /api/listens/callback/
+POST /api/listens/sync/         auth required, triggers YTM history sync
 GET  /api/listens/stats/
 GET  /api/listens/sync-status/  auth required
 GET  /api/watches/?limit=N&offset=N
@@ -80,6 +79,10 @@ GET  /api/watches/auth/         auth required, initiates Google OAuth
 GET  /api/watches/callback/     Google OAuth callback
 POST /api/watches/sync/         auth required, triggers YouTube sync
 GET  /api/watches/sync-status/  auth required
+GET  /api/lichess/auth/         auth required, initiates Lichess OAuth (PKCE)
+GET  /api/lichess/callback/     Lichess OAuth callback
+GET  /api/lichess/token/        auth required, returns stored Lichess token
+GET  /api/lichess/status/       public, returns connection status
 ```
 
 ## Auth

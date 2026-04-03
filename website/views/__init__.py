@@ -6,7 +6,8 @@ from .github import contributions as github_contributions
 from .github import github_auth, github_callback
 from .github import refresh_status as github_refresh_status
 from .health import health
-from .listen import listen_auth, listen_callback, listen_list, listen_stats, listen_sync_status
+from .lichess import lichess_auth, lichess_callback, lichess_status, lichess_token
+from .listen import listen_list, listen_stats, listen_sync, listen_sync_status
 from .project import project_list
 from .thought import thought_create, thought_list
 from .todo import todo_list
@@ -37,10 +38,13 @@ __all__ = [
     "github_contributions",
     "github_refresh_status",
     "health",
-    "listen_auth",
-    "listen_callback",
+    "lichess_auth",
+    "lichess_callback",
+    "lichess_status",
+    "lichess_token",
     "listen_list",
     "listen_stats",
+    "listen_sync",
     "listen_sync_status",
     "project_list",
     "thought_create",

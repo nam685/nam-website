@@ -99,20 +99,25 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] `/feed.xml` returns valid RSS XML
 - [ ] Feed contains thought entries with correct titles and dates
 
-## Plays
+## Plays — Lichess Integration
 
-- [ ] Chessboard renders with starting position
-- [ ] Book moves panel shows available moves (e4, d4, Nf3, c4, f4 at start)
-- [ ] Clicking a book move plays it on the board
-- [ ] Opponent auto-responds with a book move
-- [ ] Opening name and ECO code update as moves are played
-- [ ] Move history displays correctly below the board
-- [ ] Reset button returns to starting position
-- [ ] Takeback undoes two moves (yours + opponent's)
-- [ ] Flip button switches side and resets the board
-- [ ] Drag-and-drop moves work on the board
-- [ ] "Out of book" message shows when deviating from known lines
-- [ ] Board renders on mobile viewport
+- [ ] Explorer tab loads with starting position and Chessground board
+- [ ] Making moves on the board fetches explorer data from Lichess
+- [ ] Masters/Lichess database toggle works
+- [ ] Rating filter buttons appear for Lichess database
+- [ ] Move statistics show game count + win/draw/loss bar
+- [ ] Reset, Takeback, Flip buttons work
+- [ ] Move history displays correctly
+- [ ] Fallback to offline book when explorer API is unreachable
+- [ ] Play tab only visible when admin is logged in
+- [ ] "Connect Lichess" button initiates OAuth flow
+- [ ] After connecting, status shows "Connected as {username}"
+- [ ] Game creation panel: challenge, open challenge, seek modes
+- [ ] Time control presets and custom time input work
+- [ ] Live game: board streams moves, clocks update
+- [ ] Game actions: abort, resign, offer draw
+- [ ] Game end: result displayed, "New Game" returns to creator
+- [ ] Mobile: board and panels stack vertically
 
 ## Performance
 

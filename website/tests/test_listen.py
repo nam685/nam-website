@@ -4,7 +4,6 @@ import pytest
 from django.utils import timezone
 
 from website.models import ListenTrack
-from website.utils import create_oauth_nonce
 from website.views import listen
 
 
@@ -66,9 +65,8 @@ class TestAuthRequired:
     def test_sync_status_requires_auth(self, client):
         assert client.get("/api/listens/sync-status/").status_code == 401
 
-    @patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-id"})
-    def test_auth_requires_token(self, client):
-        assert client.get("/api/listens/auth/").status_code == 401
+    def test_sync_requires_auth(self, client):
+        assert client.post("/api/listens/sync/").status_code == 401
 
     def test_bad_token_rejected(self, client):
         assert client.get("/api/listens/", HTTP_AUTHORIZATION="Bearer bad").status_code == 401
@@ -113,110 +111,66 @@ class TestListenStats:
         assert isinstance(data["daily"], list)
 
 
-# ── OAuth auth endpoint ───────────────────────────────
+# ── Sync endpoint (browser auth) ─────────────────────
 
 
 @pytest.mark.django_db
-class TestListenAuth:
-    def test_no_google_client_id(self, client, admin_token):
-        with patch.dict("os.environ", {"GOOGLE_CLIENT_ID": ""}, clear=False):
-            resp = client.get(f"/api/listens/auth/?token={admin_token}")
-            assert resp.status_code == 500
+class TestListenSync:
+    def test_get_not_allowed(self, client, auth_headers):
+        resp = client.get("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 405
 
-    @patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-client-id"})
-    def test_redirects_to_google(self, client, admin_token):
-        resp = client.get(f"/api/listens/auth/?token={admin_token}")
-        assert resp.status_code == 302
-        assert "accounts.google.com" in resp["Location"]
-        assert "test-client-id" in resp["Location"]
-        assert "auth%2Fyoutube" in resp["Location"]
+    @patch("os.path.isfile", return_value=False)
+    def test_missing_browser_json(self, _mock_isfile, client, auth_headers):
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 500
+        assert "Browser auth not configured" in resp.json()["error"]
 
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_syncs_tracks(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
 
-# ── OAuth callback ────────────────────────────────────
-
-
-@pytest.mark.django_db
-class TestListenCallback:
-    def test_callback_missing_code(self, client):
-        resp = client.get("/api/listens/callback/")
-        assert resp.status_code == 400
-
-    def test_callback_bad_state(self, client):
-        resp = client.get("/api/listens/callback/?code=test&state=bad")
-        assert resp.status_code == 401
-
-    def test_callback_error_redirects(self, client):
-        resp = client.get("/api/listens/callback/?error=access_denied")
-        assert resp.status_code == 302
-        assert "/listens?error=" in resp["Location"]
-
-    @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_syncs_tracks(self, mock_urlopen, client):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"access_token":"fake","expires_in":3600}'
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_resp
-
-        nonce = create_oauth_nonce()
-        with (
-            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
-            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
-        ):
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = MOCK_HISTORY
-            mock_ytmusic_cls.return_value = mock_yt
-            resp = client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
-
-        assert resp.status_code == 302
-        assert resp["Location"] == "/listens"
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 2
         assert ListenTrack.objects.count() == 2
         assert ListenTrack.objects.get(video_id="abc123").artist == "Test Artist"
+        assert ListenTrack.objects.get(video_id="def456").artist == "Artist A, Artist B"
 
-    @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_deduplicates(self, mock_urlopen, client):
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_deduplicates(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
         ListenTrack.objects.create(video_id="abc123", title="Old", artist="Old", played_at=timezone.now())
 
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"access_token":"fake","expires_in":3600}'
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_resp
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
 
-        nonce = create_oauth_nonce()
-        with (
-            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
-            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
-        ):
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = MOCK_HISTORY
-            mock_ytmusic_cls.return_value = mock_yt
-            client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
-
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.json()["synced"] == 1
         assert ListenTrack.objects.count() == 2
 
-    @patch("website.views.listen.urllib.request.urlopen")
-    def test_callback_rate_limited(self, mock_urlopen, client):
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = b'{"access_token":"fake","expires_in":3600}'
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_resp
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_rate_limited(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = []
+        mock_ytmusic_cls.return_value = mock_yt
 
-        nonce = create_oauth_nonce()
-        with (
-            patch("website.views.listen.YTMusic") as mock_ytmusic_cls,
-            patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "csec"}),
-        ):
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = []
-            mock_ytmusic_cls.return_value = mock_yt
-            client.get(f"/api/listens/callback/?code=authcode&state={nonce}")
+        client.post("/api/listens/sync/", **auth_headers)
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 429
+        assert "Rate limited" in resp.json()["error"]
 
-        nonce2 = create_oauth_nonce()
-        resp = client.get(f"/api/listens/callback/?code=authcode2&state={nonce2}")
-        assert resp.status_code == 302
-        assert "error=" in resp["Location"]
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_ytmusic_error(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_ytmusic_cls.side_effect = Exception("Auth failed")
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 502
 
 
 # ── Sync status ───────────────────────────────────────

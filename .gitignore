@@ -22,11 +22,16 @@ media/
 .env.local
 .env.*.local
 
+# Auth credentials
+browser.json
+oauth.json
+
 # Node / Next.js
 node_modules/
 frontend/.next/
 frontend/out/
 frontend/.vercel
+oauth.json
 
 # Claude Code
 .claude/

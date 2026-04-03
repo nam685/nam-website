@@ -72,9 +72,13 @@ interface ContributionCalendar {
 function ProjectCard({
   project,
   pushedAt,
+  visible,
+  delay,
 }: {
   project: CodeProject;
   pushedAt?: string;
+  visible: boolean;
+  delay: number;
 }) {
   return (
     <div
@@ -89,6 +93,9 @@ function ProjectCard({
         overflow: "hidden",
         flex: "1 1 340px",
         minWidth: 0,
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(1.5rem)",
+        transition: `opacity 0.6s ease-out ${delay}s, transform 0.6s ease-out ${delay}s, border-color 0.3s, box-shadow 0.3s`,
       }}
     >
       {/* Corner bracket — top right */}
@@ -429,6 +436,13 @@ export default function CodesClient({
   calendar: ContributionCalendar | null;
   repositoryDates: Record<string, string> | null;
 }) {
+  const [cardsVisible, setCardsVisible] = useState(false);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setCardsVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
     <>
       <div
@@ -475,11 +489,13 @@ export default function CodesClient({
             zIndex: 2,
           }}
         >
-          {PROJECTS.map((project) => (
+          {PROJECTS.map((project, i) => (
             <ProjectCard
               key={project.slug}
               project={project}
               pushedAt={repositoryDates?.[project.github_url] ?? undefined}
+              visible={cardsVisible}
+              delay={i * 0.15}
             />
           ))}
         </div>
