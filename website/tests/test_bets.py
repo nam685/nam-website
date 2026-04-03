@@ -347,3 +347,111 @@ class TestBetsHistoryEndpoint:
     def test_not_found(self, client):
         resp = client.get("/api/bets/999/history/")
         assert resp.status_code == 404
+
+
+# --- Admin endpoint tests ---
+
+
+@pytest.mark.django_db
+class TestBetsCreateEndpoint:
+    def test_requires_auth(self, client):
+        resp = client.post("/api/bets/create/", content_type="application/json", data=json.dumps({"symbol": "ETH"}))
+        assert resp.status_code == 401
+
+    def test_creates_ticker(self, client, auth_headers):
+        resp = client.post(
+            "/api/bets/create/",
+            content_type="application/json",
+            data=json.dumps(
+                {
+                    "symbol": "ETH",
+                    "name": "Ethereum",
+                    "asset_type": "crypto",
+                    "provider": "coingecko",
+                    "provider_id": "ethereum",
+                    "currency": "USD",
+                }
+            ),
+            **auth_headers,
+        )
+        assert resp.status_code == 201
+        assert Ticker.objects.filter(symbol="ETH").exists()
+
+    def test_rejects_duplicate_symbol(self, client, auth_headers):
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        resp = client.post(
+            "/api/bets/create/",
+            content_type="application/json",
+            data=json.dumps(
+                {
+                    "symbol": "BTC",
+                    "name": "Bitcoin 2",
+                    "asset_type": "crypto",
+                    "provider": "coingecko",
+                    "provider_id": "bitcoin2",
+                }
+            ),
+            **auth_headers,
+        )
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestBetsDeleteEndpoint:
+    def test_requires_auth(self, client):
+        resp = client.post("/api/bets/1/delete/")
+        assert resp.status_code == 401
+
+    def test_deletes_ticker(self, client, auth_headers):
+        t = Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        resp = client.post(f"/api/bets/{t.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        assert not Ticker.objects.filter(pk=t.id).exists()
+
+    def test_not_found(self, client, auth_headers):
+        resp = client.post("/api/bets/999/delete/", **auth_headers)
+        assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+class TestBetsSyncEndpoint:
+    @patch("website.views.bets.call_command")
+    def test_requires_auth(self, mock_cmd, client):
+        resp = client.post("/api/bets/sync/")
+        assert resp.status_code == 401
+        mock_cmd.assert_not_called()
+
+    @patch("website.views.bets.call_command")
+    def test_triggers_sync(self, mock_cmd, client, auth_headers):
+        resp = client.post("/api/bets/sync/", **auth_headers)
+        assert resp.status_code == 200
+        mock_cmd.assert_called_once_with("sync_prices")
+
+
+@pytest.mark.django_db
+class TestBetsSyncStatusEndpoint:
+    def test_requires_auth(self, client):
+        resp = client.get("/api/bets/sync-status/")
+        assert resp.status_code == 401
+
+    def test_returns_status(self, client, auth_headers):
+        cache.set("bets:sync_status", json.dumps({"last_sync": "2026-04-03T08:00:00", "errors": []}))
+        data = client.get("/api/bets/sync-status/", **auth_headers).json()
+        assert data["last_sync"] == "2026-04-03T08:00:00"
+        assert data["errors"] == []
+
+    def test_returns_empty_when_never_synced(self, client, auth_headers):
+        data = client.get("/api/bets/sync-status/", **auth_headers).json()
+        assert data["last_sync"] is None

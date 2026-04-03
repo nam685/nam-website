@@ -1,8 +1,12 @@
 from .auth import check as auth_check
 from .auth import login as auth_login
 from .bets import (
+    bets_create,
+    bets_delete,
     bets_history,
     bets_list,
+    bets_sync,
+    bets_sync_status,
 )
 from .drawing import drawing_delete, drawing_list, drawing_upload
 from .feedback import feedback_create
@@ -41,8 +45,12 @@ from .watch import (
 __all__ = [
     "auth_check",
     "auth_login",
+    "bets_create",
+    "bets_delete",
     "bets_history",
     "bets_list",
+    "bets_sync",
+    "bets_sync_status",
     "drawing_delete",
     "drawing_list",
     "drawing_upload",

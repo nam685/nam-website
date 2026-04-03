@@ -1,10 +1,17 @@
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.core.cache import cache
+from django.core.management import call_command
+from django.db import models
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
+from website.auth import require_admin
 from website.models import PriceSnapshot, Ticker
+from website.utils import parse_json_body
 
 PERIOD_DAYS = {
     "1W": 7,
@@ -114,3 +121,82 @@ def _compute_change_periods(snapshots: list[tuple[date, Decimal]]) -> dict[str, 
             result[label] = None
 
     return result
+
+
+@csrf_exempt
+@require_admin
+def bets_create(request):
+    """Admin: add a new ticker."""
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    symbol = body.get("symbol", "").strip().upper()
+    name = body.get("name", "").strip()
+    asset_type = body.get("asset_type", "")
+    provider = body.get("provider", "")
+    provider_id = body.get("provider_id", "").strip()
+    currency = body.get("currency", "USD").strip()
+
+    if not all([symbol, name, asset_type, provider, provider_id]):
+        return JsonResponse({"error": "Missing required fields"}, status=400)
+
+    if asset_type not in dict(Ticker.AssetType.choices):
+        return JsonResponse({"error": f"Invalid asset_type: {asset_type}"}, status=400)
+
+    if provider not in dict(Ticker.Provider.choices):
+        return JsonResponse({"error": f"Invalid provider: {provider}"}, status=400)
+
+    if Ticker.objects.filter(symbol=symbol).exists():
+        return JsonResponse({"error": f"Ticker {symbol} already exists"}, status=400)
+
+    max_order = Ticker.objects.aggregate(m=models.Max("display_order"))["m"] or 0
+
+    ticker = Ticker.objects.create(
+        symbol=symbol,
+        name=name,
+        asset_type=asset_type,
+        provider=provider,
+        provider_id=provider_id,
+        currency=currency,
+        display_order=max_order + 1,
+    )
+
+    return JsonResponse({
+        "id": ticker.id,
+        "symbol": ticker.symbol,
+        "name": ticker.name,
+    }, status=201)
+
+
+@csrf_exempt
+@require_admin
+def bets_delete(request, ticker_id):
+    """Admin: remove a ticker and all its price history."""
+    try:
+        ticker = Ticker.objects.get(pk=ticker_id)
+    except Ticker.DoesNotExist:
+        return JsonResponse({"error": "Ticker not found"}, status=404)
+
+    ticker.delete()
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_admin
+def bets_sync(request):
+    """Admin: trigger manual price sync."""
+    call_command("sync_prices")
+    return JsonResponse({"ok": True})
+
+
+@require_GET
+@require_admin
+def bets_sync_status(request):
+    """Admin: check last sync time and errors."""
+    raw = cache.get("bets:sync_status")
+    if raw:
+        status = json.loads(raw)
+    else:
+        status = {"last_sync": None, "errors": []}
+    return JsonResponse(status)
