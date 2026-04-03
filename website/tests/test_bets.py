@@ -115,19 +115,19 @@ class TestAlphaVantageAdapter:
         assert result[2] == (date(2026, 4, 3), Decimal("121.3400"))
 
     @patch("website.services.alpha_vantage.httpx.get")
-    def test_fetch_forex_gold(self, mock_get):
+    def test_fetch_gold_etf(self, mock_get):
         mock_get.return_value = MagicMock(
             status_code=200,
             json=lambda: {
-                "Time Series FX (Daily)": {
-                    "2026-04-03": {"4. close": "2312.5000"},
-                    "2026-04-02": {"4. close": "2298.2000"},
+                "Time Series (Daily)": {
+                    "2026-04-03": {"4. close": "231.2500"},
+                    "2026-04-02": {"4. close": "229.8200"},
                 }
             },
         )
-        result = fetch_alpha_vantage("XAU", days=30)
+        result = fetch_alpha_vantage("GLD", days=30)
         assert len(result) == 2
-        assert result[0] == (date(2026, 4, 2), Decimal("2298.2000"))
+        assert result[0] == (date(2026, 4, 2), Decimal("229.8200"))
 
 
 class TestAlphaVantageSearch:
