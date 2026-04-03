@@ -162,3 +162,91 @@ class TestECBAdapter:
         assert len(result) == 3
         assert result[0] == (date(2026, 1, 1), Decimal("2.6500"))
         assert result[2] == (date(2026, 3, 1), Decimal("2.6800"))
+
+
+# --- Sync management command tests ---
+
+import json  # noqa: E402
+
+from django.core.cache import cache  # noqa: E402
+from django.core.management import call_command  # noqa: E402
+
+
+@pytest.mark.django_db
+class TestSyncPricesCommand:
+    @patch("website.services.coingecko.httpx.get")
+    def test_syncs_ticker_prices(self, mock_get):
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "prices": [
+                    [1743465600000, 84000.50],
+                    [1743552000000, 84500.75],
+                ]
+            },
+        )
+        call_command("sync_prices")
+        assert PriceSnapshot.objects.filter(ticker__symbol="BTC").count() == 2
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_sync_stores_status_in_cache(self, mock_get):
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"prices": [[1743465600000, 84000.50]]},
+        )
+        call_command("sync_prices")
+        status = json.loads(cache.get("bets:sync_status") or "{}")
+        assert "last_sync" in status
+        assert status["errors"] == []
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_sync_records_errors(self, mock_get):
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        mock_get.side_effect = Exception("API down")
+        call_command("sync_prices")
+        status = json.loads(cache.get("bets:sync_status") or "{}")
+        assert len(status["errors"]) == 1
+        assert status["errors"][0]["symbol"] == "BTC"
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_sync_computes_change_pct(self, mock_get):
+        t = Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "prices": [
+                    [1743465600000, 100.00],
+                    [1743552000000, 110.00],
+                ]
+            },
+        )
+        call_command("sync_prices")
+        snaps = list(PriceSnapshot.objects.filter(ticker=t).order_by("date"))
+        assert snaps[0].change_pct is None  # first day, no previous
+        assert snaps[1].change_pct == Decimal("10.0000")
