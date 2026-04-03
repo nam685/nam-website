@@ -3,7 +3,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { API, type ListenTrack, type ListenStats, type ListenRecommended } from "@/lib/api";
+import {
+  API,
+  type ListenTrack,
+  type ListenStats,
+  type ListenRecommended,
+} from "@/lib/api";
 import { store } from "@/lib/auth";
 import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
@@ -23,7 +28,9 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
   const player = usePlayer();
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
-  const [recommended, setRecommended] = useState<ListenRecommended | null>(null);
+  const [recommended, setRecommended] = useState<ListenRecommended | null>(
+    null,
+  );
   const [stats, setStats] = useState<ListenStats | null>(null);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
@@ -63,16 +70,49 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
           }}
         >
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>{stats.today}</div>
-            <div style={{ color: "#555", fontSize: 8, letterSpacing: 1, fontFamily: "monospace" }}>TODAY</div>
+            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>
+              {stats.today}
+            </div>
+            <div
+              style={{
+                color: "#555",
+                fontSize: 8,
+                letterSpacing: 1,
+                fontFamily: "monospace",
+              }}
+            >
+              TODAY
+            </div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>{stats.week}</div>
-            <div style={{ color: "#555", fontSize: 8, letterSpacing: 1, fontFamily: "monospace" }}>WEEK</div>
+            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>
+              {stats.week}
+            </div>
+            <div
+              style={{
+                color: "#555",
+                fontSize: 8,
+                letterSpacing: 1,
+                fontFamily: "monospace",
+              }}
+            >
+              WEEK
+            </div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>{stats.total.toLocaleString()}</div>
-            <div style={{ color: "#555", fontSize: 8, letterSpacing: 1, fontFamily: "monospace" }}>TOTAL</div>
+            <div style={{ color: ACCENT, fontSize: 16, fontWeight: "bold" }}>
+              {stats.total.toLocaleString()}
+            </div>
+            <div
+              style={{
+                color: "#555",
+                fontSize: 8,
+                letterSpacing: 1,
+                fontFamily: "monospace",
+              }}
+            >
+              TOTAL
+            </div>
           </div>
         </div>
       )}
@@ -115,6 +155,22 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 gap: 16,
                 alignItems: "center",
                 marginBottom: 24,
+                cursor: isAdmin ? "pointer" : "default",
+                borderRadius: 6,
+                padding: "6px 0",
+              }}
+              onClick={() => {
+                if (!isAdmin) return;
+                player.play({
+                  id: 0,
+                  video_id: recommended.video_id,
+                  title: recommended.title,
+                  artist: recommended.artist,
+                  album: recommended.album,
+                  thumbnail_url: recommended.thumbnail_url,
+                  duration: "",
+                  played_at: "",
+                });
               }}
             >
               {recommended.thumbnail_url ? (
@@ -181,30 +237,39 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
               </div>
               {isAdmin && (
                 <button
-                  onClick={() =>
-                    player.play({
-                      id: 0,
-                      video_id: recommended.video_id,
-                      title: recommended.title,
-                      artist: recommended.artist,
-                      album: recommended.album,
-                      thumbnail_url: recommended.thumbnail_url,
-                      duration: "",
-                      played_at: "",
-                    })
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const token = store("adminToken");
+                    if (token) {
+                      fetch(`${API}/api/listens/sync/`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                    }
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `rgba(249,115,22,0.15)`;
+                    e.currentTarget.style.borderColor = ACCENT;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "none";
+                    e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
+                  }}
                   style={{
                     background: "none",
-                    border: `1px solid ${ACCENT}`,
+                    border: `1px solid rgba(249,115,22,0.3)`,
                     color: ACCENT,
                     borderRadius: 4,
                     padding: "4px 10px",
                     cursor: "pointer",
-                    fontSize: 12,
+                    fontSize: 10,
+                    fontFamily: "monospace",
+                    letterSpacing: 1,
                     flexShrink: 0,
+                    transition: "background 0.15s, border-color 0.15s",
                   }}
                 >
-                  ▶
+                  SYNC
                 </button>
               )}
             </div>
@@ -236,7 +301,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                   paddingBottom: 4,
                 }}
               >
-                {topTracks.slice(0, 6).map((t, i) => (
+                {topTracks.slice(0, 10).map((t, i) => (
                   <div
                     key={t.video_id}
                     style={{
@@ -250,16 +315,18 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     }}
                     onClick={() => {
                       if (!isAdmin) return;
-                      const queue: ListenTrack[] = topTracks.slice(0, 6).map((tt) => ({
-                        id: 0,
-                        video_id: tt.video_id,
-                        title: tt.title,
-                        artist: tt.artist,
-                        album: "",
-                        thumbnail_url: tt.thumbnail_url,
-                        duration: "",
-                        played_at: "",
-                      }));
+                      const queue: ListenTrack[] = topTracks
+                        .slice(0, 10)
+                        .map((tt) => ({
+                          id: 0,
+                          video_id: tt.video_id,
+                          title: tt.title,
+                          artist: tt.artist,
+                          album: "",
+                          thumbnail_url: tt.thumbnail_url,
+                          duration: "",
+                          played_at: "",
+                        }));
                       player.play(queue[i], queue);
                     }}
                   >
@@ -517,36 +584,6 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                       })()}
                     </div>
                   </>
-                )}
-
-                {/* Sync button (admin only) */}
-                {isAdmin && (
-                  <button
-                    onClick={() => {
-                      const token = store("adminToken");
-                      if (token) {
-                        fetch(`${API}/api/listens/sync/`, {
-                          method: "POST",
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                      }
-                    }}
-                    style={{
-                      marginTop: 20,
-                      background: "none",
-                      border: "1px solid rgba(249,115,22,0.3)",
-                      color: ACCENT,
-                      padding: "6px 14px",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                      fontSize: 11,
-                      fontFamily: "monospace",
-                      letterSpacing: 1,
-                      width: "100%",
-                    }}
-                  >
-                    SYNC
-                  </button>
                 )}
               </>
             )}
