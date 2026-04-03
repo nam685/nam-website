@@ -266,32 +266,58 @@ def listen_top_tracks(request):
 
 @require_GET
 def listen_top_artists(request):
-    """Return artists ranked by play count (public)."""
+    """Return artists ranked by play count (public).
+
+    Collab tracks stored as "Artist A, Artist B" are split and each artist
+    is credited independently.
+    """
     limit = min(int(request.GET.get("limit", 50)), 200)
     offset = int(request.GET.get("offset", 0))
 
-    artists = (
-        ListenTrack.objects.values("artist")
-        .annotate(
-            play_count=Count("id"),
-            track_count=Count("video_id", distinct=True),
-        )
-        .order_by("-play_count")
-    )
-    total = artists.count()
-    page = list(artists[offset : offset + limit])
+    # Fetch all tracks — personal site, at most a few thousand rows
+    all_tracks = list(ListenTrack.objects.values_list("id", "video_id", "title", "artist", "thumbnail_url"))
 
-    for entry in page:
-        top = (
-            ListenTrack.objects.filter(artist=entry["artist"])
-            .values("video_id", "title", "thumbnail_url")
-            .annotate(pc=Count("id"))
-            .order_by("-pc")[:3]
+    # Aggregate per individual artist name
+    artist_play_counts: dict[str, int] = {}
+    artist_video_ids: dict[str, set[str]] = {}
+    artist_track_refs: dict[str, list[tuple[str, str, str]]] = {}  # name → [(video_id, title, thumbnail_url)]
+
+    for _id, video_id, title, artist_field, thumbnail_url in all_tracks:
+        names = [n.strip() for n in artist_field.split(",") if n.strip()]
+        for name in names:
+            artist_play_counts[name] = artist_play_counts.get(name, 0) + 1
+            if name not in artist_video_ids:
+                artist_video_ids[name] = set()
+                artist_track_refs[name] = []
+            artist_video_ids[name].add(video_id)
+            artist_track_refs[name].append((video_id, title, thumbnail_url))
+
+    # Sort by play count descending
+    sorted_names = sorted(artist_play_counts.keys(), key=lambda n: -artist_play_counts[n])
+    total = len(sorted_names)
+
+    page_names = sorted_names[offset : offset + limit]
+
+    page = []
+    for name in page_names:
+        # Top 3 tracks for this artist by play count (count occurrences across all refs)
+        track_play_counts: dict[str, tuple[int, str, str, str]] = {}
+        for video_id, title, thumbnail_url in artist_track_refs[name]:
+            if video_id not in track_play_counts:
+                track_play_counts[video_id] = (0, title, thumbnail_url, video_id)
+            prev = track_play_counts[video_id]
+            track_play_counts[video_id] = (prev[0] + 1, prev[1], prev[2], prev[3])
+
+        top_tracks_sorted = sorted(track_play_counts.values(), key=lambda t: -t[0])[:3]
+
+        page.append(
+            {
+                "name": name,
+                "play_count": artist_play_counts[name],
+                "track_count": len(artist_video_ids[name]),
+                "top_tracks": [{"video_id": t[3], "title": t[1], "thumbnail_url": t[2]} for t in top_tracks_sorted],
+            }
         )
-        entry["name"] = entry.pop("artist")
-        entry["top_tracks"] = [
-            {"video_id": t["video_id"], "title": t["title"], "thumbnail_url": t["thumbnail_url"]} for t in top
-        ]
 
     return JsonResponse({"artists": page, "total": total})
 

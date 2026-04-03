@@ -310,6 +310,33 @@ class TestListenTopArtists:
         assert len(data["artists"]) == 2
         assert data["total"] == 5
 
+    def test_splits_collab_artists(self, client, db):
+        """Collab tracks should credit each artist independently."""
+        now = timezone.now()
+        # 3 solo plays for Artist A
+        for i in range(3):
+            ListenTrack.objects.create(
+                video_id=f"solo_a_{i}",
+                title=f"Solo A {i}",
+                artist="Artist A",
+                played_at=now - timezone.timedelta(hours=i),
+            )
+        # 2 collab plays crediting both Artist A and Artist B
+        for i in range(2):
+            ListenTrack.objects.create(
+                video_id=f"collab_{i}",
+                title=f"Collab {i}",
+                artist="Artist A, Artist B",
+                played_at=now - timezone.timedelta(hours=10 + i),
+            )
+        resp = client.get("/api/listens/artists/")
+        data = resp.json()
+        artist_map = {a["name"]: a for a in data["artists"]}
+        # Artist A: 3 solo + 2 collab = 5 plays
+        assert artist_map["Artist A"]["play_count"] == 5
+        # Artist B: 2 collab = 2 plays
+        assert artist_map["Artist B"]["play_count"] == 2
+
 
 @pytest.mark.django_db
 class TestListenTopAlbums:
