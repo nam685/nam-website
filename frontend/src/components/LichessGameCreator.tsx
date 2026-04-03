@@ -112,8 +112,7 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         setOpenChallengeUrl(data.challenge?.url ?? data.url ?? "");
         await waitForGameStart(controller.signal);
       } else {
-        // Seek is a streaming endpoint — read game start from the seek response
-        // rather than opening a separate event stream
+        // Fire the seek, then listen on the event stream for gameStart
         const seekResp = await seekOpponent(
           token,
           {
@@ -129,25 +128,7 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           setLoading(false);
           return;
         }
-        if (!seekResp.body) {
-          setError("No response from seek");
-          setLoading(false);
-          return;
-        }
-        await new Promise<void>((resolve, reject) => {
-          parseNdJsonStream(seekResp.body!, (event: Record<string, unknown>) => {
-            // Seek stream emits the game ID when matched
-            const gameId = (event.id ?? event.gameId) as string | undefined;
-            if (gameId) {
-              const myColor = (event.color ?? "white") as "white" | "black";
-              onGameStart(gameId, myColor);
-              resolve();
-            }
-          }).catch((err) => {
-            if (controller.signal.aborted) resolve();
-            else reject(err);
-          });
-        });
+        await waitForGameStart(controller.signal);
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -287,23 +268,58 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         </div>
       )}
 
-      {/* Create button */}
-      <button
-        onClick={handleCreate}
-        disabled={loading}
-        style={{
-          ...tabStyle,
-          width: "100%",
-          padding: "0.6rem",
-          background: loading ? "#1a1a1a" : ACCENT,
-          color: loading ? "#555" : "#0e0e0e",
-          fontWeight: 700,
-          borderColor: ACCENT,
-          cursor: loading ? "wait" : "pointer",
-        }}
-      >
-        {loading ? "Waiting for opponent..." : "Create Game"}
-      </button>
+      {/* Create / Cancel button */}
+      {loading ? (
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div
+            style={{
+              ...tabStyle,
+              flex: 1,
+              padding: "0.6rem",
+              background: "#1a1a1a",
+              color: "#555",
+              fontWeight: 700,
+              borderColor: ACCENT,
+              textAlign: "center",
+            }}
+          >
+            Waiting for opponent...
+          </div>
+          <button
+            onClick={() => {
+              abortRef.current?.abort();
+              setLoading(false);
+            }}
+            style={{
+              ...tabStyle,
+              padding: "0.6rem 1rem",
+              background: "transparent",
+              color: "#ef4444",
+              fontWeight: 700,
+              borderColor: "#ef4444",
+              cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleCreate}
+          style={{
+            ...tabStyle,
+            width: "100%",
+            padding: "0.6rem",
+            background: ACCENT,
+            color: "#0e0e0e",
+            fontWeight: 700,
+            borderColor: ACCENT,
+            cursor: "pointer",
+          }}
+        >
+          Create Game
+        </button>
+      )}
 
       {/* Open challenge URL */}
       {openChallengeUrl && (
