@@ -86,6 +86,16 @@ export interface ListenTopAlbum {
   track_count: number;
 }
 
+export interface ListenRecommended {
+  video_id: string;
+  title: string;
+  artist: string;
+  album: string;
+  thumbnail_url: string;
+  play_count: number;
+  last_played: string | null;
+}
+
 export interface WatchVideo {
   id: number;
   youtube_video_id: string;
