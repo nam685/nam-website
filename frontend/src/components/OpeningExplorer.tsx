@@ -320,7 +320,15 @@ export default function OpeningExplorer() {
         </div>
 
         {/* Explorer move rows */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "2px",
+            maxHeight: "calc(7 * 2.55rem)",
+            overflowY: "auto",
+          }}
+        >
           {moves.map((m) => {
             const total = m.white + m.draws + m.black;
             const wp = total > 0 ? (m.white / total) * 100 : 0;
