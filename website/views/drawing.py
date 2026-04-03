@@ -33,7 +33,7 @@ def _normalize_image(img):
     w, h = img.size
     if w != h:
         size = max(w, h)
-        fill = (255, 255, 255, 0) if img.mode == "RGBA" else (255, 255, 255)
+        fill = (18, 10, 28, 255) if img.mode == "RGBA" else (18, 10, 28)
         padded = PILImage.new(img.mode, (size, size), fill)
         padded.paste(img, ((size - w) // 2, (size - h) // 2))
         img = padded
