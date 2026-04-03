@@ -171,6 +171,36 @@ class TestListenSync:
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 502
 
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_filters_view_counts_from_artist(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = [
+            {
+                "videoId": "grissini1",
+                "title": "Some Song",
+                "artists": [{"name": "Grissini Project"}, {"name": "89M views"}],
+                "album": {"name": "Album"},
+                "thumbnails": [{"url": "https://example.com/thumb.jpg", "width": 226}],
+                "duration": "3:00",
+            },
+            {
+                "videoId": "grissini2",
+                "title": "Another Song",
+                "artists": [{"name": "Grissini Project"}, {"name": "1.9M views"}],
+                "album": None,
+                "thumbnails": [],
+                "duration": "4:00",
+            },
+        ]
+        mock_ytmusic_cls.return_value = mock_yt
+
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 2
+        assert ListenTrack.objects.get(video_id="grissini1").artist == "Grissini Project"
+        assert ListenTrack.objects.get(video_id="grissini2").artist == "Grissini Project"
+
 
 # ── Sync status ───────────────────────────────────────
 

@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 from django.core.cache import cache as redis_cache
@@ -15,6 +16,7 @@ from ..models import ListenTrack
 logger = logging.getLogger(__name__)
 
 BROWSER_JSON_PATH = "browser.json"
+VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Rate limit: 1 sync per 5 minutes
 _last_sync: float = 0
@@ -90,7 +92,10 @@ def listen_sync(request):
             continue
 
         artists = item.get("artists", [])
-        artist_name = ", ".join(a.get("name", "") for a in artists) if artists else "Unknown"
+        artist_names = [
+            a.get("name", "") for a in artists if a.get("name") and not VIEW_COUNT_RE.match(a.get("name", ""))
+        ]
+        artist_name = ", ".join(artist_names) if artist_names else "Unknown"
 
         album_info = item.get("album")
         album_name = album_info.get("name", "") if album_info else ""
