@@ -42,9 +42,14 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
 
   async function waitForGameStart(): Promise<void> {
     const resp = await streamEvents(token);
-    if (!resp.body) return;
+    if (!resp.ok) {
+      throw new Error(`Event stream failed (${resp.status})`);
+    }
+    if (!resp.body) {
+      throw new Error("No event stream body");
+    }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       parseNdJsonStream(resp.body!, (event: Record<string, unknown>) => {
         if (event.type === "gameStart") {
           const game = event.game as Record<string, unknown>;
@@ -53,7 +58,7 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           onGameStart(gameId as string, myColor);
           resolve();
         }
-      });
+      }).catch(reject);
     });
   }
 
@@ -92,15 +97,21 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         setOpenChallengeUrl(data.challenge?.url ?? data.url ?? "");
         await waitForGameStart();
       } else {
-        seekOpponent(token, {
+        const seekResp = await seekOpponent(token, {
           time: clock.limit,
           increment: clock.increment,
           rated: false,
         });
+        if (!seekResp.ok) {
+          const body = await seekResp.json().catch(() => null);
+          setError(body?.error ?? `Seek failed (${seekResp.status})`);
+          setLoading(false);
+          return;
+        }
         await waitForGameStart();
       }
-    } catch {
-      setError("Connection failed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setLoading(false);
     }
