@@ -301,7 +301,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                   paddingBottom: 4,
                 }}
               >
-                {topTracks.slice(0, 10).map((t, i) => (
+                {topTracks.slice(0, 12).map((t, i) => (
                   <div
                     key={t.video_id}
                     style={{
