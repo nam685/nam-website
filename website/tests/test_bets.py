@@ -250,3 +250,100 @@ class TestSyncPricesCommand:
         snaps = list(PriceSnapshot.objects.filter(ticker=t).order_by("date"))
         assert snaps[0].change_pct is None  # first day, no previous
         assert snaps[1].change_pct == Decimal("10.0000")
+
+
+# --- API endpoint tests ---
+
+from datetime import timedelta  # noqa: E402
+
+
+@pytest.mark.django_db
+class TestBetsListEndpoint:
+    def test_empty_list(self, client):
+        resp = client.get("/api/bets/")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_returns_tickers_with_sparkline(self, client):
+        t = Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+            currency="USD",
+        )
+        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 1), price=Decimal("80000"))
+        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 2), price=Decimal("82000"), change_pct=Decimal("2.5"))
+        PriceSnapshot.objects.create(
+            ticker=t, date=date(2026, 4, 3), price=Decimal("81000"), change_pct=Decimal("-1.22")
+        )
+
+        data = client.get("/api/bets/").json()
+        assert len(data) == 1
+        assert data[0]["symbol"] == "BTC"
+        assert data[0]["price"] == "81000.0000"
+        assert data[0]["change_pct"] == "-1.2200"
+        assert data[0]["currency"] == "USD"
+        assert data[0]["sparkline"] == [80000.0, 82000.0, 81000.0]
+
+    def test_ordered_by_display_order(self, client):
+        Ticker.objects.create(
+            symbol="XAU",
+            name="Gold",
+            asset_type="commodity",
+            provider="alpha_vantage",
+            provider_id="XAU",
+            display_order=1,
+        )
+        Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+            display_order=0,
+        )
+        data = client.get("/api/bets/").json()
+        assert data[0]["symbol"] == "BTC"
+        assert data[1]["symbol"] == "XAU"
+
+
+@pytest.mark.django_db
+class TestBetsHistoryEndpoint:
+    def test_returns_price_history(self, client):
+        t = Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+            currency="USD",
+        )
+        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 1), price=Decimal("80000"))
+        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 2), price=Decimal("82000"), change_pct=Decimal("2.5"))
+
+        data = client.get(f"/api/bets/{t.id}/history/").json()
+        assert data["symbol"] == "BTC"
+        assert data["currency"] == "USD"
+        assert len(data["prices"]) == 2
+        assert data["prices"][0]["date"] == "2026-04-01"
+
+    def test_period_filter(self, client):
+        t = Ticker.objects.create(
+            symbol="BTC",
+            name="Bitcoin",
+            asset_type="crypto",
+            provider="coingecko",
+            provider_id="bitcoin",
+        )
+        for i in range(40):
+            d = date(2026, 2, 22) + timedelta(days=i)
+            PriceSnapshot.objects.create(ticker=t, date=d, price=Decimal("80000") + i)
+
+        data = client.get(f"/api/bets/{t.id}/history/?period=1W").json()
+        assert len(data["prices"]) == 7
+
+    def test_not_found(self, client):
+        resp = client.get("/api/bets/999/history/")
+        assert resp.status_code == 404

@@ -1,5 +1,9 @@
 from .auth import check as auth_check
 from .auth import login as auth_login
+from .bets import (
+    bets_history,
+    bets_list,
+)
 from .drawing import drawing_delete, drawing_list, drawing_upload
 from .feedback import feedback_create
 from .github import contributions as github_contributions
@@ -37,6 +41,8 @@ from .watch import (
 __all__ = [
     "auth_check",
     "auth_login",
+    "bets_history",
+    "bets_list",
     "drawing_delete",
     "drawing_list",
     "drawing_upload",

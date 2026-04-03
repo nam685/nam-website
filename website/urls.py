@@ -6,6 +6,8 @@ urlpatterns = [
     path("health/", views.health),
     path("auth/login/", views.auth_login),
     path("auth/check/", views.auth_check),
+    path("bets/", views.bets_list),
+    path("bets/<int:ticker_id>/history/", views.bets_history),
     path("todo/", views.todo_list),
     path("projects/", views.project_list),
     path("thoughts/", views.thought_list),
