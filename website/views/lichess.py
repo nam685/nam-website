@@ -154,7 +154,7 @@ def lichess_callback(request):
 
 
 @require_admin
-def lichess_token(request):
+def lichess_token(request):  # noqa: ARG001
     """Return the stored Lichess access token (admin only)."""
     token = LichessToken.objects.first()
     if not token:
@@ -168,7 +168,7 @@ def lichess_token(request):
     )
 
 
-def lichess_status(request):
+def lichess_status(request):  # noqa: ARG001
     """Public endpoint: return whether a Lichess account is connected."""
     token = LichessToken.objects.first()
     if token:
