@@ -88,6 +88,7 @@ POST /api/bets/create/             auth required, body: {symbol, name, asset_typ
 POST /api/bets/<id>/delete/        auth required
 POST /api/bets/sync/               auth required, triggers price fetch
 GET  /api/bets/sync-status/        auth required
+GET  /api/bets/search/?q=...       auth required, searches Alpha Vantage + CoinGecko
 GET  /api/lichess/auth/         auth required, initiates Lichess OAuth (PKCE)
 GET  /api/lichess/callback/     Lichess OAuth callback
 GET  /api/lichess/token/        auth required, returns stored Lichess token
