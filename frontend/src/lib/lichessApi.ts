@@ -2,6 +2,8 @@
  * Lichess API helpers: ND-JSON stream parsing, Board API, Opening Explorer.
  */
 
+import { API } from "./api";
+
 /* -- ND-JSON Stream Parser ---------------------------------------- */
 
 export async function parseNdJsonStream(
@@ -39,7 +41,10 @@ export function lichessHeaders(token: string): HeadersInit {
 }
 
 /** Stream account events (gameStart, gameFinish, challenge) */
-export function streamEvents(token: string, signal?: AbortSignal): Promise<Response> {
+export function streamEvents(
+  token: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   return fetch(`${LICHESS}/api/stream/event`, {
     headers: lichessHeaders(token),
     signal,
@@ -71,10 +76,7 @@ export function sendMove(
 }
 
 /** Resign a game */
-export function resignGame(
-  token: string,
-  gameId: string,
-): Promise<Response> {
+export function resignGame(token: string, gameId: string): Promise<Response> {
   return fetch(`${LICHESS}/api/board/game/${gameId}/resign`, {
     method: "POST",
     headers: lichessHeaders(token),
@@ -94,10 +96,7 @@ export function offerDraw(
 }
 
 /** Abort a game (only if < 2 moves played) */
-export function abortGame(
-  token: string,
-  gameId: string,
-): Promise<Response> {
+export function abortGame(token: string, gameId: string): Promise<Response> {
   return fetch(`${LICHESS}/api/board/game/${gameId}/abort`, {
     method: "POST",
     headers: lichessHeaders(token),
@@ -211,7 +210,8 @@ export function buildExplorerUrl(
   fen: string,
   opts?: { ratings?: number[]; speeds?: string[] },
 ): string {
-  const base = `https://explorer.lichess.org/${db}`;
+  // Proxy through our backend — Lichess now requires auth on explorer.lichess.org
+  const base = `${API}/api/lichess/explorer/${db}/`;
   const params = new URLSearchParams({ fen });
   if (opts?.ratings?.length) params.set("ratings", opts.ratings.join(","));
   if (opts?.speeds?.length) params.set("speeds", opts.speeds.join(","));
