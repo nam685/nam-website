@@ -107,7 +107,6 @@ export default function PlaysClient() {
       style={{ maxWidth: "72rem", position: "relative", zIndex: 1 }}
     >
       <h1>Plays</h1>
-      <p>Explore chess openings with live data, or play a game on Lichess.</p>
 
       {/* Tab bar */}
       <div
