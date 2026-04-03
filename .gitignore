@@ -22,7 +22,8 @@ media/
 .env.local
 .env.*.local
 
-# ytmusicapi OAuth tokens
+# Auth credentials
+browser.json
 oauth.json
 
 # Node / Next.js
@@ -30,6 +31,7 @@ node_modules/
 frontend/.next/
 frontend/out/
 frontend/.vercel
+oauth.json
 
 # Claude Code
 .claude/

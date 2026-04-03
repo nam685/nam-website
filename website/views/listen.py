@@ -1,5 +1,4 @@
 import logging
-import os
 import time
 
 from django.core.cache import cache as redis_cache
@@ -14,7 +13,7 @@ from ..models import ListenTrack
 
 logger = logging.getLogger(__name__)
 
-OAUTH_JSON_PATH = os.environ.get("YTM_OAUTH_JSON", os.path.join(os.path.dirname(__file__), "..", "..", "oauth.json"))
+BROWSER_JSON_PATH = "browser.json"
 
 # Rate limit: 1 sync per 5 minutes
 _last_sync: float = 0
@@ -50,26 +49,34 @@ def listen_list(request):
 
 @csrf_exempt
 @require_admin
-def listen_sync(_request):
-    """Sync YouTube Music history using file-based ytmusicapi OAuth."""
+def listen_sync(request):
+    """Sync YouTube Music history using browser auth credentials."""
     global _last_sync
 
-    if not os.path.exists(OAUTH_JSON_PATH):
-        return JsonResponse({"error": "ytmusicapi not configured. Run: uv run ytmusicapi oauth"}, status=500)
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
 
+    # Rate limit
     now = time.time()
     if now - _last_sync < SYNC_COOLDOWN:
         remaining = int(SYNC_COOLDOWN - (now - _last_sync))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
+    # Fetch history using browser auth file
     try:
+        import os
+
         from ytmusicapi import YTMusic
 
-        yt = YTMusic(OAUTH_JSON_PATH)
+        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
+        if not os.path.isfile(auth_path):
+            return JsonResponse({"error": "Browser auth not configured. Run ytmusicapi browser on server."}, status=500)
+
+        yt = YTMusic(auth_path)
         history = yt.get_history()
     except Exception:
         logger.exception("Failed to fetch YouTube Music history")
-        return JsonResponse({"error": "Failed to fetch YTM history"}, status=500)
+        return JsonResponse({"error": "Failed to fetch YTM history"}, status=502)
 
     # Deduplicate against last 24h
     cutoff = timezone.now() - timezone.timedelta(hours=24)
@@ -112,7 +119,7 @@ def listen_sync(_request):
 
     _last_sync = now
 
-    return JsonResponse({"ok": True, "new_tracks": len(new_tracks), "total_history": len(history)})
+    return JsonResponse({"synced": len(new_tracks)})
 
 
 @require_admin
@@ -168,13 +175,11 @@ def listen_sync_status(_request):
 
     last_track = ListenTrack.objects.first()
     last_updated = last_track.played_at.isoformat() if last_track else None
-    configured = os.path.exists(OAUTH_JSON_PATH)
 
     return JsonResponse(
         {
             "available": available,
             "cooldown_remaining": remaining,
             "last_updated": last_updated,
-            "configured": configured,
         }
     )

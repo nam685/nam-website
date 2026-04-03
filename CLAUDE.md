@@ -65,8 +65,7 @@ GET  /api/github/auth/          auth required, initiates GitHub OAuth
 GET  /api/github/callback/
 GET  /api/github/refresh-status/ auth required
 GET  /api/listens/?limit=N&offset=N
-GET  /api/listens/auth/         auth required, initiates Google OAuth
-GET  /api/listens/callback/
+POST /api/listens/sync/         auth required, triggers YTM history sync
 GET  /api/listens/stats/
 GET  /api/listens/sync-status/  auth required
 GET  /api/watches/?limit=N&offset=N

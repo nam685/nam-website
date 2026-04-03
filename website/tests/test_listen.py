@@ -111,65 +111,66 @@ class TestListenStats:
         assert isinstance(data["daily"], list)
 
 
-# ── Sync endpoint ─────────────────────────────────────
+# ── Sync endpoint (browser auth) ─────────────────────
 
 
 @pytest.mark.django_db
 class TestListenSync:
-    def test_not_configured(self, client, auth_headers):
-        with patch("website.views.listen.os.path.exists", return_value=False):
-            resp = client.post("/api/listens/sync/", **auth_headers)
+    def test_get_not_allowed(self, client, auth_headers):
+        resp = client.get("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 405
+
+    @patch("os.path.isfile", return_value=False)
+    def test_missing_browser_json(self, _mock_isfile, client, auth_headers):
+        resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 500
-        assert "not configured" in resp.json()["error"].lower()
+        assert "Browser auth not configured" in resp.json()["error"]
 
-    @patch("website.views.listen.os.path.exists", return_value=True)
-    def test_syncs_tracks(self, _mock_exists, client, auth_headers):
-        with patch("ytmusicapi.YTMusic") as mock_ytm_cls:
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = MOCK_HISTORY
-            mock_ytm_cls.return_value = mock_yt
-            resp = client.post("/api/listens/sync/", **auth_headers)
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert data["new_tracks"] == 2
-        assert ListenTrack.objects.count() == 2
-        assert ListenTrack.objects.get(video_id="abc123").artist == "Test Artist"
-
-    @patch("website.views.listen.os.path.exists", return_value=True)
-    def test_deduplicates(self, _mock_exists, client, auth_headers):
-        ListenTrack.objects.create(video_id="abc123", title="Old", artist="Old", played_at=timezone.now())
-
-        with patch("ytmusicapi.YTMusic") as mock_ytm_cls:
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = MOCK_HISTORY
-            mock_ytm_cls.return_value = mock_yt
-            resp = client.post("/api/listens/sync/", **auth_headers)
-
-        assert resp.status_code == 200
-        assert resp.json()["new_tracks"] == 1
-        assert ListenTrack.objects.count() == 2
-
-    @patch("website.views.listen.os.path.exists", return_value=True)
-    def test_rate_limited(self, _mock_exists, client, auth_headers):
-        with patch("ytmusicapi.YTMusic") as mock_ytm_cls:
-            mock_yt = MagicMock()
-            mock_yt.get_history.return_value = []
-            mock_ytm_cls.return_value = mock_yt
-            client.post("/api/listens/sync/", **auth_headers)
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_syncs_tracks(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
 
         resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 2
+        assert ListenTrack.objects.count() == 2
+        assert ListenTrack.objects.get(video_id="abc123").artist == "Test Artist"
+        assert ListenTrack.objects.get(video_id="def456").artist == "Artist A, Artist B"
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_deduplicates(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        ListenTrack.objects.create(video_id="abc123", title="Old", artist="Old", played_at=timezone.now())
+
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
+
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.json()["synced"] == 1
+        assert ListenTrack.objects.count() == 2
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_rate_limited(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = []
+        mock_ytmusic_cls.return_value = mock_yt
+
+        client.post("/api/listens/sync/", **auth_headers)
+        resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 429
+        assert "Rate limited" in resp.json()["error"]
 
-    @patch("website.views.listen.os.path.exists", return_value=True)
-    def test_ytm_error(self, _mock_exists, client, auth_headers):
-        with patch("ytmusicapi.YTMusic") as mock_ytm_cls:
-            mock_ytm_cls.side_effect = Exception("YTM error")
-            resp = client.post("/api/listens/sync/", **auth_headers)
-
-        assert resp.status_code == 500
-        assert "failed" in resp.json()["error"].lower()
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_ytmusic_error(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        mock_ytmusic_cls.side_effect = Exception("Auth failed")
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 502
 
 
 # ── Sync status ───────────────────────────────────────
