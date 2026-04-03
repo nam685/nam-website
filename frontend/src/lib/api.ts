@@ -62,6 +62,30 @@ export interface ListenStats {
   daily: { date: string; count: number }[];
 }
 
+export interface ListenTopTrack {
+  video_id: string;
+  title: string;
+  artist: string;
+  album: string;
+  thumbnail_url: string;
+  play_count: number;
+}
+
+export interface ListenTopArtist {
+  name: string;
+  play_count: number;
+  track_count: number;
+  top_tracks: { video_id: string; title: string; thumbnail_url: string }[];
+}
+
+export interface ListenTopAlbum {
+  name: string;
+  artist: string;
+  thumbnail_url: string;
+  play_count: number;
+  track_count: number;
+}
+
 export interface WatchVideo {
   id: number;
   youtube_video_id: string;
