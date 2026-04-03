@@ -97,6 +97,8 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
         setOpenChallengeUrl(data.challenge?.url ?? data.url ?? "");
         await waitForGameStart();
       } else {
+        // Seek is a streaming endpoint — read game start from the seek response
+        // rather than opening a separate event stream
         const seekResp = await seekOpponent(token, {
           time: clock.limit,
           increment: clock.increment,
@@ -108,7 +110,22 @@ export default function LichessGameCreator({ token, onGameStart }: Props) {
           setLoading(false);
           return;
         }
-        await waitForGameStart();
+        if (!seekResp.body) {
+          setError("No response from seek");
+          setLoading(false);
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          parseNdJsonStream(seekResp.body!, (event: Record<string, unknown>) => {
+            // Seek stream emits the game ID when matched
+            const gameId = (event.id ?? event.gameId) as string | undefined;
+            if (gameId) {
+              const myColor = (event.color ?? "white") as "white" | "black";
+              onGameStart(gameId, myColor);
+              resolve();
+            }
+          }).catch(reject);
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connection failed");
