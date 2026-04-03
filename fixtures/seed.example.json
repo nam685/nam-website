@@ -125,11 +125,11 @@
     "model": "website.ticker",
     "pk": 2,
     "fields": {
-      "symbol": "XAU",
-      "name": "Gold",
+      "symbol": "GLD",
+      "name": "SPDR Gold Shares",
       "asset_type": "commodity",
       "provider": "alpha_vantage",
-      "provider_id": "XAU",
+      "provider_id": "GLD",
       "currency": "USD",
       "display_order": 1,
       "created_at": "2026-04-03T00:00:00Z"
