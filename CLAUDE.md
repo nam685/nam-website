@@ -80,6 +80,10 @@ GET  /api/watches/auth/         auth required, initiates Google OAuth
 GET  /api/watches/callback/     Google OAuth callback
 POST /api/watches/sync/         auth required, triggers YouTube sync
 GET  /api/watches/sync-status/  auth required
+GET  /api/lichess/auth/         auth required, initiates Lichess OAuth (PKCE)
+GET  /api/lichess/callback/     Lichess OAuth callback
+GET  /api/lichess/token/        auth required, returns stored Lichess token
+GET  /api/lichess/status/       public, returns connection status
 ```
 
 ## Auth
