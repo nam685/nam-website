@@ -116,7 +116,7 @@ export default function ChessgroundBoard({
       style={{
         width: "min(400px, 90vw)",
         aspectRatio: "1",
-        border: "1px solid color-mix(in srgb, #06b6d4 30%, #1a1a1a)",
+        border: "1px solid color-mix(in srgb, var(--accent) 30%, #1a1a1a)",
         borderRadius: "4px",
       }}
     />
