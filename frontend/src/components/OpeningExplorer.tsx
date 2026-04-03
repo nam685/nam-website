@@ -8,10 +8,14 @@ import { parseUci, makeUci } from "chessops/util";
 import { chessgroundDests } from "chessops/compat";
 import type { Key } from "chessground/types";
 import ChessgroundBoard from "./ChessgroundBoard";
-import { fetchExplorer, type ExplorerResponse, type ExplorerDb } from "@/lib/lichessApi";
+import {
+  fetchExplorer,
+  type ExplorerResponse,
+  type ExplorerDb,
+} from "@/lib/lichessApi";
 import { lookupPosition } from "@/lib/chessOpenings";
 
-const ACCENT = "#06b6d4";
+const ACCENT = "var(--accent)";
 
 interface HistoryEntry {
   san: string;
@@ -35,7 +39,9 @@ export default function OpeningExplorer() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const [explorerDb, setExplorerDb] = useState<ExplorerDb>("masters");
-  const [explorerData, setExplorerData] = useState<ExplorerResponse | null>(null);
+  const [explorerData, setExplorerData] = useState<ExplorerResponse | null>(
+    null,
+  );
   const [explorerLoading, setExplorerLoading] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<number[]>([]);
   const [isLive, setIsLive] = useState(false);
@@ -43,7 +49,9 @@ export default function OpeningExplorer() {
   const fen = makeFen(position.toSetup());
   const turnColor = position.turn === "white" ? "white" : "black";
   const lastMove =
-    history.length > 0 ? (history[history.length - 1].uci.match(/.{2}/g) as [Key, Key]) : undefined;
+    history.length > 0
+      ? (history[history.length - 1].uci.match(/.{2}/g) as [Key, Key])
+      : undefined;
   const isCheck = position.isCheck();
   const dests = chessgroundDests(position);
 
@@ -54,7 +62,10 @@ export default function OpeningExplorer() {
   // Fetch explorer data when position changes
   useEffect(() => {
     setExplorerLoading(true);
-    const opts = explorerDb === "lichess" && ratingFilter.length > 0 ? { ratings: ratingFilter } : undefined;
+    const opts =
+      explorerDb === "lichess" && ratingFilter.length > 0
+        ? { ratings: ratingFilter }
+        : undefined;
     fetchExplorer(explorerDb, fen, opts).then((data) => {
       setExplorerData(data);
       setIsLive(data !== null);
@@ -126,10 +137,16 @@ export default function OpeningExplorer() {
   }
 
   // Opening name: prefer explorer data, fall back to static db
-  const openingName = explorerData?.opening?.name ?? fallbackLookup.opening?.name ?? "Starting Position";
-  const openingEco = explorerData?.opening?.eco ?? fallbackLookup.opening?.eco ?? "---";
+  const openingName =
+    explorerData?.opening?.name ??
+    fallbackLookup.opening?.name ??
+    "Starting Position";
+  const openingEco =
+    explorerData?.opening?.eco ?? fallbackLookup.opening?.eco ?? "---";
   const moves = explorerData?.moves ?? [];
-  const totalGames = explorerData ? explorerData.white + explorerData.draws + explorerData.black : 0;
+  const totalGames = explorerData
+    ? explorerData.white + explorerData.draws + explorerData.black
+    : 0;
 
   return (
     <div
@@ -154,15 +171,28 @@ export default function OpeningExplorer() {
         />
 
         {/* Controls */}
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            marginTop: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
           <button onClick={reset} style={uiBtnStyle}>
             Reset
           </button>
-          <button onClick={takeback} style={uiBtnStyle} disabled={history.length === 0}>
+          <button
+            onClick={takeback}
+            style={uiBtnStyle}
+            disabled={history.length === 0}
+          >
             Takeback
           </button>
           <button
-            onClick={() => setOrientation((o) => (o === "white" ? "black" : "white"))}
+            onClick={() =>
+              setOrientation((o) => (o === "white" ? "black" : "white"))
+            }
             style={uiBtnStyle}
           >
             Flip
@@ -190,7 +220,10 @@ export default function OpeningExplorer() {
             {history.map((h, i) =>
               i % 2 === 0 ? (
                 <span key={i}>
-                  <span style={{ color: "#555" }}>{Math.floor(i / 2) + 1}.</span> {h.san}{" "}
+                  <span style={{ color: "#555" }}>
+                    {Math.floor(i / 2) + 1}.
+                  </span>{" "}
+                  {h.san}{" "}
                 </span>
               ) : (
                 <span key={i}>{h.san} </span>
@@ -224,12 +257,24 @@ export default function OpeningExplorer() {
           >
             {openingEco}
           </div>
-          <div style={{ fontFamily: "var(--font-headline)", fontSize: "0.95rem", fontWeight: 600 }}>
+          <div
+            style={{
+              fontFamily: "var(--font-headline)",
+              fontSize: "0.95rem",
+              fontWeight: 600,
+            }}
+          >
             {openingName}
           </div>
           {totalGames > 0 && (
             <>
-              <div style={{ fontSize: "0.7rem", color: "#555", marginTop: "0.25rem" }}>
+              <div
+                style={{
+                  fontSize: "0.7rem",
+                  color: "#555",
+                  marginTop: "0.25rem",
+                }}
+              >
                 {fmtCount(totalGames)} games
               </div>
               {/* Overall position win/draw/loss stats */}
@@ -257,7 +302,9 @@ export default function OpeningExplorer() {
         </div>
 
         {/* Database toggle */}
-        <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.75rem" }}>
+        <div
+          style={{ display: "flex", gap: "0.25rem", marginBottom: "0.75rem" }}
+        >
           {(["masters", "lichess"] as const).map((db) => (
             <button
               key={db}
@@ -276,19 +323,32 @@ export default function OpeningExplorer() {
 
         {/* Rating filter (Lichess DB only) */}
         {explorerDb === "lichess" && (
-          <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "0.25rem",
+              marginBottom: "0.75rem",
+              flexWrap: "wrap",
+            }}
+          >
             {[1600, 1800, 2000, 2200, 2500].map((r) => (
               <button
                 key={r}
                 onClick={() =>
-                  setRatingFilter((f) => (f.includes(r) ? f.filter((x) => x !== r) : [...f, r]))
+                  setRatingFilter((f) =>
+                    f.includes(r) ? f.filter((x) => x !== r) : [...f, r],
+                  )
                 }
                 style={{
                   ...uiBtnStyle,
                   fontSize: "0.6rem",
                   padding: "0.25rem 0.5rem",
-                  background: ratingFilter.includes(r) ? "rgba(6,182,212,0.15)" : "#131313",
-                  borderColor: ratingFilter.includes(r) ? "rgba(6,182,212,0.4)" : "#1a1a1a",
+                  background: ratingFilter.includes(r)
+                    ? "color-mix(in srgb, var(--accent) 15%, #131313)"
+                    : "#131313",
+                  borderColor: ratingFilter.includes(r)
+                    ? "color-mix(in srgb, var(--accent) 40%, #1a1a1a)"
+                    : "#1a1a1a",
                 }}
               >
                 {r}+
@@ -311,9 +371,16 @@ export default function OpeningExplorer() {
             marginBottom: "0.5rem",
           }}
         >
-          <span>{explorerLoading ? "Loading..." : `Moves (${moves.length})`}</span>
+          <span>
+            {explorerLoading ? "Loading..." : `Moves (${moves.length})`}
+          </span>
           {!explorerLoading && (
-            <span style={{ fontSize: "0.55rem", color: isLive ? "#22c55e" : "#555" }}>
+            <span
+              style={{
+                fontSize: "0.55rem",
+                color: isLive ? "#22c55e" : "#555",
+              }}
+            >
               {isLive ? "live" : "offline"}
             </span>
           )}
@@ -363,12 +430,21 @@ export default function OpeningExplorer() {
                 }}
               >
                 {/* Move name */}
-                <span style={{ fontWeight: 700, minWidth: "3rem" }}>{m.san}</span>
+                <span style={{ fontWeight: 700, minWidth: "3rem" }}>
+                  {m.san}
+                </span>
                 {/* Game count + percentages */}
-                <span style={{ fontSize: "0.6rem", color: "#777", minWidth: "6rem" }}>
+                <span
+                  style={{
+                    fontSize: "0.6rem",
+                    color: "#777",
+                    minWidth: "6rem",
+                  }}
+                >
                   {fmtCount(total)}{" "}
                   <span style={{ color: "#555" }}>
-                    ({pct(m.white, total)}/{pct(m.draws, total)}/{pct(m.black, total)})
+                    ({pct(m.white, total)}/{pct(m.draws, total)}/
+                    {pct(m.black, total)})
                   </span>
                 </span>
                 {/* Win/draw/loss bar */}
@@ -392,42 +468,52 @@ export default function OpeningExplorer() {
         </div>
 
         {/* Fallback: show static book moves if explorer has no data */}
-        {moves.length === 0 && !explorerLoading && fallbackLookup.bookMoves.length > 0 && (
-          <>
-            <div
-              style={{
-                fontFamily: "var(--font-headline)",
-                fontSize: "0.6rem",
-                color: "#444",
-                marginTop: "0.75rem",
-                marginBottom: "0.25rem",
-              }}
-            >
-              Offline book ({fallbackLookup.bookMoves.length})
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-              {fallbackLookup.bookMoves.map((san) => (
-                <button
-                  key={san}
-                  onClick={() => playBookMove(san)}
-                  style={{
-                    ...moveBtnStyle,
-                    fontWeight: 700,
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  {san}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+        {moves.length === 0 &&
+          !explorerLoading &&
+          fallbackLookup.bookMoves.length > 0 && (
+            <>
+              <div
+                style={{
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.6rem",
+                  color: "#444",
+                  marginTop: "0.75rem",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                Offline book ({fallbackLookup.bookMoves.length})
+              </div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "2px" }}
+              >
+                {fallbackLookup.bookMoves.map((san) => (
+                  <button
+                    key={san}
+                    onClick={() => playBookMove(san)}
+                    style={{
+                      ...moveBtnStyle,
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    {san}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
-        {moves.length === 0 && !explorerLoading && fallbackLookup.bookMoves.length === 0 && (
-          <p style={{ fontSize: "0.8rem", color: "#555", fontStyle: "italic" }}>
-            {history.length === 0 ? "Make a move to begin." : "No data for this position."}
-          </p>
-        )}
+        {moves.length === 0 &&
+          !explorerLoading &&
+          fallbackLookup.bookMoves.length === 0 && (
+            <p
+              style={{ fontSize: "0.8rem", color: "#555", fontStyle: "italic" }}
+            >
+              {history.length === 0
+                ? "Make a move to begin."
+                : "No data for this position."}
+            </p>
+          )}
       </div>
     </div>
   );

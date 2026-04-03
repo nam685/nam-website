@@ -16,7 +16,7 @@ import {
   offerDraw,
 } from "@/lib/lichessApi";
 
-const ACCENT = "#06b6d4";
+const ACCENT = "var(--accent)";
 
 interface Player {
   name: string;
@@ -42,7 +42,12 @@ interface Props {
   onGameEnd: () => void;
 }
 
-export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props) {
+export default function LichessGame({
+  token,
+  gameId,
+  myColor,
+  onGameEnd,
+}: Props) {
   const [position, setPosition] = useState<Chess>(Chess.default());
   const [moveList, setMoveList] = useState<string[]>([]);
   const [lastMove, setLastMove] = useState<[Key, Key] | undefined>();
@@ -53,6 +58,8 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
   const [status, setStatus] = useState("Connecting...");
   const [gameOver, setGameOver] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastSyncRef = useRef(Date.now());
+  const [, setTick] = useState(0);
 
   const turnColor = position.turn === "white" ? "white" : "black";
   const isMyTurn = turnColor === myColor;
@@ -111,12 +118,14 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
             applyMoves(state.moves);
             setWtime(state.wtime);
             setBtime(state.btime);
+            lastSyncRef.current = Date.now();
             updateStatus(state);
           } else if (event.type === "gameState") {
             const state = event as unknown as GameState;
             applyMoves(state.moves);
             setWtime(state.wtime);
             setBtime(state.btime);
+            lastSyncRef.current = Date.now();
             updateStatus(state);
           }
         });
@@ -139,7 +148,11 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
       setGameOver(false);
     } else {
       const result =
-        state.winner === myColor ? "You won!" : state.winner ? "You lost." : "Draw.";
+        state.winner === myColor
+          ? "You won!"
+          : state.winner
+            ? "You lost."
+            : "Draw.";
       setStatus(`Game over — ${result} (${state.status})`);
       setGameOver(true);
     }
@@ -157,6 +170,19 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
     }
   }
 
+  // Client-side clock countdown between server updates
+  useEffect(() => {
+    if (gameOver) return;
+    const id = setInterval(() => setTick((t) => t + 1), 100);
+    return () => clearInterval(id);
+  }, [gameOver]);
+
+  const elapsed = gameOver ? 0 : Date.now() - lastSyncRef.current;
+  const displayWtime =
+    turnColor === "white" ? Math.max(0, wtime - elapsed) : wtime;
+  const displayBtime =
+    turnColor === "black" ? Math.max(0, btime - elapsed) : btime;
+
   function formatTime(ms: number): string {
     const s = Math.max(0, Math.floor(ms / 1000));
     const m = Math.floor(s / 60);
@@ -166,8 +192,8 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
 
   const topPlayer = myColor === "white" ? blackPlayer : whitePlayer;
   const bottomPlayer = myColor === "white" ? whitePlayer : blackPlayer;
-  const topTime = myColor === "white" ? btime : wtime;
-  const bottomTime = myColor === "white" ? wtime : btime;
+  const topTime = myColor === "white" ? displayBtime : displayWtime;
+  const bottomTime = myColor === "white" ? displayWtime : displayBtime;
 
   return (
     <div
@@ -182,8 +208,20 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
       {/* Board + clocks */}
       <div style={{ flexShrink: 0 }}>
         {/* Top player + clock */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-          <span style={{ fontFamily: "var(--font-headline)", fontSize: "0.8rem", color: "#aaa" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-headline)",
+              fontSize: "0.8rem",
+              color: "#aaa",
+            }}
+          >
             {topPlayer ? `${topPlayer.name} (${topPlayer.rating})` : "Opponent"}
           </span>
           <span
@@ -204,7 +242,11 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
           orientation={myColor}
           turnColor={turnColor}
           onMove={handleMove}
-          movable={{ free: false, dests, color: isMyTurn ? myColor : undefined }}
+          movable={{
+            free: false,
+            dests,
+            color: isMyTurn ? myColor : undefined,
+          }}
           lastMove={lastMove}
           check={isCheck}
           premovable={true}
@@ -212,9 +254,23 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
         />
 
         {/* Bottom player + clock */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.5rem" }}>
-          <span style={{ fontFamily: "var(--font-headline)", fontSize: "0.8rem", color: "#aaa" }}>
-            {bottomPlayer ? `${bottomPlayer.name} (${bottomPlayer.rating})` : "You"}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: "0.5rem",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-headline)",
+              fontSize: "0.8rem",
+              color: "#aaa",
+            }}
+          >
+            {bottomPlayer
+              ? `${bottomPlayer.name} (${bottomPlayer.rating})`
+              : "You"}
           </span>
           <span
             style={{
@@ -247,7 +303,9 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
       {/* Game actions panel */}
       <div style={{ flex: "1 1 200px", minWidth: "200px", maxWidth: "280px" }}>
         {!gameOver && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+          >
             {moveList.length < 2 && (
               <button onClick={() => abortGame(token, gameId)} style={btnStyle}>
                 Abort
@@ -256,7 +314,10 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
             <button onClick={() => resignGame(token, gameId)} style={btnStyle}>
               Resign
             </button>
-            <button onClick={() => offerDraw(token, gameId, "yes")} style={btnStyle}>
+            <button
+              onClick={() => offerDraw(token, gameId, "yes")}
+              style={btnStyle}
+            >
               Offer Draw
             </button>
           </div>
@@ -265,7 +326,12 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
         {gameOver && (
           <button
             onClick={onGameEnd}
-            style={{ ...btnStyle, background: ACCENT, color: "#0e0e0e", fontWeight: 700 }}
+            style={{
+              ...btnStyle,
+              background: ACCENT,
+              color: "#0e0e0e",
+              fontWeight: 700,
+            }}
           >
             New Game
           </button>
@@ -291,7 +357,10 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
             {moveList.map((uci, i) =>
               i % 2 === 0 ? (
                 <span key={i}>
-                  <span style={{ color: "#555" }}>{Math.floor(i / 2) + 1}.</span> {uci}{" "}
+                  <span style={{ color: "#555" }}>
+                    {Math.floor(i / 2) + 1}.
+                  </span>{" "}
+                  {uci}{" "}
                 </span>
               ) : (
                 <span key={i}>{uci} </span>
