@@ -172,10 +172,13 @@ Issue tracker lives in `backlog/` — one `.md` file per ticket with YAML frontm
 Common tasks are available via `make`:
 ```bash
 make help          # show all available commands
-make up            # start PostgreSQL + Redis
+make up            # full dev boot: containers + migrate + seed + dev servers
 make down          # stop containers
+make dev           # start Django + Next.js dev servers (no setup)
 make db-reset      # drop + recreate database
-make dev           # start Django + Next.js dev servers
+make db-seed       # run migrations + seed
+make dumpseed      # export current DB to fixtures/seed.json
+make sync          # show instructions for live API syncs
 make test          # run all tests (backend + frontend)
 make lint          # run all linters
 make format        # format all code

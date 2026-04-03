@@ -1,0 +1,110 @@
+[
+  {
+    "model": "website.listentrack",
+    "pk": 1,
+    "fields": {
+      "video_id": "dQw4w9WgXcQ",
+      "title": "Never Gonna Give You Up",
+      "artist": "Rick Astley",
+      "album": "Whenever You Need Somebody",
+      "thumbnail_url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+      "duration": "3:33",
+      "played_at": "2026-04-01T18:30:00Z"
+    }
+  },
+  {
+    "model": "website.listentrack",
+    "pk": 2,
+    "fields": {
+      "video_id": "9bZkp7q19f0",
+      "title": "Gangnam Style",
+      "artist": "PSY",
+      "album": "PSY 6 (Six Rules), Part 1",
+      "thumbnail_url": "https://i.ytimg.com/vi/9bZkp7q19f0/hqdefault.jpg",
+      "duration": "4:13",
+      "played_at": "2026-04-01T18:00:00Z"
+    }
+  },
+  {
+    "model": "website.listentrack",
+    "pk": 3,
+    "fields": {
+      "video_id": "kJQP7kiw5Fk",
+      "title": "Despacito",
+      "artist": "Luis Fonsi",
+      "album": "Vida",
+      "thumbnail_url": "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
+      "duration": "4:42",
+      "played_at": "2026-04-01T17:30:00Z"
+    }
+  },
+  {
+    "model": "website.watchchannel",
+    "pk": 1,
+    "fields": {
+      "youtube_channel_id": "UC_x5XG1OV2P6uZZ5FSM9Ttw",
+      "name": "Google for Developers",
+      "description": "The Google Developers channel",
+      "thumbnail_url": "https://yt3.ggpht.com/example/photo.jpg",
+      "tier": "never_miss",
+      "display_order": 0,
+      "created_at": "2026-03-01T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchchannel",
+    "pk": 2,
+    "fields": {
+      "youtube_channel_id": "UCsBjURrPoezykLs9EqgamOA",
+      "name": "Fireship",
+      "description": "High-intensity code tutorials",
+      "thumbnail_url": "https://yt3.ggpht.com/example/fireship.jpg",
+      "tier": "regular",
+      "display_order": 1,
+      "created_at": "2026-03-01T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchvideo",
+    "pk": 1,
+    "fields": {
+      "youtube_video_id": "rfscVS0vtbw",
+      "channel": 1,
+      "title": "What's New in Web Development 2026",
+      "thumbnail_url": "https://i.ytimg.com/vi/rfscVS0vtbw/hqdefault.jpg",
+      "note": "Great overview of new web APIs",
+      "pinned": true,
+      "visible": true,
+      "created_at": "2026-03-15T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.githubcontributions",
+    "pk": 1,
+    "fields": {
+      "data": {
+        "totalContributions": 365,
+        "weeks": [
+          {
+            "contributionDays": [
+              {"contributionCount": 3, "date": "2026-03-28"},
+              {"contributionCount": 5, "date": "2026-03-29"},
+              {"contributionCount": 0, "date": "2026-03-30"},
+              {"contributionCount": 2, "date": "2026-03-31"},
+              {"contributionCount": 7, "date": "2026-04-01"},
+              {"contributionCount": 1, "date": "2026-04-02"},
+              {"contributionCount": 4, "date": "2026-04-03"}
+            ]
+          }
+        ],
+        "repositoryDates": {
+          "https://github.com/nam685/nam-website": "2026-04-03T10:00:00Z"
+        }
+      },
+      "updated_at": "2026-04-03T10:00:00Z"
+    }
+  }
+]
