@@ -153,6 +153,19 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] CORS headers are correct (not wildcard)
 - [ ] CSP header is present
 
+## Bets (Market Dashboard)
+
+- [ ] `/bets` loads and shows ticker cards with prices and sparklines
+- [ ] Clicking a card expands it with a larger chart and period toggles
+- [ ] Period toggles (1W/1M/3M/1Y/ALL) update the chart
+- [ ] Pressing Escape or clicking expanded card collapses it
+- [ ] Admin: "+ Add Ticker" form works and new ticker appears
+- [ ] Admin: "×" delete button removes ticker
+- [ ] Admin: "↻ Refresh" triggers sync and updates prices
+- [ ] Non-admin: admin controls are hidden
+- [ ] Mobile: cards stack single column, expanded card full width
+- [ ] Empty state shows message when no tickers exist
+
 ## Mobile
 
 - [ ] All pages render correctly on mobile viewport (375px)

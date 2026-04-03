@@ -1,12 +1,768 @@
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = { title: "bets" };
+import { useEffect, useState } from "react";
+import { store } from "@/lib/auth";
+import { API } from "@/lib/api";
+import type { BetsTicker, BetsHistory } from "@/lib/api";
+
+const ACCENT = "#db2777";
+const GREEN = "#22c55e";
+const RED = "#ef4444";
+
+function formatPrice(price: string | null, currency: string): string {
+  if (!price) return "—";
+  const num = parseFloat(price);
+  if (currency === "%") return `${num.toFixed(2)}%`;
+  const symbol = currency === "EUR" ? "€" : "$";
+  if (num >= 10000)
+    return `${symbol}${num.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  return `${symbol}${num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatChange(pct: string | null): { text: string; color: string } {
+  if (!pct) return { text: "—", color: "#555" };
+  const num = parseFloat(pct);
+  const sign = num >= 0 ? "+" : "";
+  return { text: `${sign}${num.toFixed(2)}%`, color: num >= 0 ? GREEN : RED };
+}
+
+function Sparkline({
+  data,
+  color,
+  height = 32,
+}: {
+  data: number[];
+  color: string;
+  height?: number;
+}) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const w = 200;
+  const pad = 2;
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = pad + ((max - v) / range) * (height - pad * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} style={{ width: "100%", height }}>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
+
+const PERIODS = ["1W", "1M", "3M", "1Y", "ALL"] as const;
+
+function ExpandedCard({
+  ticker,
+  history,
+  period,
+  onPeriodChange,
+  onClose,
+}: {
+  ticker: BetsTicker;
+  history: BetsHistory;
+  period: string;
+  onPeriodChange: (p: string) => void;
+  onClose: () => void;
+}) {
+  const change = formatChange(ticker.change_pct);
+  const prices = history.prices.map((p) => parseFloat(p.price));
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const chartH = 160;
+  const chartW = 500;
+  const pad = 8;
+
+  const linePoints = prices
+    .map((v, i) => {
+      const x =
+        prices.length > 1 ? (i / (prices.length - 1)) * chartW : chartW / 2;
+      const y = pad + ((max - v) / range) * (chartH - pad * 2);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const areaPoints = `0,${chartH} ${linePoints} ${chartW},${chartH}`;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        border: `1px solid ${ACCENT}66`,
+        padding: 20,
+        marginBottom: 12,
+        cursor: "pointer",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#555",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+            }}
+          >
+            {ticker.asset_type}
+          </div>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 600,
+              color: "#eee",
+              marginTop: 2,
+            }}
+          >
+            {ticker.symbol}{" "}
+            <span style={{ fontSize: 13, color: "#666", fontWeight: 400 }}>
+              {ticker.name}
+            </span>
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 24, fontFamily: "monospace", color: "#eee" }}>
+            {formatPrice(ticker.price, ticker.currency)}
+          </div>
+          <div
+            style={{
+              fontSize: 14,
+              fontFamily: "monospace",
+              color: change.color,
+            }}
+          >
+            {change.text} today
+          </div>
+        </div>
+      </div>
+
+      {/* Period toggles */}
+      <div
+        style={{ display: "flex", gap: 4, marginBottom: 16 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {PERIODS.map((p) => (
+          <button
+            key={p}
+            onClick={() => onPeriodChange(p)}
+            style={{
+              padding: "3px 10px",
+              fontSize: 11,
+              color: p === period ? ACCENT : "#888",
+              border: `1px solid ${p === period ? `${ACCENT}88` : "#333"}`,
+              background: p === period ? `${ACCENT}1a` : "transparent",
+              borderRadius: 2,
+              cursor: "pointer",
+            }}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
+      {prices.length >= 2 && (
+        <div
+          style={{
+            height: chartH,
+            border: "1px solid #1a1a1a",
+            padding: 8,
+            position: "relative",
+          }}
+        >
+          <svg
+            viewBox={`0 0 ${chartW} ${chartH}`}
+            style={{ width: "100%", height: "100%" }}
+          >
+            {[0.25, 0.5, 0.75].map((frac) => (
+              <line
+                key={frac}
+                x1="0"
+                y1={chartH * frac}
+                x2={chartW}
+                y2={chartH * frac}
+                stroke="#1a1a1a"
+                strokeWidth="0.5"
+              />
+            ))}
+            <defs>
+              <linearGradient
+                id={`grad-${ticker.id}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor={change.color} />
+                <stop offset="100%" stopColor="transparent" />
+              </linearGradient>
+            </defs>
+            <polygon
+              points={areaPoints}
+              fill={`url(#grad-${ticker.id})`}
+              opacity="0.3"
+            />
+            <polyline
+              points={linePoints}
+              fill="none"
+              stroke={change.color}
+              strokeWidth="2"
+            />
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              right: 4,
+              top: 8,
+              fontSize: 10,
+              color: "#444",
+              fontFamily: "monospace",
+            }}
+          >
+            {formatPrice(String(max), ticker.currency)}
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              right: 4,
+              bottom: 8,
+              fontSize: 10,
+              color: "#444",
+              fontFamily: "monospace",
+            }}
+          >
+            {formatPrice(String(min), ticker.currency)}
+          </div>
+        </div>
+      )}
+
+      {/* Change periods */}
+      <div style={{ display: "flex", gap: 24, marginTop: 16 }}>
+        {PERIODS.map((p) => {
+          const val = history.change_periods[p];
+          const c = formatChange(val);
+          return (
+            <div key={p}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#555",
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                }}
+              >
+                {p}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontFamily: "monospace",
+                  color: c.color,
+                }}
+              >
+                {c.text}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function BetsPage() {
+  const [tickers, setTickers] = useState<BetsTicker[]>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [history, setHistory] = useState<BetsHistory | null>(null);
+  const [historyPeriod, setHistoryPeriod] = useState("1M");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({
+    symbol: "",
+    name: "",
+    asset_type: "stock",
+    provider: "alpha_vantage",
+    provider_id: "",
+    currency: "USD",
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setIsAdmin(!!store("adminToken"));
+    fetch(`${API}/api/bets/`)
+      .then((r) => r.json())
+      .then(setTickers)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!expandedId) {
+      setHistory(null);
+      return;
+    }
+    fetch(`${API}/api/bets/${expandedId}/history/?period=${historyPeriod}`)
+      .then((r) => r.json())
+      .then(setHistory)
+      .catch(console.error);
+  }, [expandedId, historyPeriod]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpandedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const token = store("adminToken");
+      await fetch(`${API}/api/bets/sync/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const r = await fetch(`${API}/api/bets/`);
+      setTickers(await r.json());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    const token = store("adminToken");
+    const resp = await fetch(`${API}/api/bets/create/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(addForm),
+    });
+    if (resp.ok) {
+      setShowAddForm(false);
+      setAddForm({
+        symbol: "",
+        name: "",
+        asset_type: "stock",
+        provider: "alpha_vantage",
+        provider_id: "",
+        currency: "USD",
+      });
+      const r = await fetch(`${API}/api/bets/`);
+      setTickers(await r.json());
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    const token = store("adminToken");
+    await fetch(`${API}/api/bets/${id}/delete/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setTickers((prev) => prev.filter((t) => t.id !== id));
+    if (expandedId === id) setExpandedId(null);
+  };
+
+  const updatedAt = tickers.find((t) => t.updated_at)?.updated_at;
+
+  if (loading) {
+    return (
+      <div
+        style={{ padding: "80px 24px 24px", maxWidth: 900, margin: "0 auto" }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: 2,
+            color: ACCENT,
+          }}
+        >
+          Markets
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="page-narrow">
-      <h1>Bets</h1>
-      <p>Financial portfolio, positions, and market commentary.</p>
+    <div style={{ padding: "80px 24px 24px", maxWidth: 900, margin: "0 auto" }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 24,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 2,
+              color: ACCENT,
+            }}
+          >
+            Markets
+          </div>
+          {updatedAt && (
+            <div style={{ fontSize: 12, color: "#555", marginTop: 4 }}>
+              Last updated: {updatedAt}
+            </div>
+          )}
+        </div>
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              style={{
+                padding: "4px 10px",
+                border: `1px solid ${ACCENT}44`,
+                fontSize: 11,
+                color: ACCENT,
+                background: "transparent",
+                cursor: "pointer",
+                borderRadius: 2,
+              }}
+            >
+              + Add Ticker
+            </button>
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              style={{
+                padding: "4px 10px",
+                border: `1px solid ${ACCENT}44`,
+                fontSize: 11,
+                color: "#555",
+                background: "transparent",
+                cursor: "pointer",
+                borderRadius: 2,
+              }}
+            >
+              {syncing ? "syncing..." : "↻ Refresh"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add ticker form */}
+      {showAddForm && (
+        <div
+          style={{
+            border: `1px solid ${ACCENT}33`,
+            padding: 16,
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <input
+              placeholder="Symbol"
+              value={addForm.symbol}
+              onChange={(e) =>
+                setAddForm({ ...addForm, symbol: e.target.value })
+              }
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            />
+            <input
+              placeholder="Name"
+              value={addForm.name}
+              onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            />
+            <input
+              placeholder="Provider ID"
+              value={addForm.provider_id}
+              onChange={(e) =>
+                setAddForm({ ...addForm, provider_id: e.target.value })
+              }
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              value={addForm.asset_type}
+              onChange={(e) =>
+                setAddForm({ ...addForm, asset_type: e.target.value })
+              }
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            >
+              <option value="stock">Stock</option>
+              <option value="commodity">Commodity</option>
+              <option value="crypto">Crypto</option>
+              <option value="bond">Bond</option>
+            </select>
+            <select
+              value={addForm.provider}
+              onChange={(e) =>
+                setAddForm({ ...addForm, provider: e.target.value })
+              }
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+              }}
+            >
+              <option value="alpha_vantage">Alpha Vantage</option>
+              <option value="coingecko">CoinGecko</option>
+              <option value="ecb">ECB</option>
+            </select>
+            <input
+              placeholder="Currency"
+              value={addForm.currency}
+              onChange={(e) =>
+                setAddForm({ ...addForm, currency: e.target.value })
+              }
+              style={{
+                background: "#111",
+                border: "1px solid #333",
+                color: "#eee",
+                padding: "6px 8px",
+                fontSize: 13,
+                width: 60,
+              }}
+            />
+            <button
+              onClick={handleAdd}
+              style={{
+                padding: "6px 16px",
+                background: ACCENT,
+                color: "#fff",
+                border: "none",
+                fontSize: 13,
+                cursor: "pointer",
+                borderRadius: 2,
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded card */}
+      {expandedId && history && (
+        <ExpandedCard
+          ticker={tickers.find((t) => t.id === expandedId)!}
+          history={history}
+          period={historyPeriod}
+          onPeriodChange={setHistoryPeriod}
+          onClose={() => setExpandedId(null)}
+        />
+      )}
+
+      {/* Card grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: expandedId
+            ? "repeat(auto-fill, minmax(180px, 1fr))"
+            : "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: 12,
+          opacity: expandedId ? 0.6 : 1,
+          transition: "opacity 0.2s",
+        }}
+      >
+        {tickers
+          .filter((t) => t.id !== expandedId)
+          .map((t) => {
+            const change = formatChange(t.change_pct);
+            return (
+              <div
+                key={t.id}
+                onClick={() => {
+                  setExpandedId(t.id);
+                  setHistoryPeriod("1M");
+                }}
+                style={{
+                  border: "1px solid #222",
+                  padding: expandedId ? 12 : 16,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  position: "relative",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.borderColor = "#444")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.borderColor = "#222")
+                }
+              >
+                {isAdmin && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(t.id);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 4,
+                      right: 8,
+                      background: "none",
+                      border: "none",
+                      color: "#444",
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                    title="Remove ticker"
+                  >
+                    ×
+                  </button>
+                )}
+                {expandedId ? (
+                  <>
+                    <div style={{ fontSize: 14, color: "#eee" }}>
+                      {t.symbol}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontFamily: "monospace",
+                        color: change.color,
+                      }}
+                    >
+                      {formatPrice(t.price, t.currency)} {change.text}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#555",
+                            textTransform: "uppercase",
+                            letterSpacing: 1,
+                          }}
+                        >
+                          {t.asset_type}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 600,
+                            color: "#eee",
+                            marginTop: 2,
+                          }}
+                        >
+                          {t.symbol}
+                        </div>
+                        <div
+                          style={{ fontSize: 11, color: "#666", marginTop: 2 }}
+                        >
+                          {t.name}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div
+                          style={{
+                            fontSize: 18,
+                            fontFamily: "monospace",
+                            color: "#eee",
+                          }}
+                        >
+                          {formatPrice(t.price, t.currency)}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontFamily: "monospace",
+                            color: change.color,
+                          }}
+                        >
+                          {change.text}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                      <Sparkline data={t.sparkline} color={change.color} />
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+      </div>
+
+      {!loading && tickers.length === 0 && (
+        <div
+          style={{
+            textAlign: "center",
+            color: "#555",
+            marginTop: 48,
+            fontSize: 14,
+          }}
+        >
+          No tickers tracked yet.
+          {isAdmin && " Click '+ Add Ticker' to get started."}
+        </div>
+      )}
     </div>
   );
 }

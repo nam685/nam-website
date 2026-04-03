@@ -146,3 +146,33 @@ export interface LichessStatus {
   connected: boolean;
   username: string | null;
 }
+
+export interface BetsTicker {
+  id: number;
+  symbol: string;
+  name: string;
+  asset_type: "stock" | "commodity" | "crypto" | "bond";
+  display_order: number;
+  price: string | null;
+  change_pct: string | null;
+  currency: string;
+  sparkline: number[];
+  updated_at: string | null;
+}
+
+export interface BetsHistoryPrice {
+  date: string;
+  price: string;
+  change_pct: string | null;
+}
+
+export interface BetsHistory {
+  id: number;
+  symbol: string;
+  name: string;
+  asset_type: string;
+  currency: string;
+  period: string;
+  prices: BetsHistoryPrice[];
+  change_periods: Record<string, string | null>;
+}

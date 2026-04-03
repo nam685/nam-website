@@ -35,7 +35,7 @@ Admin users can connect their Lichess account via OAuth to play live games direc
 A curated "taste map" of YouTube channels and standout videos. Channels are organized into three tiers — "never miss", "regular rotation", and "worth checking out" — displayed as a glow grid where visual intensity reflects how much Nam cares about each channel. Click a channel to see pinned standout videos. Content is synced from YouTube subscriptions and liked videos, then hand-curated by the admin (hidden by default, promoted to tiers manually).
 
 ### Bets
-Future section — placeholder for prediction content.
+Mini Bloomberg — tracks stocks (VWCE), gold, Bitcoin, EU bond yields with daily price snapshots, sparkline charts, and expandable detail views. Admin can add/remove tickers and trigger manual price syncs.
 
 ## Feedback
 
