@@ -21,7 +21,7 @@ export interface ChessgroundBoardProps {
     color?: Color | "both";
   };
   lastMove?: [Key, Key];
-  check?: Key | boolean;
+  check?: Color | boolean;
   premovable?: boolean;
   viewOnly?: boolean;
 }
