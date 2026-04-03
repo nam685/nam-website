@@ -218,3 +218,89 @@ class TestListenTopTracks:
         data = resp.json()
         assert len(data["tracks"]) == 2
         assert data["total"] == 5
+
+
+@pytest.mark.django_db
+class TestListenTopArtists:
+    def test_empty(self, client):
+        resp = client.get("/api/listens/artists/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["artists"] == []
+        assert data["total"] == 0
+
+    def test_ranked(self, client, sample_tracks):  # noqa: ARG002
+        """Artists with more plays rank higher."""
+        # Give Artist 1 an extra play
+        ListenTrack.objects.create(
+            video_id="vid_extra",
+            title="Bonus Track",
+            artist="Artist 1",
+            played_at=timezone.now(),
+        )
+        resp = client.get("/api/listens/artists/")
+        data = resp.json()
+        assert data["artists"][0]["name"] == "Artist 1"
+        assert data["artists"][0]["play_count"] == 2
+        assert data["artists"][0]["track_count"] == 2
+        assert len(data["artists"][0]["top_tracks"]) <= 3
+
+    def test_pagination(self, client, sample_tracks):  # noqa: ARG002
+        resp = client.get("/api/listens/artists/?limit=2&offset=0")
+        data = resp.json()
+        assert len(data["artists"]) == 2
+        assert data["total"] == 5
+
+
+@pytest.mark.django_db
+class TestListenTopAlbums:
+    def test_empty(self, client):
+        resp = client.get("/api/listens/albums/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["albums"] == []
+        assert data["total"] == 0
+
+    def test_ranked(self, client, sample_tracks):  # noqa: ARG002
+        ListenTrack.objects.create(
+            video_id="alb1",
+            title="Song A",
+            artist="Band X",
+            album="Album One",
+            played_at=timezone.now(),
+        )
+        ListenTrack.objects.create(
+            video_id="alb2",
+            title="Song B",
+            artist="Band X",
+            album="Album One",
+            played_at=timezone.now(),
+        )
+        ListenTrack.objects.create(
+            video_id="alb3",
+            title="Song C",
+            artist="Band Y",
+            album="Album Two",
+            played_at=timezone.now(),
+        )
+        resp = client.get("/api/listens/albums/")
+        data = resp.json()
+        assert data["albums"][0]["name"] == "Album One"
+        assert data["albums"][0]["play_count"] == 2
+        assert data["albums"][0]["artist"] == "Band X"
+
+    def test_excludes_empty_album(self, client, sample_tracks):  # noqa: ARG002
+        """Tracks with empty album field are excluded."""
+        # sample_tracks have album="Album N" so let's check they're included
+        # but create one with empty album to verify exclusion
+        ListenTrack.objects.create(
+            video_id="no_album",
+            title="No Album",
+            artist="X",
+            album="",
+            played_at=timezone.now(),
+        )
+        resp = client.get("/api/listens/albums/")
+        data = resp.json()
+        for album in data["albums"]:
+            assert album["name"] != ""

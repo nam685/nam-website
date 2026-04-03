@@ -180,6 +180,69 @@ def listen_top_tracks(request):
     return JsonResponse({"tracks": page, "total": total})
 
 
+@require_GET
+def listen_top_artists(request):
+    """Return artists ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    artists = (
+        ListenTrack.objects.values("artist")
+        .annotate(
+            play_count=Count("id"),
+            track_count=Count("video_id", distinct=True),
+        )
+        .order_by("-play_count")
+    )
+    total = artists.count()
+    page = list(artists[offset : offset + limit])
+
+    for entry in page:
+        top = (
+            ListenTrack.objects.filter(artist=entry["artist"])
+            .values("video_id", "title", "thumbnail_url")
+            .annotate(pc=Count("id"))
+            .order_by("-pc")[:3]
+        )
+        entry["name"] = entry.pop("artist")
+        entry["top_tracks"] = [
+            {"video_id": t["video_id"], "title": t["title"], "thumbnail_url": t["thumbnail_url"]} for t in top
+        ]
+
+    return JsonResponse({"artists": page, "total": total})
+
+
+@require_GET
+def listen_top_albums(request):
+    """Return albums ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    albums = (
+        ListenTrack.objects.exclude(album="")
+        .values("album", "artist")
+        .annotate(
+            play_count=Count("id"),
+            track_count=Count("video_id", distinct=True),
+        )
+        .order_by("-play_count")
+    )
+    total = albums.count()
+    page = list(albums[offset : offset + limit])
+
+    for entry in page:
+        track = (
+            ListenTrack.objects.filter(album=entry["album"], artist=entry["artist"])
+            .exclude(thumbnail_url="")
+            .values_list("thumbnail_url", flat=True)
+            .first()
+        )
+        entry["name"] = entry.pop("album")
+        entry["thumbnail_url"] = track or ""
+
+    return JsonResponse({"albums": page, "total": total})
+
+
 @require_admin
 def listen_sync_status(_request):
     """Check sync availability and last update time."""
