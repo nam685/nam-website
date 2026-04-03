@@ -55,22 +55,22 @@ describe("parseNdJsonStream", () => {
 });
 
 describe("buildExplorerUrl", () => {
-  it("builds masters URL", () => {
+  it("builds masters URL via backend proxy", () => {
     const url = buildExplorerUrl(
       "masters",
       "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
     );
-    expect(url).toContain("explorer.lichess.org/masters");
+    expect(url).toContain("/api/lichess/explorer/masters/");
     expect(url).toContain("fen=");
   });
 
-  it("builds lichess URL with rating filter", () => {
+  it("builds lichess URL with rating filter via backend proxy", () => {
     const url = buildExplorerUrl(
       "lichess",
       "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
       { ratings: [2000, 2200] },
     );
-    expect(url).toContain("explorer.lichess.org/lichess");
+    expect(url).toContain("/api/lichess/explorer/lichess/");
     expect(url).toContain("ratings=2000%2C2200");
   });
 });

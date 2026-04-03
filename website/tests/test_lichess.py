@@ -175,3 +175,59 @@ class TestLichessStatus:
         )
         data = client.get("/api/lichess/status/").json()
         assert data == {"connected": True, "username": "nam685"}
+
+
+# ── Explorer proxy ──────────────────────────────────
+
+
+EXPLORER_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+EXPLORER_JSON = b'{"opening":{"eco":"B00","name":"King Pawn"},"white":100,"draws":50,"black":50,"moves":[]}'
+
+
+@pytest.mark.django_db
+class TestLichessExplorer:
+    def test_invalid_db(self, client):
+        resp = client.get("/api/lichess/explorer/invalid/?fen=x")
+        assert resp.status_code == 400
+
+    def test_missing_fen(self, client):
+        resp = client.get("/api/lichess/explorer/masters/")
+        assert resp.status_code == 400
+
+    @patch("website.views.lichess.urllib.request.urlopen")
+    def test_proxies_with_token(self, mock_urlopen, client):
+        LichessToken.objects.create(
+            access_token="lip_proxy",
+            lichess_username="nam685",
+            expires_at=timezone.now() + timezone.timedelta(days=365),
+        )
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = EXPLORER_JSON
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        resp = client.get(f"/api/lichess/explorer/masters/?fen={EXPLORER_FEN}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["opening"]["eco"] == "B00"
+
+        # Verify auth header was sent
+        req_obj = mock_urlopen.call_args[0][0]
+        assert req_obj.get_header("Authorization") == "Bearer lip_proxy"
+
+    @patch("website.views.lichess.urllib.request.urlopen")
+    def test_proxies_without_token(self, mock_urlopen, client):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = EXPLORER_JSON
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        resp = client.get(f"/api/lichess/explorer/lichess/?fen={EXPLORER_FEN}")
+        assert resp.status_code == 200
+
+        # No auth header when no token stored
+        req_obj = mock_urlopen.call_args[0][0]
+        assert not req_obj.has_header("Authorization")

@@ -15,7 +15,7 @@ from .github import contributions as github_contributions
 from .github import github_auth, github_callback
 from .github import refresh_status as github_refresh_status
 from .health import health
-from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess_status, lichess_token
+from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess_explorer, lichess_status, lichess_token
 from .listen import (
     listen_list,
     listen_stats,
@@ -65,6 +65,7 @@ __all__ = [
     "lichess_auth",
     "lichess_callback",
     "lichess_disconnect",
+    "lichess_explorer",
     "lichess_status",
     "lichess_token",
     "listen_list",
