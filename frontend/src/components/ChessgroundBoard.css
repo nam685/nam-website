@@ -4,12 +4,16 @@
  * Uses var(--accent) so the board follows each page's color palette.
  */
 
-/* Board square colors — light squares get a subtle accent tint */
-cg-board square.dark {
-  background-color: #1a1a1a;
-}
-cg-board square.light {
-  background-color: color-mix(in srgb, var(--accent) 8%, #2a2a2a);
+/* Board checkerboard — override brown theme SVG with accent-tinted pattern.
+   conic-gradient creates a 2×2 tile; background-size tiles it across 8×8. */
+cg-board {
+  background: conic-gradient(
+      color-mix(in srgb, var(--accent) 20%, #444) 0.25turn,
+      color-mix(in srgb, var(--accent) 8%, #2e2e2e) 0 0.5turn,
+      color-mix(in srgb, var(--accent) 20%, #444) 0 0.75turn,
+      color-mix(in srgb, var(--accent) 8%, #2e2e2e) 0
+    )
+    top left / 25% 25% repeat !important;
 }
 
 /* Last move highlight */
