@@ -84,9 +84,8 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
         style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr",
+          alignItems: "start",
           gap: 1,
-          borderRadius: isMobile && stats ? 0 : 8,
-          overflow: "hidden",
           marginBottom: 0,
         }}
       >
@@ -96,6 +95,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             background: PANEL_BG,
             backdropFilter: "blur(12px)",
             padding: 24,
+            borderRadius: isMobile && stats ? 0 : "8px 0 0 8px",
           }}
         >
           {/* Latest */}
@@ -292,7 +292,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
               background: PANEL_BG,
               backdropFilter: "blur(12px)",
               padding: 24,
-              borderLeft: "1px solid rgba(255,255,255,0.05)",
+              borderRadius: "0 8px 8px 0",
             }}
           >
             {stats && (

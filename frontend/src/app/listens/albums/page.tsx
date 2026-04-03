@@ -62,7 +62,6 @@ export default function ListensAlbumsPage() {
               background: "rgba(20, 20, 20, 0.6)",
               border: "1px solid rgba(255,255,255,0.05)",
               borderRadius: 8,
-              overflow: "hidden",
               transition: "border-color 0.15s",
               cursor: isAdmin ? "pointer" : "default",
             }}
@@ -87,46 +86,50 @@ export default function ListensAlbumsPage() {
               (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.05)";
             }}
           >
-            {album.thumbnail_url ? (
-              <img
-                src={album.thumbnail_url}
-                alt=""
-                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  aspectRatio: "1",
-                  background: `color-mix(in srgb, ${ACCENT} 15%, #111)`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 24,
-                  color: ACCENT,
-                  fontWeight: "bold",
-                }}
-              >
-                {album.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div style={{ padding: "10px 12px" }}>
-              <div
-                style={{
-                  color: "#eee",
-                  fontSize: 13,
-                  fontFamily: "var(--font-headline)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  marginBottom: 2,
-                }}
-              >
-                {album.name}
-              </div>
-              <div style={{ color: "#888", fontSize: 10, marginBottom: 4 }}>{album.artist}</div>
-              <div style={{ color: "#555", fontSize: 10, fontFamily: "monospace" }}>
-                {album.play_count}× · {album.track_count} tracks
+            <div style={{ display: "flex", gap: 12, alignItems: "center", padding: 14 }}>
+              {album.thumbnail_url ? (
+                <img
+                  src={album.thumbnail_url}
+                  alt=""
+                  style={{ width: 56, height: 56, borderRadius: 4, objectFit: "cover", flexShrink: 0 }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 4,
+                    background: `color-mix(in srgb, ${ACCENT} 15%, #111)`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 18,
+                    color: ACCENT,
+                    fontWeight: "bold",
+                    flexShrink: 0,
+                  }}
+                >
+                  {album.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    color: "#eee",
+                    fontSize: 13,
+                    fontFamily: "var(--font-headline)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    marginBottom: 2,
+                  }}
+                >
+                  {album.name}
+                </div>
+                <div style={{ color: "#888", fontSize: 10, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{album.artist}</div>
+                <div style={{ color: "#555", fontSize: 10, fontFamily: "monospace" }}>
+                  {album.play_count}× · {album.track_count} {album.track_count === 1 ? "track" : "tracks"}
+                </div>
               </div>
             </div>
           </div>
