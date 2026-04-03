@@ -19,6 +19,17 @@ interface HistoryEntry {
   fen: string;
 }
 
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+function pct(n: number, total: number): string {
+  if (total === 0) return "0";
+  return Math.round((n / total) * 100).toString();
+}
+
 export default function OpeningExplorer() {
   const [position, setPosition] = useState<Chess>(Chess.default());
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -27,10 +38,12 @@ export default function OpeningExplorer() {
   const [explorerData, setExplorerData] = useState<ExplorerResponse | null>(null);
   const [explorerLoading, setExplorerLoading] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<number[]>([]);
+  const [isLive, setIsLive] = useState(false);
 
   const fen = makeFen(position.toSetup());
   const turnColor = position.turn === "white" ? "white" : "black";
-  const lastMove = history.length > 0 ? (history[history.length - 1].uci.match(/.{2}/g) as [Key, Key]) : undefined;
+  const lastMove =
+    history.length > 0 ? (history[history.length - 1].uci.match(/.{2}/g) as [Key, Key]) : undefined;
   const isCheck = position.isCheck();
   const dests = chessgroundDests(position);
 
@@ -44,6 +57,7 @@ export default function OpeningExplorer() {
     const opts = explorerDb === "lichess" && ratingFilter.length > 0 ? { ratings: ratingFilter } : undefined;
     fetchExplorer(explorerDb, fen, opts).then((data) => {
       setExplorerData(data);
+      setIsLive(data !== null);
       setExplorerLoading(false);
     });
   }, [fen, explorerDb, ratingFilter]);
@@ -102,7 +116,6 @@ export default function OpeningExplorer() {
   function takeback() {
     if (history.length === 0) return;
     const newHistory = history.slice(0, -1);
-    // Rebuild position from scratch
     const pos = Chess.default();
     for (const entry of newHistory) {
       const move = parseUci(entry.uci);
@@ -142,13 +155,16 @@ export default function OpeningExplorer() {
 
         {/* Controls */}
         <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-          <button onClick={reset} style={btnStyle}>
+          <button onClick={reset} style={uiBtnStyle}>
             Reset
           </button>
-          <button onClick={takeback} style={btnStyle} disabled={history.length === 0}>
+          <button onClick={takeback} style={uiBtnStyle} disabled={history.length === 0}>
             Takeback
           </button>
-          <button onClick={() => setOrientation((o) => (o === "white" ? "black" : "white"))} style={btnStyle}>
+          <button
+            onClick={() => setOrientation((o) => (o === "white" ? "black" : "white"))}
+            style={uiBtnStyle}
+          >
             Flip
           </button>
         </div>
@@ -210,9 +226,31 @@ export default function OpeningExplorer() {
             {openingName}
           </div>
           {totalGames > 0 && (
-            <div style={{ fontSize: "0.7rem", color: "#555", marginTop: "0.25rem" }}>
-              {totalGames.toLocaleString()} games
-            </div>
+            <>
+              <div style={{ fontSize: "0.7rem", color: "#555", marginTop: "0.25rem" }}>
+                {fmtCount(totalGames)} games
+              </div>
+              {/* Overall position win/draw/loss stats */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.75rem",
+                  marginTop: "0.4rem",
+                  fontSize: "0.65rem",
+                  fontFamily: "var(--font-headline)",
+                }}
+              >
+                <span style={{ color: "#e5e2e1" }}>
+                  {pct(explorerData!.white, totalGames)}% white
+                </span>
+                <span style={{ color: "#777" }}>
+                  {pct(explorerData!.draws, totalGames)}% draw
+                </span>
+                <span style={{ color: "#555" }}>
+                  {pct(explorerData!.black, totalGames)}% black
+                </span>
+              </div>
+            </>
           )}
         </div>
 
@@ -223,7 +261,7 @@ export default function OpeningExplorer() {
               key={db}
               onClick={() => setExplorerDb(db)}
               style={{
-                ...btnStyle,
+                ...uiBtnStyle,
                 background: explorerDb === db ? ACCENT : "#131313",
                 color: explorerDb === db ? "#0e0e0e" : ACCENT,
                 fontWeight: explorerDb === db ? 700 : 400,
@@ -244,13 +282,11 @@ export default function OpeningExplorer() {
                   setRatingFilter((f) => (f.includes(r) ? f.filter((x) => x !== r) : [...f, r]))
                 }
                 style={{
-                  ...btnStyle,
+                  ...uiBtnStyle,
                   fontSize: "0.6rem",
                   padding: "0.25rem 0.5rem",
                   background: ratingFilter.includes(r) ? "rgba(6,182,212,0.15)" : "#131313",
-                  borderColor: ratingFilter.includes(r)
-                    ? "rgba(6,182,212,0.4)"
-                    : "#1a1a1a",
+                  borderColor: ratingFilter.includes(r) ? "rgba(6,182,212,0.4)" : "#1a1a1a",
                 }}
               >
                 {r}+
@@ -262,6 +298,9 @@ export default function OpeningExplorer() {
         {/* Explorer moves header */}
         <div
           style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             fontFamily: "var(--font-headline)",
             fontSize: "0.65rem",
             color: "#555",
@@ -270,7 +309,12 @@ export default function OpeningExplorer() {
             marginBottom: "0.5rem",
           }}
         >
-          {explorerLoading ? "Loading..." : `Moves (${moves.length})`}
+          <span>{explorerLoading ? "Loading..." : `Moves (${moves.length})`}</span>
+          {!explorerLoading && (
+            <span style={{ fontSize: "0.55rem", color: isLive ? "#22c55e" : "#555" }}>
+              {isLive ? "live" : "offline"}
+            </span>
+          )}
         </div>
 
         {/* Explorer move rows */}
@@ -310,9 +354,12 @@ export default function OpeningExplorer() {
               >
                 {/* Move name */}
                 <span style={{ fontWeight: 700, minWidth: "3rem" }}>{m.san}</span>
-                {/* Game count */}
-                <span style={{ fontSize: "0.65rem", color: "#777", minWidth: "4rem" }}>
-                  {total >= 1000 ? `${(total / 1000).toFixed(1)}k` : total}
+                {/* Game count + percentages */}
+                <span style={{ fontSize: "0.6rem", color: "#777", minWidth: "6rem" }}>
+                  {fmtCount(total)}{" "}
+                  <span style={{ color: "#555" }}>
+                    ({pct(m.white, total)}/{pct(m.draws, total)}/{pct(m.black, total)})
+                  </span>
                 </span>
                 {/* Win/draw/loss bar */}
                 <div
@@ -354,9 +401,7 @@ export default function OpeningExplorer() {
                   key={san}
                   onClick={() => playBookMove(san)}
                   style={{
-                    ...btnStyle,
-                    width: "100%",
-                    textAlign: "left",
+                    ...moveBtnStyle,
                     fontWeight: 700,
                     fontSize: "0.85rem",
                   }}
@@ -378,11 +423,12 @@ export default function OpeningExplorer() {
   );
 }
 
-const btnStyle: React.CSSProperties = {
+/* UI buttons (Reset, Takeback, Flip, db toggle, rating filter) — uppercase OK */
+const uiBtnStyle: React.CSSProperties = {
   fontFamily: "var(--font-headline)",
   fontSize: "0.7rem",
   letterSpacing: "0.1em",
-  textTransform: "uppercase" as const,
+  textTransform: "uppercase",
   padding: "0.4rem 0.8rem",
   background: "#131313",
   color: ACCENT,
@@ -390,4 +436,20 @@ const btnStyle: React.CSSProperties = {
   borderRadius: "3px",
   cursor: "pointer",
   transition: "background 0.15s, border-color 0.15s",
+};
+
+/* Move buttons — NO text-transform to preserve chess notation (Nf3, not NF3) */
+const moveBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-headline)",
+  fontSize: "0.7rem",
+  letterSpacing: "0.05em",
+  padding: "0.45rem 0.75rem",
+  background: "#131313",
+  color: ACCENT,
+  border: "1px solid #1a1a1a",
+  borderRadius: "3px",
+  cursor: "pointer",
+  textAlign: "left",
+  width: "100%",
+  transition: "border-color 0.15s",
 };
