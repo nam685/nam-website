@@ -1,0 +1,62 @@
+/*
+ * Chessground dark theme overrides for nam685.de
+ * Import AFTER chessground/assets/chessground.base.css
+ */
+
+.cg-wrap {
+  --cg-dark: #164e63;
+  --cg-light: #1e293b;
+}
+
+/* Board square colors */
+cg-board square.dark {
+  background-color: #164e63;
+}
+cg-board square.light {
+  background-color: #1e293b;
+}
+
+/* Last move highlight */
+cg-board square.last-move {
+  background-color: rgba(6, 182, 212, 0.2);
+}
+
+/* Selected square */
+cg-board square.selected {
+  background-color: rgba(6, 182, 212, 0.35);
+}
+
+/* Move destination dots */
+cg-board square.move-dest {
+  background: radial-gradient(rgba(6, 182, 212, 0.4) 22%, transparent 22%);
+}
+cg-board square.move-dest.oc {
+  background: radial-gradient(
+    transparent 0%,
+    transparent 80%,
+    rgba(6, 182, 212, 0.3) 80%
+  );
+}
+
+/* Check highlight */
+cg-board square.check {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 0, 0, 0.6) 0%,
+    rgba(255, 0, 0, 0.3) 40%,
+    transparent 70%
+  );
+}
+
+/* Promotion dialog */
+cg-board square.premove-dest {
+  background-color: rgba(6, 182, 212, 0.15);
+}
+
+/* Coordinates */
+.cg-wrap coords {
+  color: #555;
+  font-family: var(--font-headline);
+  font-size: 0.6rem;
+  text-transform: lowercase;
+}
