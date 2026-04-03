@@ -313,11 +313,41 @@ class TestListenTopAlbums:
             album="Album Two",
             played_at=timezone.now(),
         )
+        ListenTrack.objects.create(
+            video_id="alb4",
+            title="Song D",
+            artist="Band Y",
+            album="Album Two",
+            played_at=timezone.now(),
+        )
         resp = client.get("/api/listens/albums/")
         data = resp.json()
         assert data["albums"][0]["name"] == "Album One"
         assert data["albums"][0]["play_count"] == 2
         assert data["albums"][0]["artist"] == "Band X"
+
+    def test_excludes_single_track_albums(self, client, db):
+        """Albums with only 1 unique track should be excluded."""
+        now = timezone.now()
+        # Album with 2 tracks — should be included
+        ListenTrack.objects.create(
+            video_id="multi1", title="Song 1", artist="Band", album="Multi Album",
+            played_at=now,
+        )
+        ListenTrack.objects.create(
+            video_id="multi2", title="Song 2", artist="Band", album="Multi Album",
+            played_at=now - timezone.timedelta(hours=1),
+        )
+        # Album with 1 track — should be excluded
+        ListenTrack.objects.create(
+            video_id="single1", title="Only Song", artist="Solo", album="Single Album",
+            played_at=now - timezone.timedelta(hours=2),
+        )
+        resp = client.get("/api/listens/albums/")
+        data = resp.json()
+        album_names = [a["name"] for a in data["albums"]]
+        assert "Multi Album" in album_names
+        assert "Single Album" not in album_names
 
     def test_excludes_empty_album(self, client, sample_tracks):  # noqa: ARG002
         """Tracks with empty album field are excluded."""

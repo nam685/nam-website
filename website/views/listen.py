@@ -306,6 +306,7 @@ def listen_top_albums(request):
             play_count=Count("id"),
             track_count=Count("video_id", distinct=True),
         )
+        .filter(track_count__gte=2)
         .order_by("-play_count")
     )
     total = albums.count()
