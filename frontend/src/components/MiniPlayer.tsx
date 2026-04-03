@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
@@ -31,6 +32,7 @@ export default function MiniPlayer() {
     toggleMinimize,
     close,
   } = usePlayer();
+  const router = useRouter();
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
 
@@ -49,7 +51,7 @@ export default function MiniPlayer() {
   if (minimized) {
     return (
       <div
-        onClick={toggleMinimize}
+        onClick={() => router.push("/listens")}
         style={{
           position: "fixed",
           bottom: "5rem",
@@ -129,42 +131,54 @@ export default function MiniPlayer() {
           marginBottom: "10px",
         }}
       >
-        <img
-          src={track.thumbnail_url}
-          alt=""
+        <div
+          onClick={() => router.push("/listens")}
           style={{
-            width: "44px",
-            height: "44px",
-            borderRadius: "6px",
-            objectFit: "cover",
-            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            flex: 1,
+            minWidth: 0,
+            cursor: "pointer",
           }}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
+        >
+          <img
+            src={track.thumbnail_url}
+            alt=""
             style={{
-              color: "#e5e2e1",
-              fontSize: "12px",
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              lineHeight: 1.3,
+              width: "44px",
+              height: "44px",
+              borderRadius: "6px",
+              objectFit: "cover",
+              flexShrink: 0,
             }}
-          >
-            {track.title}
-          </div>
-          <div
-            style={{
-              color: "#888",
-              fontSize: "11px",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              lineHeight: 1.3,
-            }}
-          >
-            {track.artist}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                color: "#e5e2e1",
+                fontSize: "12px",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                lineHeight: 1.3,
+              }}
+            >
+              {track.title}
+            </div>
+            <div
+              style={{
+                color: "#888",
+                fontSize: "11px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                lineHeight: 1.3,
+              }}
+            >
+              {track.artist}
+            </div>
           </div>
         </div>
         <div
