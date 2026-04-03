@@ -7,6 +7,7 @@ from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
@@ -20,9 +21,8 @@ _last_sync: float = 0
 SYNC_COOLDOWN = 300
 
 
-@require_admin
 def listen_list(request):
-    """Return recently played tracks (paginated)."""
+    """Return recently played tracks (paginated, public)."""
     try:
         limit = min(max(int(request.GET.get("limit", "50")), 1), 200)
         offset = max(int(request.GET.get("offset", "0")), 0)
@@ -122,9 +122,8 @@ def listen_sync(request):
     return JsonResponse({"synced": len(new_tracks)})
 
 
-@require_admin
 def listen_stats(_request):
-    """Return listening statistics (cached for 5 minutes)."""
+    """Return listening statistics (cached for 5 minutes, public)."""
     cached = redis_cache.get("listen_stats")
     if cached:
         return JsonResponse(cached)
@@ -162,6 +161,23 @@ def listen_stats(_request):
     }
     redis_cache.set("listen_stats", result, 300)
     return JsonResponse(result)
+
+
+@require_GET
+def listen_top_tracks(request):
+    """Return tracks ranked by play count (public)."""
+    limit = min(int(request.GET.get("limit", 50)), 200)
+    offset = int(request.GET.get("offset", 0))
+
+    tracks = (
+        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+        .annotate(play_count=Count("id"))
+        .order_by("-play_count")
+    )
+    total = tracks.count()
+    page = list(tracks[offset : offset + limit])
+
+    return JsonResponse({"tracks": page, "total": total})
 
 
 @require_admin

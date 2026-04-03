@@ -22,6 +22,7 @@ urlpatterns = [
     path("lichess/callback/", views.lichess_callback),
     path("lichess/token/", views.lichess_token),
     path("lichess/status/", views.lichess_status),
+    path("listens/tracks/", views.listen_top_tracks),
     path("listens/", views.listen_list),
     path("listens/sync/", views.listen_sync),
     path("listens/stats/", views.listen_stats),
