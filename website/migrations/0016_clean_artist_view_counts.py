@@ -5,7 +5,7 @@ from django.db import migrations
 VIEW_COUNT_RE = re.compile(r",?\s*\d+\.?\d*\s*[MKBmkb]?\s*views?", re.IGNORECASE)
 
 
-def clean_artist_names(apps, schema_editor):
+def clean_artist_names(apps, _schema_editor):
     ListenTrack = apps.get_model("website", "ListenTrack")
     tracks = ListenTrack.objects.filter(artist__iregex=r"\d+\.?\d*\s*[MKBmkb]?\s*views?")
     updated = []

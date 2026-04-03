@@ -310,7 +310,7 @@ class TestListenTopArtists:
         assert len(data["artists"]) == 2
         assert data["total"] == 5
 
-    def test_splits_collab_artists(self, client, db):
+    def test_splits_collab_artists(self, client, db):  # noqa: ARG002
         """Collab tracks should credit each artist independently."""
         now = timezone.now()
         # 3 solo plays for Artist A
@@ -382,21 +382,30 @@ class TestListenTopAlbums:
         assert data["albums"][0]["play_count"] == 2
         assert data["albums"][0]["artist"] == "Band X"
 
-    def test_excludes_single_track_albums(self, client, db):
+    def test_excludes_single_track_albums(self, client, db):  # noqa: ARG002
         """Albums with only 1 unique track should be excluded."""
         now = timezone.now()
         # Album with 2 tracks — should be included
         ListenTrack.objects.create(
-            video_id="multi1", title="Song 1", artist="Band", album="Multi Album",
+            video_id="multi1",
+            title="Song 1",
+            artist="Band",
+            album="Multi Album",
             played_at=now,
         )
         ListenTrack.objects.create(
-            video_id="multi2", title="Song 2", artist="Band", album="Multi Album",
+            video_id="multi2",
+            title="Song 2",
+            artist="Band",
+            album="Multi Album",
             played_at=now - timezone.timedelta(hours=1),
         )
         # Album with 1 track — should be excluded
         ListenTrack.objects.create(
-            video_id="single1", title="Only Song", artist="Solo", album="Single Album",
+            video_id="single1",
+            title="Only Song",
+            artist="Solo",
+            album="Single Album",
             played_at=now - timezone.timedelta(hours=2),
         )
         resp = client.get("/api/listens/albums/")
@@ -429,7 +438,7 @@ class TestListenRecommended:
         assert resp.status_code == 200
         assert resp.json()["track"] is None
 
-    def test_returns_rediscovery_track(self, client, db):
+    def test_returns_rediscovery_track(self, client, db):  # noqa: ARG002
         """Tracks played often but not recently should be recommended."""
         now = timezone.now()
         # Track played 10 times, last play 20 days ago — good candidate
@@ -455,7 +464,7 @@ class TestListenRecommended:
         assert data["track"] is not None
         assert data["track"]["video_id"] == "rediscover"
 
-    def test_fallback_to_most_played(self, client, db):
+    def test_fallback_to_most_played(self, client, db):  # noqa: ARG002
         """When no tracks qualify for rediscovery, return most played."""
         now = timezone.now()
         # All tracks are recent — none qualify for 14-day rediscovery
