@@ -3,8 +3,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Chess } from "chessops/chess";
 import { makeFen } from "chessops/fen";
-import { makeSan } from "chessops/san";
-import { parseUci } from "chessops/util";
+import { makeSan, parseSan } from "chessops/san";
+import { parseUci, makeUci } from "chessops/util";
 import { chessgroundDests } from "chessops/compat";
 import type { Key } from "chessground/types";
 import ChessgroundBoard from "./ChessgroundBoard";
@@ -71,6 +71,21 @@ export default function OpeningExplorer() {
 
       const pos = position.clone();
       const san = makeSan(pos, move);
+      pos.play(move);
+
+      setPosition(pos);
+      setHistory((h) => [...h, { san, uci, fen: makeFen(pos.toSetup()) }]);
+    },
+    [position],
+  );
+
+  const playBookMove = useCallback(
+    (san: string) => {
+      const move = parseSan(position, san);
+      if (!move) return;
+
+      const pos = position.clone();
+      const uci = makeUci(move);
       pos.play(move);
 
       setPosition(pos);
@@ -337,10 +352,7 @@ export default function OpeningExplorer() {
               {fallbackLookup.bookMoves.map((san) => (
                 <button
                   key={san}
-                  onClick={() => {
-                    /* Would need SAN->UCI conversion -- skip for offline fallback.
-                       Users can just click the board. */
-                  }}
+                  onClick={() => playBookMove(san)}
                   style={{
                     ...btnStyle,
                     width: "100%",
