@@ -113,9 +113,11 @@ function ExpandedCard({
           justifyContent: "space-between",
           alignItems: "flex-start",
           marginBottom: 16,
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div
             style={{
               fontSize: 11,
@@ -141,7 +143,7 @@ function ExpandedCard({
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 24, fontFamily: "monospace", color: "#eee" }}>
+          <div style={{ fontSize: 22, fontFamily: "monospace", color: "#eee" }}>
             {formatPrice(ticker.price, ticker.currency)}
           </div>
           <div
@@ -158,7 +160,7 @@ function ExpandedCard({
 
       {/* Period toggles */}
       <div
-        style={{ display: "flex", gap: 4, marginBottom: 16 }}
+        style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}
         onClick={(e) => e.stopPropagation()}
       >
         {PERIODS.map((p) => (
@@ -257,7 +259,14 @@ function ExpandedCard({
       )}
 
       {/* Change periods */}
-      <div style={{ display: "flex", gap: 24, marginTop: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          marginTop: 16,
+          flexWrap: "wrap",
+        }}
+      >
         {PERIODS.map((p) => {
           const val = history.change_periods[p];
           const c = formatChange(val);
@@ -393,7 +402,13 @@ export default function BetsPage() {
   if (loading) {
     return (
       <div
-        style={{ padding: "80px 24px 24px", maxWidth: 900, margin: "0 auto" }}
+        style={{
+          padding: "80px 24px 24px",
+          maxWidth: 900,
+          margin: "0 auto",
+          position: "relative",
+          zIndex: 1,
+        }}
       >
         <div
           style={{
@@ -410,7 +425,15 @@ export default function BetsPage() {
   }
 
   return (
-    <div style={{ padding: "80px 24px 24px", maxWidth: 900, margin: "0 auto" }}>
+    <div
+      style={{
+        padding: "80px 16px 24px",
+        maxWidth: 900,
+        margin: "0 auto",
+        position: "relative",
+        zIndex: 1,
+      }}
+    >
       {/* Header */}
       <div
         style={{
@@ -418,6 +441,8 @@ export default function BetsPage() {
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 24,
+          flexWrap: "wrap",
+          gap: 12,
         }}
       >
         <div>
@@ -484,7 +509,7 @@ export default function BetsPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
               gap: 8,
               marginBottom: 8,
             }}
@@ -530,7 +555,14 @@ export default function BetsPage() {
               }}
             />
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <select
               value={addForm.asset_type}
               onChange={(e) =>
@@ -615,8 +647,8 @@ export default function BetsPage() {
         style={{
           display: "grid",
           gridTemplateColumns: expandedId
-            ? "repeat(auto-fill, minmax(180px, 1fr))"
-            : "repeat(auto-fill, minmax(280px, 1fr))",
+            ? "repeat(auto-fill, minmax(140px, 1fr))"
+            : "repeat(auto-fill, minmax(260px, 1fr))",
           gap: 12,
           opacity: expandedId ? 0.6 : 1,
           transition: "opacity 0.2s",
