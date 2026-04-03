@@ -29,8 +29,9 @@ def bets_list(_request):
     result = []
     for t in tickers:
         snapshots = list(
-            PriceSnapshot.objects.filter(ticker=t).order_by("date").values_list("date", "price", "change_pct")[:30]
+            PriceSnapshot.objects.filter(ticker=t).order_by("-date").values_list("date", "price", "change_pct")[:30]
         )
+        snapshots.reverse()  # chronological order for sparkline
         latest_price = None
         latest_change = None
         latest_date = None
