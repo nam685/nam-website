@@ -11,6 +11,7 @@ from django.views.decorators.http import require_GET
 
 from website.auth import require_admin
 from website.models import PriceSnapshot, Ticker
+from website.services import search_alpha_vantage, search_coingecko
 from website.utils import parse_json_body
 
 PERIOD_DAYS = {
@@ -207,3 +208,37 @@ def bets_sync_status(_request):
     else:
         status = {"last_sync": None, "errors": []}
     return JsonResponse(status)
+
+
+@require_GET
+@require_admin
+def bets_search(request):
+    """Admin: search for tickers across providers."""
+    q = request.GET.get("q", "").strip()
+    if len(q) < 2:
+        return JsonResponse({"error": "Query must be at least 2 characters"}, status=400)
+
+    try:
+        av_results = search_alpha_vantage(q)
+    except Exception:
+        av_results = []
+
+    try:
+        cg_results = search_coingecko(q)
+    except Exception:
+        cg_results = []
+
+    existing_symbols = set(Ticker.objects.values_list("symbol", flat=True))
+
+    seen = set()
+    merged = []
+    for item in sorted(av_results + cg_results, key=lambda x: x["match_score"], reverse=True):
+        sym = item["symbol"]
+        if sym in seen or sym in existing_symbols:
+            continue
+        seen.add(sym)
+        merged.append(item)
+        if len(merged) >= 8:
+            break
+
+    return JsonResponse(merged, safe=False)

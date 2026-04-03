@@ -10,6 +10,7 @@ urlpatterns = [
     path("bets/create/", views.bets_create),
     path("bets/sync/", views.bets_sync),
     path("bets/sync-status/", views.bets_sync_status),
+    path("bets/search/", views.bets_search),
     path("bets/<int:ticker_id>/history/", views.bets_history),
     path("bets/<int:ticker_id>/delete/", views.bets_delete),
     path("todo/", views.todo_list),
