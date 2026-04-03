@@ -1,9 +1,10 @@
 import logging
+import random
 import re
 import time
 
 from django.core.cache import cache as redis_cache
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
@@ -165,6 +166,81 @@ def listen_stats(_request):
         "daily": [{"date": d["date"].isoformat(), "count": d["count"]} for d in daily],
     }
     redis_cache.set("listen_stats", result, 300)
+    return JsonResponse(result)
+
+
+@require_GET
+def listen_recommended(_request):
+    """Return a single recommended track using rediscovery algorithm."""
+    cached = redis_cache.get("listen_recommended")
+    if cached:
+        return JsonResponse(cached)
+
+    total_tracks = ListenTrack.objects.values("video_id").annotate(play_count=Count("id")).count()
+    if total_tracks == 0:
+        result = {"track": None}
+        redis_cache.set("listen_recommended", result, 3600)
+        return JsonResponse(result)
+
+    # Find tracks in top 25% by play count not played in last 14 days
+    cutoff = timezone.now() - timezone.timedelta(days=14)
+
+    candidates = (
+        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+        .annotate(
+            play_count=Count("id"),
+            last_played=Max("played_at"),
+        )
+        .filter(last_played__lt=cutoff)
+        .order_by("-play_count")
+    )
+
+    # Determine top-25% threshold
+    all_play_counts = list(
+        ListenTrack.objects.values("video_id")
+        .annotate(play_count=Count("id"))
+        .order_by("-play_count")
+        .values_list("play_count", flat=True)
+    )
+    if all_play_counts:
+        threshold_idx = max(0, len(all_play_counts) // 4 - 1)
+        threshold = all_play_counts[threshold_idx]
+        candidates = candidates.filter(play_count__gte=threshold)
+
+    candidates = list(candidates[:50])
+
+    if candidates:
+        # Weighted random: play_count * days_since_last_play
+        now = timezone.now()
+        weights = []
+        for c in candidates:
+            days_since = (now - c["last_played"]).days
+            weights.append(c["play_count"] * max(days_since, 1))
+        pick = random.choices(candidates, weights=weights, k=1)[0]
+    else:
+        # Fallback: most played track overall
+        pick = (
+            ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+            .annotate(play_count=Count("id"), last_played=Max("played_at"))
+            .order_by("-play_count")
+            .first()
+        )
+
+    if pick:
+        track = {
+            "video_id": pick["video_id"],
+            "title": pick["title"],
+            "artist": pick["artist"],
+            "album": pick["album"],
+            "thumbnail_url": pick["thumbnail_url"],
+            "play_count": pick["play_count"],
+            "last_played": pick["last_played"].isoformat() if pick["last_played"] else None,
+        }
+    else:
+        track = None
+
+    result = {"track": track}
+    redis_cache.set("listen_recommended", result, 3600)
     return JsonResponse(result)
 
 

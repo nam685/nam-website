@@ -334,3 +334,59 @@ class TestListenTopAlbums:
         data = resp.json()
         for album in data["albums"]:
             assert album["name"] != ""
+
+
+@pytest.mark.django_db
+class TestListenRecommended:
+    def test_empty_db(self, client):
+        resp = client.get("/api/listens/recommended/")
+        assert resp.status_code == 200
+        assert resp.json()["track"] is None
+
+    def test_returns_rediscovery_track(self, client, db):
+        """Tracks played often but not recently should be recommended."""
+        now = timezone.now()
+        # Track played 10 times, last play 20 days ago — good candidate
+        for i in range(10):
+            ListenTrack.objects.create(
+                video_id="rediscover",
+                title="Old Favorite",
+                artist="Artist A",
+                album="Album A",
+                thumbnail_url="https://example.com/thumb.jpg",
+                played_at=now - timezone.timedelta(days=20 + i),
+            )
+        # Track played 2 times, last play 1 day ago — too recent
+        for i in range(2):
+            ListenTrack.objects.create(
+                video_id="recent",
+                title="Recent Song",
+                artist="Artist B",
+                played_at=now - timezone.timedelta(days=i),
+            )
+        resp = client.get("/api/listens/recommended/")
+        data = resp.json()
+        assert data["track"] is not None
+        assert data["track"]["video_id"] == "rediscover"
+
+    def test_fallback_to_most_played(self, client, db):
+        """When no tracks qualify for rediscovery, return most played."""
+        now = timezone.now()
+        # All tracks are recent — none qualify for 14-day rediscovery
+        for i in range(5):
+            ListenTrack.objects.create(
+                video_id="popular",
+                title="Popular Song",
+                artist="Artist",
+                played_at=now - timezone.timedelta(hours=i),
+            )
+        ListenTrack.objects.create(
+            video_id="less_popular",
+            title="Less Popular",
+            artist="Artist",
+            played_at=now - timezone.timedelta(hours=10),
+        )
+        resp = client.get("/api/listens/recommended/")
+        data = resp.json()
+        assert data["track"] is not None
+        assert data["track"]["video_id"] == "popular"
