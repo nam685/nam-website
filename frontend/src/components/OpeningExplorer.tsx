@@ -183,6 +183,8 @@ export default function OpeningExplorer() {
               fontFamily: "var(--font-headline)",
               letterSpacing: "0.02em",
               lineHeight: 1.8,
+              maxHeight: "200px",
+              overflowY: "auto",
             }}
           >
             {history.map((h, i) =>
