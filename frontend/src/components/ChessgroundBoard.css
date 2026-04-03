@@ -4,16 +4,16 @@
  */
 
 .cg-wrap {
-  --cg-dark: #164e63;
-  --cg-light: #1e293b;
+  --cg-dark: #1a1a1a;
+  --cg-light: #2a2a2a;
 }
 
 /* Board square colors */
 cg-board square.dark {
-  background-color: #164e63;
+  background-color: #1a1a1a;
 }
 cg-board square.light {
-  background-color: #1e293b;
+  background-color: #2a2a2a;
 }
 
 /* Last move highlight */
