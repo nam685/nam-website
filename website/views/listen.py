@@ -150,7 +150,7 @@ def listen_stats(_request):
         ListenTrack.objects.filter(played_at__gte=month_start)
         .values("video_id", "title", "artist", "thumbnail_url")
         .annotate(play_count=Count("id"))
-        .order_by("-play_count")[:10]
+        .order_by("-play_count")[:12]
     )
 
     daily = (
