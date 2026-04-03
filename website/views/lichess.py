@@ -10,6 +10,7 @@ import urllib.request
 from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt  # used on lichess_disconnect
 
 from ..auth import require_admin, verify_token
 from ..models import LichessToken
@@ -168,6 +169,7 @@ def lichess_token(request):  # noqa: ARG001
     )
 
 
+@csrf_exempt
 @require_admin
 def lichess_disconnect(request):  # noqa: ARG001
     """Revoke stored Lichess token and delete from DB."""
