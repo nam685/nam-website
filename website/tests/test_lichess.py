@@ -1,7 +1,10 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from django.utils import timezone
 
 from website.models import LichessToken
+from website.views import lichess as lichess_views
 
 
 @pytest.mark.django_db
@@ -31,3 +34,144 @@ class TestLichessToken:
         )
         assert LichessToken.objects.count() == 1
         assert LichessToken.objects.first().lichess_username == "newuser"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    lichess_views._last_sync = 0
+    yield
+    lichess_views._last_sync = 0
+
+
+# ── Auth guard ──────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLichessAuthGuard:
+    def test_auth_requires_admin_token(self, client):
+        resp = client.get("/api/lichess/auth/")
+        assert resp.status_code == 401
+
+    def test_auth_rejects_bad_token(self, client):
+        resp = client.get("/api/lichess/auth/?token=bad")
+        assert resp.status_code == 401
+
+    def test_token_requires_auth(self, client):
+        resp = client.get("/api/lichess/token/")
+        assert resp.status_code == 401
+
+
+# ── Auth endpoint ────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLichessAuth:
+    def test_redirects_to_lichess(self, client, admin_token):
+        resp = client.get(f"/api/lichess/auth/?token={admin_token}")
+        assert resp.status_code == 302
+        location = resp["Location"]
+        assert "lichess.org/oauth" in location
+        assert "nam685.de" in location
+        assert "board%3Aplay" in location
+        assert "code_challenge=" in location
+
+
+# ── Callback endpoint ────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLichessCallback:
+    def test_callback_missing_code(self, client):
+        resp = client.get("/api/lichess/callback/")
+        assert resp.status_code == 400
+
+    def test_callback_bad_state(self, client):
+        resp = client.get("/api/lichess/callback/?code=test&state=bad:bad")
+        assert resp.status_code == 401
+
+    @patch("website.views.lichess.urllib.request.urlopen")
+    def test_callback_exchanges_token(self, mock_urlopen, client, admin_token):
+        from django.core.cache import cache
+
+        cache.set("lichess_pkce_nonce123", "test_verifier_string", 600)
+
+        token_resp = MagicMock()
+        token_resp.read.return_value = b'{"access_token":"lip_abc","expires_in":31536000}'
+        token_resp.__enter__ = lambda s: s
+        token_resp.__exit__ = MagicMock(return_value=False)
+
+        account_resp = MagicMock()
+        account_resp.read.return_value = b'{"username":"nam685"}'
+        account_resp.__enter__ = lambda s: s
+        account_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [token_resp, account_resp]
+
+        resp = client.get(f"/api/lichess/callback/?code=authcode&state=nonce123:{admin_token}")
+        assert resp.status_code == 302
+        assert resp["Location"] == "/plays"
+        assert LichessToken.objects.count() == 1
+        assert LichessToken.objects.first().lichess_username == "nam685"
+
+    @patch("website.views.lichess.urllib.request.urlopen")
+    def test_callback_rate_limited(self, mock_urlopen, client, admin_token):
+        from django.core.cache import cache
+
+        cache.set("lichess_pkce_nonce1", "verifier1", 600)
+
+        token_resp = MagicMock()
+        token_resp.read.return_value = b'{"access_token":"lip_abc","expires_in":31536000}'
+        token_resp.__enter__ = lambda s: s
+        token_resp.__exit__ = MagicMock(return_value=False)
+
+        account_resp = MagicMock()
+        account_resp.read.return_value = b'{"username":"nam685"}'
+        account_resp.__enter__ = lambda s: s
+        account_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_urlopen.side_effect = [token_resp, account_resp]
+        client.get(f"/api/lichess/callback/?code=code1&state=nonce1:{admin_token}")
+
+        cache.set("lichess_pkce_nonce2", "verifier2", 600)
+        resp = client.get(f"/api/lichess/callback/?code=code2&state=nonce2:{admin_token}")
+        assert resp.status_code == 302
+        assert "error=" in resp["Location"]
+
+
+# ── Token endpoint ───────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLichessTokenEndpoint:
+    def test_no_token_stored(self, client, auth_headers):
+        data = client.get("/api/lichess/token/", **auth_headers).json()
+        assert data == {"error": "Not connected"}
+
+    def test_returns_token(self, client, auth_headers):
+        LichessToken.objects.create(
+            access_token="lip_test",
+            lichess_username="nam685",
+            expires_at=timezone.now() + timezone.timedelta(days=365),
+        )
+        data = client.get("/api/lichess/token/", **auth_headers).json()
+        assert data["access_token"] == "lip_test"
+        assert data["username"] == "nam685"
+
+
+# ── Status endpoint ──────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLichessStatus:
+    def test_not_connected(self, client):
+        data = client.get("/api/lichess/status/").json()
+        assert data == {"connected": False, "username": None}
+
+    def test_connected(self, client):
+        LichessToken.objects.create(
+            access_token="lip_test",
+            lichess_username="nam685",
+            expires_at=timezone.now() + timezone.timedelta(days=365),
+        )
+        data = client.get("/api/lichess/status/").json()
+        assert data == {"connected": True, "username": "nam685"}
