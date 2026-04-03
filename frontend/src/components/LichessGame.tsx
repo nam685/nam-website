@@ -284,7 +284,7 @@ export default function LichessGame({ token, gameId, myColor, onGameEnd }: Props
               color: "#aaa",
               fontFamily: "var(--font-headline)",
               lineHeight: 1.8,
-              maxHeight: "calc(7 * 0.75rem * 1.8 + 1rem)",
+              maxHeight: "200px",
               overflowY: "auto",
             }}
           >
