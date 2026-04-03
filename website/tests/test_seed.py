@@ -123,3 +123,45 @@ class TestSeedCommand:
         output = capsys.readouterr().out
         assert "No seed fixture found" in output
         assert ListenTrack.objects.count() == 0
+
+
+@pytest.mark.django_db
+class TestDumpseedCommand:
+    def test_dumpseed_exports_seeded_models(self, tmp_path):
+        ListenTrack.objects.create(
+            video_id="abc123",
+            title="Song",
+            artist="Artist",
+            played_at="2026-01-01T12:00:00Z",
+        )
+        WatchChannel.objects.create(
+            youtube_channel_id="UC_test",
+            name="Channel",
+        )
+        GitHubContributions.objects.create(
+            pk=1,
+            data={"totalContributions": 10, "weeks": []},
+        )
+
+        output_file = tmp_path / "seed.json"
+
+        with patch("website.management.commands.dumpseed.SEED_FILE", output_file):
+            call_command("dumpseed")
+
+        assert output_file.exists()
+        data = json.loads(output_file.read_text())
+        models = {obj["model"] for obj in data}
+        assert "website.listentrack" in models
+        assert "website.watchchannel" in models
+        assert "website.githubcontributions" in models
+        assert "website.feedback" not in models  # not a seeded model
+
+    def test_dumpseed_warns_when_empty(self, tmp_path, capsys):
+        output_file = tmp_path / "seed.json"
+
+        with patch("website.management.commands.dumpseed.SEED_FILE", output_file):
+            call_command("dumpseed")
+
+        output = capsys.readouterr().out
+        assert "No data" in output
+        assert not output_file.exists()
