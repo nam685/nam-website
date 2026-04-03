@@ -217,6 +217,52 @@ class TestCoinGeckoAdapter:
         assert result[0][1] == Decimal("84000.50")
 
 
+class TestCoinGeckoSearch:
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_returns_mapped_results(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "coins": [
+                    {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+                    {"id": "ethereum", "name": "Ethereum", "symbol": "eth"},
+                    {"id": "bitcoin-cash", "name": "Bitcoin Cash", "symbol": "bch"},
+                ]
+            },
+        )
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("bitcoin")
+        assert len(results) == 3
+        assert results[0]["symbol"] == "BTC"
+        assert results[0]["name"] == "Bitcoin"
+        assert results[0]["asset_type"] == "crypto"
+        assert results[0]["provider"] == "coingecko"
+        assert results[0]["provider_id"] == "bitcoin"
+        assert results[0]["currency"] == "USD"
+        assert results[0]["match_score"] == 1.0
+        assert results[2]["match_score"] < 1.0
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_limits_to_five(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"coins": [{"id": f"coin-{i}", "name": f"Coin {i}", "symbol": f"C{i}"} for i in range(10)]},
+        )
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("coin")
+        assert len(results) == 5
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_search_handles_api_failure(self, mock_get):
+        mock_get.side_effect = Exception("API down")
+        from website.services.coingecko import search_coingecko
+
+        results = search_coingecko("bitcoin")
+        assert results == []
+
+
 class TestECBAdapter:
     @patch("website.services.ecb.httpx.get")
     def test_fetch_bond_yield(self, mock_get):
