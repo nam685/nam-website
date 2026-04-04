@@ -46,12 +46,17 @@
   padding: 0;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   background: #0e0e0e;
   color: #e5e2e1;
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 a {
@@ -171,7 +176,7 @@ a {
 /* Cards grid */
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 1.25rem;
   margin-top: 1.5rem;
 }
@@ -212,7 +217,7 @@ a {
 /* Image grid */
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
   gap: 1rem;
   margin-top: 1.5rem;
 }
