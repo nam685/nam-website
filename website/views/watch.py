@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import time
 import urllib.parse
 import urllib.request
@@ -74,6 +75,47 @@ def watch_list(request):
             "total": total,
             "limit": limit,
             "offset": offset,
+        }
+    )
+
+
+def watch_recommended(request):  # noqa: ARG001
+    """Public: return a weighted-random pinned video for the hero section."""
+    visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
+    tier_weights = {"never_miss": 3, "regular": 2, "check_out": 1}
+
+    pinned_videos = WatchVideo.objects.filter(
+        pinned=True,
+        visible=True,
+        channel__isnull=False,
+        channel__tier__in=visible_tiers,
+    ).select_related("channel")
+
+    if not pinned_videos.exists():
+        return JsonResponse({"video": None})
+
+    weighted = []
+    for v in pinned_videos:
+        weight = tier_weights.get(v.channel.tier, 1)
+        weighted.extend([v] * weight)
+
+    chosen = random.choice(weighted)
+
+    return JsonResponse(
+        {
+            "video": {
+                "id": chosen.id,
+                "youtube_video_id": chosen.youtube_video_id,
+                "title": chosen.title,
+                "thumbnail_url": chosen.thumbnail_url,
+                "view_count": chosen.view_count,
+                "like_count": chosen.like_count,
+                "comment_count": chosen.comment_count,
+                "description": chosen.description,
+                "duration": chosen.duration,
+                "channel_name": chosen.channel.name,
+                "channel_thumbnail_url": chosen.channel.thumbnail_url,
+            }
         }
     )
 

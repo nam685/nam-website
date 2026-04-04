@@ -279,6 +279,39 @@ class TestWatchVideoDelete:
         assert WatchVideo.objects.count() == 0
 
 
+@pytest.mark.django_db
+class TestWatchRecommended:
+    def test_empty_when_no_pinned_videos(self, client):
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_returns_pinned_video_from_visible_channel(self, client, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/recommended/").json()
+        video = data["video"]
+        assert video is not None
+        assert video["youtube_video_id"] == "vid_pinned"
+        assert video["title"] == "Great Video"
+        assert video["channel_name"] == "Top Channel"
+        assert video["channel_thumbnail_url"] is not None
+        assert "view_count" in video
+        assert "like_count" in video
+        assert "comment_count" in video
+        assert "description" in video
+        assert "duration" in video
+
+    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
+        hidden_ch = WatchChannel.objects.create(youtube_channel_id="UC_hidden_rec", name="Hidden", tier="hidden")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_hidden_rec",
+            title="Hidden Vid",
+            pinned=True,
+            visible=True,
+            channel=hidden_ch,
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+
 @pytest.fixture(autouse=True)
 def _reset_watch_rate_limit():
     watch_views._last_sync = 0
