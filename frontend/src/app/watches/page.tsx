@@ -1014,20 +1014,20 @@ export default function WatchesPage() {
               onScroll={handleGridScroll}
             >
               <div className="watches-grid">{gridItems}</div>
-              {!scrolledToBottom && (
-                <div
-                  style={{
-                    position: "sticky",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 32,
-                    background: "linear-gradient(transparent, #0a0a0a)",
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
             </div>
+            {!scrolledToBottom && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 60,
+                  background: "linear-gradient(transparent, #0a0a0a)",
+                  pointerEvents: "none",
+                }}
+              />
+            )}
           )}
         </div>
       </div>
@@ -1037,7 +1037,7 @@ export default function WatchesPage() {
         style={{
           position: "fixed",
           bottom: "1.5rem",
-          left: "1.5rem",
+          left: "4.5rem",
           fontStyle: "italic",
           color: "#444",
           fontSize: "0.8rem",
