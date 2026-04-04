@@ -247,6 +247,13 @@ def watch_video_pin(_request, video_id):
     if video.pinned:
         video.visible = True
     video.save(update_fields=["pinned", "visible"])
+
+    # Fetch stats if pinning and stats are missing
+    if video.pinned and not video.stats_updated_at:
+        access_token = _refresh_access_token()
+        if access_token:
+            _fetch_video_stats(access_token, [video.youtube_video_id])
+
     return JsonResponse({"ok": True, "pinned": video.pinned, "visible": video.visible})
 
 
@@ -708,6 +715,7 @@ def watch_channel_pin_videos(request, channel_id):
     videos_data = body.get("videos", [])
     pinned_count = 0
 
+    pinned_yt_ids = []
     for vdata in videos_data:
         yt_id = vdata.get("youtube_video_id")
         if not yt_id:
@@ -722,7 +730,14 @@ def watch_channel_pin_videos(request, channel_id):
         video.pinned = True
         video.visible = True
         video.save(update_fields=["channel", "title", "thumbnail_url", "pinned", "visible"])
+        pinned_yt_ids.append(yt_id)
         pinned_count += 1
+
+    # Fetch stats (view/like/comment counts, description, duration) for newly pinned videos
+    if pinned_yt_ids:
+        access_token = _refresh_access_token()
+        if access_token:
+            _fetch_video_stats(access_token, pinned_yt_ids)
 
     return JsonResponse({"pinned": pinned_count})
 
