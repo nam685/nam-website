@@ -198,6 +198,41 @@ class TestAlphaVantageSearch:
         results = search_alpha_vantage("vwce")
         assert results == []
 
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_search_refines_bond_etf(self, mock_get):
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "bestMatches": [
+                    {
+                        "1. symbol": "IBGL.AMS",
+                        "2. name": "iShares EUR Govt Bond 15-30yr UCITS ETF",
+                        "3. type": "ETF",
+                        "4. region": "Amsterdam",
+                        "8. currency": "EUR",
+                        "9. matchScore": "0.8000",
+                    },
+                    {
+                        "1. symbol": "GLD",
+                        "2. name": "SPDR Gold Shares",
+                        "3. type": "ETF",
+                        "4. region": "United States",
+                        "8. currency": "USD",
+                        "9. matchScore": "1.0000",
+                    },
+                ]
+            },
+        )
+        from website.services.alpha_vantage import search_alpha_vantage
+
+        results = search_alpha_vantage("ibgl")
+        assert results[0]["symbol"] == "IBGL.AMS"
+        assert results[0]["asset_type"] == "bond"
+        assert results[0]["provider"] == "alpha_vantage"
+        assert results[1]["symbol"] == "GLD"
+        assert results[1]["asset_type"] == "commodity"
+        assert results[1]["provider"] == "alpha_vantage"
+
 
 class TestCoinGeckoAdapter:
     @patch("website.services.coingecko.httpx.get")

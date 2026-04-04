@@ -64,6 +64,14 @@ function Sparkline({
 
 const PERIODS = ["1W", "1M", "3M", "1Y", "ALL"] as const;
 
+const SECTION_ORDER = ["stock", "bond", "commodity", "crypto"] as const;
+const SECTION_LABELS: Record<string, string> = {
+  stock: "Stocks",
+  bond: "Bonds",
+  commodity: "Gold",
+  crypto: "Crypto",
+};
+
 function ExpandedCard({
   ticker,
   history,
@@ -118,16 +126,6 @@ function ExpandedCard({
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 11,
-              color: "#555",
-              textTransform: "uppercase",
-              letterSpacing: 1,
-            }}
-          >
-            {ticker.asset_type}
-          </div>
           <div
             style={{
               fontSize: 20,
@@ -309,6 +307,7 @@ export default function BetsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BetsSearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -340,26 +339,29 @@ export default function BetsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => {
-    if (searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  const doSearch = async () => {
+    if (searchQuery.length < 2) return;
     setSearching(true);
-    const timer = setTimeout(() => {
+    setSearchError(null);
+    try {
       const token = store("adminToken");
-      fetch(`${API}/api/bets/search/?q=${encodeURIComponent(searchQuery)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) setSearchResults(data);
-        })
-        .catch(console.error)
-        .finally(() => setSearching(false));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+      const r = await fetch(
+        `${API}/api/bets/search/?q=${encodeURIComponent(searchQuery)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        setSearchResults(data);
+      } else if (data.error) {
+        setSearchError(data.error);
+        setSearchResults([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -519,9 +521,16 @@ export default function BetsPage() {
         >
           <input
             autoFocus
-            placeholder="Search ticker (e.g. VWCE, Bitcoin)..."
+            placeholder="Search ticker and press Enter..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchResults([]);
+              setSearchError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") doSearch();
+            }}
             style={{
               background: "#111",
               border: "1px solid #333",
@@ -537,11 +546,19 @@ export default function BetsPage() {
               Searching...
             </div>
           )}
-          {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
-            <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
-              No results
+          {searchError && (
+            <div style={{ fontSize: 12, color: RED, marginTop: 8 }}>
+              {searchError}
             </div>
           )}
+          {!searching &&
+            !searchError &&
+            searchQuery.length >= 2 &&
+            searchResults.length === 0 && (
+              <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
+                Press Enter to search
+              </div>
+            )}
           {searchResults.length > 0 && (
             <div
               style={{
@@ -621,145 +638,162 @@ export default function BetsPage() {
         />
       )}
 
-      {/* Card grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: expandedId
-            ? "repeat(auto-fill, minmax(min(140px, 100%), 1fr))"
-            : "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
-          gap: 12,
-          opacity: expandedId ? 0.6 : 1,
-          transition: "opacity 0.2s",
-        }}
-      >
-        {tickers
-          .filter((t) => t.id !== expandedId)
-          .map((t) => {
-            const change = formatChange(t.change_pct);
-            return (
-              <div
-                key={t.id}
-                onClick={() => {
-                  setExpandedId(t.id);
-                  setHistoryPeriod("1M");
-                }}
-                style={{
-                  border: "1px solid #222",
-                  padding: expandedId ? 12 : 16,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                  position: "relative",
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.borderColor = "#444")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.borderColor = "#222")
-                }
-              >
-                {isAdmin && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(t.id);
+      {/* Sectioned card grids */}
+      {SECTION_ORDER.filter((type) =>
+        tickers.some((t) => t.asset_type === type),
+      ).map((type) => {
+        const section = tickers.filter(
+          (t) => t.asset_type === type && t.id !== expandedId,
+        );
+        if (section.length === 0 && expandedId) return null;
+        return (
+          <div key={type} style={{ marginBottom: 28 }}>
+            <div
+              style={{
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: 2,
+                color: "#444",
+                marginBottom: 10,
+                borderBottom: "1px solid #1a1a1a",
+                paddingBottom: 6,
+              }}
+            >
+              {SECTION_LABELS[type] || type}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: expandedId
+                  ? "repeat(auto-fill, minmax(min(140px, 100%), 1fr))"
+                  : "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
+                gap: 12,
+                opacity: expandedId ? 0.6 : 1,
+                transition: "opacity 0.2s",
+              }}
+            >
+              {section.map((t) => {
+                const change = formatChange(t.change_pct);
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => {
+                      setExpandedId(t.id);
+                      setHistoryPeriod("1M");
                     }}
                     style={{
-                      position: "absolute",
-                      top: 4,
-                      right: 8,
-                      background: "none",
-                      border: "none",
-                      color: "#444",
+                      border: "1px solid #222",
+                      padding: expandedId ? 12 : 16,
                       cursor: "pointer",
-                      fontSize: 14,
+                      transition: "all 0.2s",
+                      position: "relative",
                     }}
-                    title="Remove ticker"
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.borderColor = "#444")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.borderColor = "#222")
+                    }
                   >
-                    ×
-                  </button>
-                )}
-                {expandedId ? (
-                  <>
-                    <div style={{ fontSize: 14, color: "#eee" }}>
-                      {t.symbol}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontFamily: "monospace",
-                        color: change.color,
-                      }}
-                    >
-                      {formatPrice(t.price, t.currency)} {change.text}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "#555",
-                            textTransform: "uppercase",
-                            letterSpacing: 1,
-                          }}
-                        >
-                          {t.asset_type}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 600,
-                            color: "#eee",
-                            marginTop: 2,
-                          }}
-                        >
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(t.id);
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 8,
+                          background: "none",
+                          border: "none",
+                          color: "#444",
+                          cursor: "pointer",
+                          fontSize: 14,
+                        }}
+                        title="Remove ticker"
+                      >
+                        ×
+                      </button>
+                    )}
+                    {expandedId ? (
+                      <>
+                        <div style={{ fontSize: 14, color: "#eee" }}>
                           {t.symbol}
                         </div>
                         <div
-                          style={{ fontSize: 11, color: "#666", marginTop: 2 }}
-                        >
-                          {t.name}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div
                           style={{
-                            fontSize: 18,
-                            fontFamily: "monospace",
-                            color: "#eee",
-                          }}
-                        >
-                          {formatPrice(t.price, t.currency)}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 13,
+                            fontSize: 12,
                             fontFamily: "monospace",
                             color: change.color,
                           }}
                         >
-                          {change.text}
+                          {formatPrice(t.price, t.currency)} {change.text}
                         </div>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                      <Sparkline data={t.sparkline} color={change.color} />
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-      </div>
+                      </>
+                    ) : (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 16,
+                                fontWeight: 600,
+                                color: "#eee",
+                                marginTop: 2,
+                              }}
+                            >
+                              {t.symbol}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: "#666",
+                                marginTop: 2,
+                              }}
+                            >
+                              {t.name}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div
+                              style={{
+                                fontSize: 18,
+                                fontFamily: "monospace",
+                                color: "#eee",
+                              }}
+                            >
+                              {formatPrice(t.price, t.currency)}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontFamily: "monospace",
+                                color: change.color,
+                              }}
+                            >
+                              {change.text}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: 12 }}>
+                          <Sparkline data={t.sparkline} color={change.color} />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
 
       {!loading && tickers.length === 0 && (
         <div

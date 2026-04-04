@@ -141,6 +141,15 @@ class TestListenStats:
 
 # ── Sync endpoint (browser auth) ─────────────────────
 
+FAKE_BROWSER_JSON = json.dumps({"cookie": "SAPISID=abc; __Secure-3PAPISID=abc", "origin": "https://music.youtube.com"})
+
+
+def _mock_open_browser():
+    """Return a mock for builtins.open that returns fake browser.json content."""
+    from unittest.mock import mock_open
+
+    return mock_open(read_data=FAKE_BROWSER_JSON)
+
 
 @pytest.mark.django_db
 class TestListenSync:
@@ -161,7 +170,8 @@ class TestListenSync:
         mock_yt.get_history.return_value = MOCK_HISTORY
         mock_ytmusic_cls.return_value = mock_yt
 
-        resp = client.post("/api/listens/sync/", **auth_headers)
+        with patch("builtins.open", _mock_open_browser()):
+            resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 200
         assert resp.json()["synced"] == 2
         assert ListenTrack.objects.count() == 2
@@ -177,7 +187,8 @@ class TestListenSync:
         mock_yt.get_history.return_value = MOCK_HISTORY
         mock_ytmusic_cls.return_value = mock_yt
 
-        resp = client.post("/api/listens/sync/", **auth_headers)
+        with patch("builtins.open", _mock_open_browser()):
+            resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.json()["synced"] == 1
         assert ListenTrack.objects.count() == 2
 
@@ -188,7 +199,8 @@ class TestListenSync:
         mock_yt.get_history.return_value = []
         mock_ytmusic_cls.return_value = mock_yt
 
-        client.post("/api/listens/sync/", **auth_headers)
+        with patch("builtins.open", _mock_open_browser()):
+            client.post("/api/listens/sync/", **auth_headers)
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 429
         assert "Rate limited" in resp.json()["error"]
@@ -197,7 +209,8 @@ class TestListenSync:
     @patch("ytmusicapi.YTMusic")
     def test_ytmusic_error(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
         mock_ytmusic_cls.side_effect = Exception("Auth failed")
-        resp = client.post("/api/listens/sync/", **auth_headers)
+        with patch("builtins.open", _mock_open_browser()):
+            resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 502
 
     @patch("os.path.isfile", return_value=True)
@@ -224,7 +237,8 @@ class TestListenSync:
         ]
         mock_ytmusic_cls.return_value = mock_yt
 
-        resp = client.post("/api/listens/sync/", **auth_headers)
+        with patch("builtins.open", _mock_open_browser()):
+            resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 200
         assert resp.json()["synced"] == 2
         assert ListenTrack.objects.get(video_id="grissini1").artist == "Grissini Project"
