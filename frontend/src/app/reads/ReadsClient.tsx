@@ -90,22 +90,13 @@ const READS: ReadItem[] = [
 
 const FUTURE_READS: ReadItem[] = [
   {
-    title: "The Elements of Statistical Learning",
-    author: "Hastie, Tibshirani, Friedman",
+    title: "AI Engineering",
+    author: "Chip Huyen",
     type: "book",
     description:
-      "Comprehensive reference on statistical learning methods. The math-heavy companion to PRML.",
-    tags: ["statistics", "machine learning", "reference"],
-    url: "",
-  },
-  {
-    title: "Gödel, Escher, Bach",
-    author: "Douglas Hofstadter",
-    type: "book",
-    description:
-      "A metaphorical fugue on minds and machines in the spirit of Lewis Carroll.",
-    tags: ["philosophy", "logic", "consciousness"],
-    url: "",
+      "Building applications with foundation models. Covers evaluation, RAG, agents, dataset engineering, and finetuning.",
+    tags: ["AI", "engineering", "LLMs"],
+    url: "https://github.com/chiphuyen/aie-book",
   },
 ];
 
