@@ -34,7 +34,7 @@ export default function PageBackground() {
 
   return (
     <div
-      className="z-0 pointer-events-none animate-[fadeIn_0.4s_ease-out]"
+      className="z-0 pointer-events-none"
       style={{
         position: "fixed",
         top: 0,
