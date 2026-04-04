@@ -42,10 +42,10 @@
     "model": "website.watchchannel",
     "pk": 1,
     "fields": {
-      "youtube_channel_id": "UC_x5XG1OV2P6uZZ5FSM9Ttw",
-      "name": "Google for Developers",
-      "description": "The Google Developers channel",
-      "thumbnail_url": "https://yt3.ggpht.com/example/photo.jpg",
+      "youtube_channel_id": "UCHnyfMqiRRG1u-2MsSQLbXA",
+      "name": "Veritasium",
+      "description": "Science and engineering videos",
+      "thumbnail_url": "https://yt3.ggpht.com/ytc/AIdro_kS7PjDs64bJ0bQFBsFmE7aTXI6JxZkY3u-BjP2NELbvfI=s88-c-k-c0x00ffffff-no-rj",
       "tier": "never_miss",
       "display_order": 0,
       "created_at": "2026-03-01T00:00:00Z",
@@ -59,9 +59,51 @@
       "youtube_channel_id": "UCsBjURrPoezykLs9EqgamOA",
       "name": "Fireship",
       "description": "High-intensity code tutorials",
-      "thumbnail_url": "https://yt3.ggpht.com/example/fireship.jpg",
+      "thumbnail_url": "https://yt3.ggpht.com/ytc/AIdro_lGRp-MNZ_LO1sJQmCWL0v3XNHP2d4YS18RXZq3_QbKCA=s88-c-k-c0x00ffffff-no-rj",
       "tier": "regular",
       "display_order": 1,
+      "created_at": "2026-03-01T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchchannel",
+    "pk": 3,
+    "fields": {
+      "youtube_channel_id": "UCsXVk37bltHxD1rDPwtNM8Q",
+      "name": "Kurzgesagt",
+      "description": "In a Nutshell — animated science videos",
+      "thumbnail_url": "https://yt3.ggpht.com/ytc/AIdro_mBz79MN54bpMA_bcLJ8V2fZQCN2mWjX5p2UILL0lJDCA=s88-c-k-c0x00ffffff-no-rj",
+      "tier": "regular",
+      "display_order": 2,
+      "created_at": "2026-03-01T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchchannel",
+    "pk": 4,
+    "fields": {
+      "youtube_channel_id": "UCYO_jab_esuFRV4b17AJtAw",
+      "name": "3Blue1Brown",
+      "description": "Animated math explorations",
+      "thumbnail_url": "https://yt3.ggpht.com/ytc/AIdro_nK_dAzHpjJMAMWp0xg8i27JcpEhCCmDSc5L5ta5SqvVMQ=s88-c-k-c0x00ffffff-no-rj",
+      "tier": "never_miss",
+      "display_order": 3,
+      "created_at": "2026-03-01T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchchannel",
+    "pk": 5,
+    "fields": {
+      "youtube_channel_id": "UC2C_jShtL725hvbm1arSV9w",
+      "name": "CGP Grey",
+      "description": "",
+      "thumbnail_url": "",
+      "tier": "check_out",
+      "display_order": 4,
       "created_at": "2026-03-01T00:00:00Z",
       "synced_at": "2026-04-01T12:00:00Z"
     }
@@ -70,13 +112,40 @@
     "model": "website.watchvideo",
     "pk": 1,
     "fields": {
-      "youtube_video_id": "rfscVS0vtbw",
+      "youtube_video_id": "S4RMhPxQGMw",
       "channel": 1,
-      "title": "What's New in Web Development 2026",
-      "thumbnail_url": "https://i.ytimg.com/vi/rfscVS0vtbw/hqdefault.jpg",
-      "note": "Great overview of new web APIs",
+      "title": "The Bizarre Behavior of Rotating Bodies",
+      "thumbnail_url": "https://i.ytimg.com/vi/S4RMhPxQGMw/hqdefault.jpg",
+      "note": "",
       "pinned": true,
       "visible": true,
+      "view_count": 12400000,
+      "like_count": 340000,
+      "comment_count": 8900,
+      "description": "Spinning objects have strange instabilities known as the Dzhanibekov effect.",
+      "duration": "PT11M44S",
+      "stats_updated_at": "2026-04-01T12:00:00Z",
+      "created_at": "2026-03-15T00:00:00Z",
+      "synced_at": "2026-04-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "website.watchvideo",
+    "pk": 2,
+    "fields": {
+      "youtube_video_id": "WUvTyaaNkzM",
+      "channel": 4,
+      "title": "But what is the Fourier Transform?",
+      "thumbnail_url": "https://i.ytimg.com/vi/WUvTyaaNkzM/hqdefault.jpg",
+      "note": "",
+      "pinned": true,
+      "visible": true,
+      "view_count": 18000000,
+      "like_count": 520000,
+      "comment_count": 11000,
+      "description": "A visual introduction to the Fourier Transform.",
+      "duration": "PT20M57S",
+      "stats_updated_at": "2026-04-01T12:00:00Z",
       "created_at": "2026-03-15T00:00:00Z",
       "synced_at": "2026-04-01T12:00:00Z"
     }

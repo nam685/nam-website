@@ -40,31 +40,31 @@ const TIER_STYLE: Record<
   {
     border: string;
     borderHover: string;
+    borderWidth: number;
     shadow: string;
-    opacity: number;
     bg: string;
   }
 > = {
   never_miss: {
-    border: `${ACCENT}60`,
-    borderHover: `${ACCENT}e6`,
-    shadow: `0 0 12px ${ACCENT}20`,
-    opacity: 1,
-    bg: "#111",
+    border: `${ACCENT}50`,
+    borderHover: `${ACCENT}cc`,
+    borderWidth: 2,
+    shadow: `0 0 10px ${ACCENT}18`,
+    bg: `${ACCENT}08`,
   },
   regular: {
     border: `${ACCENT}25`,
-    borderHover: `${ACCENT}80`,
+    borderHover: `${ACCENT}70`,
+    borderWidth: 1,
     shadow: "none",
-    opacity: 0.85,
-    bg: "#0e0e0e",
+    bg: "transparent",
   },
   check_out: {
     border: `${ACCENT}10`,
-    borderHover: `${ACCENT}4d`,
+    borderHover: `${ACCENT}40`,
+    borderWidth: 1,
     shadow: "none",
-    opacity: 0.65,
-    bg: "#0a0a0a",
+    bg: "transparent",
   },
 };
 
@@ -103,14 +103,13 @@ function ChannelCard({
       className="watches-card"
       style={{
         background: hovered ? `${ACCENT}0d` : tier.bg,
-        border: `1px solid ${hovered ? tier.borderHover : tier.border}`,
+        border: `${tier.borderWidth}px solid ${hovered ? tier.borderHover : tier.border}`,
         boxShadow: hovered ? `0 0 12px ${ACCENT}15` : tier.shadow,
         borderRadius: 6,
         padding: "0.75rem",
         cursor: "pointer",
         transition:
           "border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease",
-        opacity: tier.opacity,
         outline: isExpanded ? `2px solid ${ACCENT}60` : "none",
         outlineOffset: -1,
         display: "flex",
@@ -378,31 +377,19 @@ function HeroPanel({
   video,
   playing,
   onPlay,
-  isAdmin,
-  syncStatus,
-  syncing,
-  onSync,
-  onConnectYouTube,
 }: {
   video: HeroVideo | null;
   playing: boolean;
   onPlay: () => void;
-  isAdmin: boolean;
-  syncStatus: WatchSyncStatus | null;
-  syncing: boolean;
-  onSync: () => void;
-  onConnectYouTube: () => void;
 }) {
   const [descExpanded, setDescExpanded] = useState(false);
 
   return (
     <div
-      className="watches-hero"
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        padding: "0 0 5rem",
       }}
     >
       {/* Video area */}
@@ -562,6 +549,8 @@ function HeroPanel({
                 fontSize: "0.75rem",
                 color: "#666",
                 lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
                 maxHeight: descExpanded ? "none" : "4.5rem",
                 overflow: "hidden",
                 cursor: "pointer",
@@ -571,110 +560,6 @@ function HeroPanel({
               {video.description}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Admin controls */}
-      {isAdmin && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            marginTop: "1rem",
-            flexShrink: 0,
-          }}
-        >
-          {syncStatus?.connected ? (
-            <button
-              onClick={onSync}
-              disabled={syncing || !syncStatus.available}
-              title={
-                !syncStatus.available
-                  ? `cooldown: ${Math.ceil(syncStatus.cooldown_remaining)}s`
-                  : "sync YouTube data"
-              }
-              style={{
-                padding: "0.25rem 0.75rem",
-                border: `1px solid ${ACCENT}40`,
-                background: "none",
-                color: ACCENT,
-                fontFamily: "var(--font-headline)",
-                fontSize: "0.6875rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.15em",
-                cursor:
-                  syncing || !syncStatus.available ? "not-allowed" : "pointer",
-                opacity: syncing || !syncStatus.available ? 0.5 : 1,
-                borderRadius: 2,
-                transition: "border-color 0.2s, background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                if (!syncing && syncStatus?.available) {
-                  e.currentTarget.style.borderColor = ACCENT;
-                  e.currentTarget.style.background = `${ACCENT}15`;
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = `${ACCENT}40`;
-                e.currentTarget.style.background = "none";
-              }}
-            >
-              {syncing ? "syncing..." : "sync"}
-            </button>
-          ) : (
-            <button
-              onClick={onConnectYouTube}
-              style={{
-                padding: "0.25rem 0.75rem",
-                border: `1px solid ${ACCENT}40`,
-                background: "none",
-                color: ACCENT,
-                fontFamily: "var(--font-headline)",
-                fontSize: "0.6875rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.15em",
-                cursor: "pointer",
-                borderRadius: 2,
-                transition: "border-color 0.2s, background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = ACCENT;
-                e.currentTarget.style.background = `${ACCENT}15`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = `${ACCENT}40`;
-                e.currentTarget.style.background = "none";
-              }}
-            >
-              connect youtube
-            </button>
-          )}
-          <a
-            href="/watches/staging"
-            style={{
-              padding: "0.25rem 0.75rem",
-              border: `1px solid ${ACCENT}20`,
-              color: `${ACCENT}99`,
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.6875rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.15em",
-              borderRadius: 2,
-              textDecoration: "none",
-              transition: "border-color 0.2s, color 0.2s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = `${ACCENT}50`;
-              e.currentTarget.style.color = ACCENT;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = `${ACCENT}20`;
-              e.currentTarget.style.color = `${ACCENT}99`;
-            }}
-          >
-            staging
-          </a>
         </div>
       )}
 
@@ -902,12 +787,20 @@ export default function WatchesPage() {
       <title>Nam watches</title>
 
       <style>{`
+        .watches-admin-bar {
+          max-width: 1400px;
+          margin: 0 auto;
+          padding: 0.75rem 1.5rem;
+          display: flex;
+          justify-content: flex-end;
+          gap: 0.5rem;
+          position: relative;
+          z-index: 2;
+        }
         .watches-layout {
           display: flex;
           flex-wrap: wrap;
-          max-width: 1400px;
-          margin: 0 auto;
-          padding: 2rem 1.5rem 6rem;
+          padding: 0 0 6rem;
           gap: 0;
           position: relative;
           z-index: 1;
@@ -920,12 +813,13 @@ export default function WatchesPage() {
           align-self: flex-start;
           max-height: calc(100vh - 100px);
           overflow-y: auto;
-          padding-right: 1rem;
+          padding: 0 1rem 0 1.5rem;
         }
         .watches-grid-container {
           width: 50%;
           min-width: 0;
           position: relative;
+          padding-right: 1.5rem;
         }
         .watches-grid-scroll {
           height: calc(100vh - 100px);
@@ -945,10 +839,11 @@ export default function WatchesPage() {
         @media (max-width: 1023px) {
           .watches-hero {
             width: 50%;
-            padding-right: 0.75rem;
+            padding: 0 0.75rem 0 1rem;
           }
           .watches-grid-container {
             width: 50%;
+            padding-right: 1rem;
           }
           .watches-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -957,18 +852,19 @@ export default function WatchesPage() {
         @media (max-width: 767px) {
           .watches-layout {
             flex-direction: column;
-            padding: 1rem 1rem 6rem;
+            padding: 0 1rem 6rem;
             gap: 1.5rem;
           }
           .watches-hero {
             width: 100%;
-            padding-right: 0;
+            padding: 0;
             position: static;
             max-height: none;
             overflow-y: visible;
           }
           .watches-grid-container {
             width: 100%;
+            padding-right: 0;
           }
           .watches-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -980,6 +876,102 @@ export default function WatchesPage() {
         }
       `}</style>
 
+      {/* Admin controls — above layout so always visible */}
+      {isAdmin && (
+        <div className="watches-admin-bar">
+          {syncStatus?.connected ? (
+            <button
+              onClick={handleSync}
+              disabled={syncing || !syncStatus.available}
+              title={
+                !syncStatus.available
+                  ? `cooldown: ${Math.ceil(syncStatus.cooldown_remaining)}s`
+                  : "sync YouTube data"
+              }
+              style={{
+                padding: "0.25rem 0.75rem",
+                border: `1px solid ${ACCENT}40`,
+                background: "none",
+                color: ACCENT,
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.6875rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                cursor:
+                  syncing || !syncStatus.available ? "not-allowed" : "pointer",
+                opacity: syncing || !syncStatus.available ? 0.5 : 1,
+                borderRadius: 2,
+                transition: "border-color 0.2s, background 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                if (!syncing && syncStatus?.available) {
+                  e.currentTarget.style.borderColor = ACCENT;
+                  e.currentTarget.style.background = `${ACCENT}15`;
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${ACCENT}40`;
+                e.currentTarget.style.background = "none";
+              }}
+            >
+              {syncing ? "syncing..." : "sync"}
+            </button>
+          ) : (
+            <button
+              onClick={handleConnectYouTube}
+              style={{
+                padding: "0.25rem 0.75rem",
+                border: `1px solid ${ACCENT}40`,
+                background: "none",
+                color: ACCENT,
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.6875rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+                cursor: "pointer",
+                borderRadius: 2,
+                transition: "border-color 0.2s, background 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = ACCENT;
+                e.currentTarget.style.background = `${ACCENT}15`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${ACCENT}40`;
+                e.currentTarget.style.background = "none";
+              }}
+            >
+              connect youtube
+            </button>
+          )}
+          <a
+            href="/watches/staging"
+            style={{
+              padding: "0.25rem 0.75rem",
+              border: `1px solid ${ACCENT}20`,
+              color: `${ACCENT}99`,
+              fontFamily: "var(--font-headline)",
+              fontSize: "0.6875rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.15em",
+              borderRadius: 2,
+              textDecoration: "none",
+              transition: "border-color 0.2s, color 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = `${ACCENT}50`;
+              e.currentTarget.style.color = ACCENT;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = `${ACCENT}20`;
+              e.currentTarget.style.color = `${ACCENT}99`;
+            }}
+          >
+            staging
+          </a>
+        </div>
+      )}
+
       <div className="watches-layout">
         {/* Hero Panel */}
         <div className="watches-hero" ref={heroRef}>
@@ -987,11 +979,6 @@ export default function WatchesPage() {
             video={heroVideo}
             playing={playing}
             onPlay={handlePlay}
-            isAdmin={isAdmin}
-            syncStatus={syncStatus}
-            syncing={syncing}
-            onSync={handleSync}
-            onConnectYouTube={handleConnectYouTube}
           />
         </div>
 
