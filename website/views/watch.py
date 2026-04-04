@@ -95,22 +95,31 @@ def watch_list(request):
 
 
 def watch_recommended(request):  # noqa: ARG001
-    """Public: return a weighted-random pinned video for the hero section."""
+    """Public: return a weighted-random video for the hero section.
+
+    Pool: all videos belonging to a non-hidden channel with duration > 60s.
+    Weighting: never_miss ×3, regular ×2, check_out ×1.
+    """
     visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
     tier_weights = {"never_miss": 3, "regular": 2, "check_out": 1}
 
-    pinned_videos = WatchVideo.objects.filter(
-        pinned=True,
-        visible=True,
-        channel__isnull=False,
-        channel__tier__in=visible_tiers,
-    ).select_related("channel")
+    all_videos = (
+        WatchVideo.objects.filter(
+            channel__isnull=False,
+            channel__tier__in=visible_tiers,
+        )
+        .exclude(duration="")
+        .select_related("channel")
+    )
 
-    if not pinned_videos.exists():
+    # Filter out Shorts (<=60s) in Python since duration is stored as ISO 8601 string
+    candidates = [v for v in all_videos if parse_iso8601_duration(v.duration) > 60]
+
+    if not candidates:
         return JsonResponse({"video": None})
 
     weighted = []
-    for v in pinned_videos:
+    for v in candidates:
         weight = tier_weights.get(v.channel.tier, 1)
         weighted.extend([v] * weight)
 

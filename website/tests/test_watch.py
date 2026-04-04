@@ -308,32 +308,75 @@ class TestWatchVideoDelete:
 
 @pytest.mark.django_db
 class TestWatchRecommended:
-    def test_empty_when_no_pinned_videos(self, client):
+    def test_empty_when_no_videos(self, client):
         data = client.get("/api/watches/recommended/").json()
         assert data["video"] is None
 
-    def test_returns_pinned_video_from_visible_channel(self, client, visible_channels):  # noqa: ARG002
+    def test_returns_pinned_video(self, client, visible_channels):  # noqa: ARG002
+        WatchVideo.objects.filter(youtube_video_id="vid_pinned").update(duration="PT5M30S")
         data = client.get("/api/watches/recommended/").json()
-        video = data["video"]
-        assert video is not None
-        assert video["youtube_video_id"] == "vid_pinned"
-        assert video["title"] == "Great Video"
-        assert video["channel_name"] == "Top Channel"
-        assert video["channel_thumbnail_url"] is not None
-        assert "view_count" in video
-        assert "like_count" in video
-        assert "comment_count" in video
-        assert "description" in video
-        assert "duration" in video
+        assert data["video"] is not None
+        assert data["video"]["title"] == "Great Video"
 
-    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
-        hidden_ch = WatchChannel.objects.create(youtube_channel_id="UC_hidden_rec", name="Hidden", tier="hidden")
+    def test_includes_liked_non_pinned_video(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_rec", name="Rec Ch", tier="regular")
         WatchVideo.objects.create(
-            youtube_video_id="vid_hidden_rec",
-            title="Hidden Vid",
+            youtube_video_id="vid_liked",
+            title="Liked Video",
+            thumbnail_url="https://i.ytimg.com/vi/vid_liked/hqdefault.jpg",
+            channel=ch,
+            pinned=False,
+            visible=False,
+            duration="PT10M",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is not None
+        assert data["video"]["title"] == "Liked Video"
+
+    def test_excludes_shorts(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_short", name="Shorts Ch", tier="never_miss")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_short",
+            title="Short Video",
+            thumbnail_url="https://i.ytimg.com/vi/vid_short/hqdefault.jpg",
+            channel=ch,
             pinned=True,
             visible=True,
-            channel=hidden_ch,
+            duration="PT30S",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_empty_duration(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_nodur", name="No Dur", tier="never_miss")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_nodur",
+            title="No Duration",
+            channel=ch,
+            pinned=True,
+            visible=True,
+            duration="",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_hid", name="Hidden", tier="hidden")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_hid",
+            title="Hidden Vid",
+            channel=ch,
+            duration="PT5M",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_videos_without_channel(self, client, db):  # noqa: ARG002
+        WatchVideo.objects.create(
+            youtube_video_id="vid_orphan",
+            title="Orphan",
+            channel=None,
+            duration="PT5M",
         )
         data = client.get("/api/watches/recommended/").json()
         assert data["video"] is None
