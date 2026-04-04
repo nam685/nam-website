@@ -694,6 +694,41 @@ def watch_channel_uploads(_request, channel_id):
 
 @csrf_exempt
 @require_admin
+def watch_channel_pin_videos(request, channel_id):
+    """Admin: bulk pin videos to a channel."""
+    try:
+        channel = WatchChannel.objects.get(pk=channel_id)
+    except WatchChannel.DoesNotExist:
+        return JsonResponse({"error": "Channel not found"}, status=404)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    videos_data = body.get("videos", [])
+    pinned_count = 0
+
+    for vdata in videos_data:
+        yt_id = vdata.get("youtube_video_id")
+        if not yt_id:
+            continue
+        video, _ = WatchVideo.objects.get_or_create(
+            youtube_video_id=yt_id,
+            defaults={"title": vdata.get("title", ""), "thumbnail_url": vdata.get("thumbnail_url", "")},
+        )
+        video.channel = channel
+        video.title = vdata.get("title", video.title)
+        video.thumbnail_url = vdata.get("thumbnail_url", video.thumbnail_url)
+        video.pinned = True
+        video.visible = True
+        video.save(update_fields=["channel", "title", "thumbnail_url", "pinned", "visible"])
+        pinned_count += 1
+
+    return JsonResponse({"pinned": pinned_count})
+
+
+@csrf_exempt
+@require_admin
 def watch_backfill_stats(_request):
     """Admin: backfill video stats from YouTube API for videos with stale or missing stats."""
     access_token = _refresh_access_token()

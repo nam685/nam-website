@@ -606,6 +606,95 @@ class TestWatchBackfillStats:
 
 
 @pytest.mark.django_db
+class TestWatchChannelPinVideos:
+    def test_requires_auth(self, client):
+        assert client.post("/api/watches/channels/1/pin-videos/").status_code == 401
+
+    def test_channel_not_found(self, client, auth_headers):
+        resp = client.post(
+            "/api/watches/channels/9999/pin-videos/",
+            data=json.dumps({"videos": []}),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 404
+
+    def test_pins_new_videos(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps(
+                {
+                    "videos": [
+                        {
+                            "youtube_video_id": "vid_new1",
+                            "title": "New Video 1",
+                            "thumbnail_url": "https://thumb1.jpg",
+                        },
+                        {
+                            "youtube_video_id": "vid_new2",
+                            "title": "New Video 2",
+                            "thumbnail_url": "https://thumb2.jpg",
+                        },
+                    ]
+                }
+            ),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 2
+
+        v1 = WatchVideo.objects.get(youtube_video_id="vid_new1")
+        assert v1.pinned is True
+        assert v1.visible is True
+        assert v1.channel == ch
+        assert v1.title == "New Video 1"
+
+    def test_pins_existing_video(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_exist",
+            title="Old Title",
+            pinned=False,
+            visible=False,
+        )
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps(
+                {
+                    "videos": [
+                        {
+                            "youtube_video_id": "vid_exist",
+                            "title": "Updated Title",
+                            "thumbnail_url": "https://new_thumb.jpg",
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        v = WatchVideo.objects.get(youtube_video_id="vid_exist")
+        assert v.pinned is True
+        assert v.visible is True
+        assert v.channel == ch
+        assert v.title == "Updated Title"
+
+    def test_empty_videos_list(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps({"videos": []}),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 0
+
+
+@pytest.mark.django_db
 class TestWatchChannelUploads:
     def test_requires_auth(self, client):
         assert client.get("/api/watches/channels/1/uploads/").status_code == 401
