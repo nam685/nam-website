@@ -14,7 +14,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.5)";
+const PANEL_BG = "rgba(14, 14, 14, 0.25)";
 
 const TABS = [
   { label: "History", href: "/listens" },
@@ -647,6 +647,21 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
 
       {/* ---- Sub-route content ---- */}
       <div style={{ marginTop: 1 }}>{children}</div>
+
+      {/* ---- Tagline ---- */}
+      <div style={{ textAlign: "center", marginTop: "3rem" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-headline)",
+            fontSize: "0.6rem",
+            color: "#2a2a2a",
+            letterSpacing: "0.2em",
+            textTransform: "lowercase",
+          }}
+        >
+          vibing...
+        </span>
+      </div>
     </div>
   );
 }

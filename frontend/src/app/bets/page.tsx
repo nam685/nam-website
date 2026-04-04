@@ -787,6 +787,21 @@ export default function BetsPage() {
           {isAdmin && " Click '+ Add Ticker' to get started."}
         </div>
       )}
+
+      {/* Tagline */}
+      <div style={{ textAlign: "center", marginTop: "3rem" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-headline)",
+            fontSize: "0.6rem",
+            color: "#2a2a2a",
+            letterSpacing: "0.2em",
+            textTransform: "lowercase",
+          }}
+        >
+          i look here to feel very smart
+        </span>
+      </div>
     </div>
   );
 }

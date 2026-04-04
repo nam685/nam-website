@@ -538,25 +538,6 @@ export default function WatchesPage() {
           </div>
         )}
 
-        {/* Footer */}
-        <div
-          style={{
-            textAlign: "center",
-            marginTop: "4rem",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.6rem",
-              color: "#2a2a2a",
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-            }}
-          >
-            curated not algorithmic
-          </span>
-        </div>
       </div>
     </>
   );
