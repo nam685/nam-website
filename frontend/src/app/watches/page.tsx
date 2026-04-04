@@ -1044,6 +1044,7 @@ export default function WatchesPage() {
           color: "#444",
           fontSize: "0.8rem",
           margin: 0,
+          width: "fit-content",
           pointerEvents: "none",
         }}
       >
