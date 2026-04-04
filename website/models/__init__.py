@@ -3,6 +3,7 @@ from .feedback import Feedback
 from .github import GitHubContributions
 from .lichess import LichessToken
 from .listen import ListenTrack
+from .mission import Mission
 from .price_snapshot import PriceSnapshot
 from .project import Project
 from .thought import Thought
@@ -16,6 +17,7 @@ __all__ = [
     "GitHubContributions",
     "LichessToken",
     "ListenTrack",
+    "Mission",
     "PriceSnapshot",
     "Project",
     "Thought",
