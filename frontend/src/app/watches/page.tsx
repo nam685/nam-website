@@ -747,6 +747,7 @@ export default function WatchesPage() {
   const [syncStatus, setSyncStatus] = useState<WatchSyncStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
+  const initialLoadDone = useRef(false);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
   /* ── Fetch channels ───────────────────────────────── */
@@ -757,7 +758,9 @@ export default function WatchesPage() {
       );
       if (!res.ok) return;
       const data: WatchListResponse = await res.json();
-      setChannels(shuffle(data.channels));
+      // Only shuffle on initial load — re-fetches (e.g. after sync) keep current order
+      setChannels(initialLoadDone.current ? data.channels : shuffle(data.channels));
+      initialLoadDone.current = true;
     } finally {
       setLoading(false);
     }
