@@ -95,13 +95,11 @@ def watch_list(request):
 
 
 def watch_recommended(request):  # noqa: ARG001
-    """Public: return a weighted-random video for the hero section.
+    """Public: return a uniform-random video for the hero section.
 
     Pool: all videos belonging to a non-hidden channel with duration > 60s.
-    Weighting: never_miss ×3, regular ×2, check_out ×1.
     """
     visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
-    tier_weights = {"never_miss": 3, "regular": 2, "check_out": 1}
 
     all_videos = (
         WatchVideo.objects.filter(
@@ -118,12 +116,7 @@ def watch_recommended(request):  # noqa: ARG001
     if not candidates:
         return JsonResponse({"video": None})
 
-    weighted = []
-    for v in candidates:
-        weight = tier_weights.get(v.channel.tier, 1)
-        weighted.extend([v] * weight)
-
-    chosen = random.choice(weighted)
+    chosen = random.choice(candidates)
 
     return JsonResponse(
         {
