@@ -1008,26 +1008,28 @@ export default function WatchesPage() {
               nothing here yet
             </p>
           ) : (
-            <div
-              className="watches-grid-scroll"
-              ref={gridScrollRef}
-              onScroll={handleGridScroll}
-            >
-              <div className="watches-grid">{gridItems}</div>
-            </div>
-            {!scrolledToBottom && (
+            <>
               <div
-                style={{
-                  position: "absolute",
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: 60,
-                  background: "linear-gradient(transparent, #0a0a0a)",
-                  pointerEvents: "none",
-                }}
-              />
-            )}
+                className="watches-grid-scroll"
+                ref={gridScrollRef}
+                onScroll={handleGridScroll}
+              >
+                <div className="watches-grid">{gridItems}</div>
+              </div>
+              {!scrolledToBottom && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 60,
+                    background: "linear-gradient(transparent, #0a0a0a)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
