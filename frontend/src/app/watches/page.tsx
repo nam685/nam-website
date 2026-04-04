@@ -174,16 +174,11 @@ function ChannelCard({
 function ExpandedBlock({
   channel,
   onVideoClick,
-  isAdmin,
-  onTierChange,
 }: {
   channel: WatchChannel;
   onVideoClick: (_v: WatchVideo, _ch: WatchChannel) => void;
-  isAdmin: boolean;
-  onTierChange: (_channelId: number, _tier: TierKey) => void;
 }) {
   const tier = TIER_STYLE[channel.tier] ?? TIER_STYLE.check_out;
-  const tiers: TierKey[] = ["never_miss", "regular", "check_out"];
 
   return (
     <div
@@ -292,42 +287,6 @@ function ExpandedBlock({
             >
               {channel.description}
             </p>
-          )}
-
-          {/* Admin tier selector */}
-          {isAdmin && (
-            <div
-              style={{
-                display: "flex",
-                gap: "0.4rem",
-                marginBottom: "0.75rem",
-              }}
-            >
-              {tiers.map((t) => (
-                <button
-                  key={t}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTierChange(channel.id, t);
-                  }}
-                  style={{
-                    padding: "0.2rem 0.6rem",
-                    border: `1px solid ${channel.tier === t ? ACCENT : `${ACCENT}30`}`,
-                    background: channel.tier === t ? `${ACCENT}25` : "none",
-                    color: channel.tier === t ? "#e5e2e1" : "#666",
-                    fontFamily: "var(--font-headline)",
-                    fontSize: "0.6rem",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.1em",
-                    cursor: "pointer",
-                    borderRadius: 2,
-                    transition: "all 0.15s",
-                  }}
-                >
-                  {t.replace("_", " ")}
-                </button>
-              ))}
-            </div>
           )}
 
           {/* Pinned videos */}
@@ -612,9 +571,6 @@ function HeroPanel({
         </div>
       )}
 
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
       {/* Admin controls */}
       {isAdmin && (
         <div
@@ -719,20 +675,6 @@ function HeroPanel({
         </div>
       )}
 
-      {/* Tagline */}
-      <p
-        style={{
-          fontStyle: "italic",
-          color: "#444",
-          fontSize: "0.8rem",
-          marginTop: "1rem",
-          paddingTop: "0.75rem",
-          borderTop: "1px solid #222",
-          flexShrink: 0,
-        }}
-      >
-        at least i don&apos;t doom scroll facebook et al.
-      </p>
     </div>
   );
 }
@@ -747,7 +689,9 @@ export default function WatchesPage() {
   const [syncStatus, setSyncStatus] = useState<WatchSyncStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const heroRef = useRef<HTMLDivElement>(null);
+  const gridScrollRef = useRef<HTMLDivElement>(null);
   const initialLoadDone = useRef(false);
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
   /* ── Fetch channels ───────────────────────────────── */
@@ -863,29 +807,11 @@ export default function WatchesPage() {
     window.location.href = `${API}/api/watches/auth/?token=${encodeURIComponent(token)}`;
   }
 
-  async function handleTierChange(channelId: number, tier: TierKey) {
-    const token = store("adminToken");
-    if (!token) return;
-    try {
-      const res = await fetch(
-        `${API}/api/watches/channels/${channelId}/tier/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ tier }),
-        },
-      );
-      if (res.ok) {
-        setChannels((prev) =>
-          prev.map((ch) => (ch.id === channelId ? { ...ch, tier } : ch)),
-        );
-      }
-    } catch {
-      // ignore
-    }
+  function handleGridScroll() {
+    const el = gridScrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+    setScrolledToBottom(atBottom);
   }
 
   /* ── Build grid items with expansion ──────────────── */
@@ -919,8 +845,6 @@ export default function WatchesPage() {
             key={`expanded-${expandedChannel.id}`}
             channel={expandedChannel}
             onVideoClick={handleVideoClick}
-            isAdmin={isAdmin}
-            onTierChange={handleTierChange}
           />,
         );
       }
@@ -997,6 +921,17 @@ export default function WatchesPage() {
         .watches-grid-container {
           flex: 1;
           min-width: 0;
+          position: relative;
+        }
+        .watches-grid-scroll {
+          height: calc(100vh - 100px);
+          overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          padding-bottom: 2rem;
+        }
+        .watches-grid-scroll::-webkit-scrollbar {
+          display: none;
         }
         .watches-grid {
           display: grid;
@@ -1032,6 +967,10 @@ export default function WatchesPage() {
           .watches-grid {
             grid-template-columns: repeat(2, 1fr);
           }
+          .watches-grid-scroll {
+            height: auto;
+            overflow-y: visible;
+          }
         }
       `}</style>
 
@@ -1066,10 +1005,46 @@ export default function WatchesPage() {
               nothing here yet
             </p>
           ) : (
-            <div className="watches-grid">{gridItems}</div>
+            <div
+              className="watches-grid-scroll"
+              ref={gridScrollRef}
+              onScroll={handleGridScroll}
+            >
+              <div className="watches-grid">{gridItems}</div>
+              {!scrolledToBottom && (
+                <div
+                  style={{
+                    position: "sticky",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 60,
+                    background: "linear-gradient(transparent, #0a0a0a)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
       </div>
+
+      <p
+        className="watches-tagline"
+        style={{
+          position: "fixed",
+          bottom: "1.5rem",
+          left: "1.5rem",
+          zIndex: 10,
+          fontStyle: "italic",
+          color: "#444",
+          fontSize: "0.8rem",
+          margin: 0,
+          pointerEvents: "none",
+        }}
+      >
+        at least i don&apos;t doom scroll facebook et al.
+      </p>
     </>
   );
 }
