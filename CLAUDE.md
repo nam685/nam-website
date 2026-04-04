@@ -97,6 +97,13 @@ GET  /api/lichess/auth/         auth required, initiates Lichess OAuth (PKCE)
 GET  /api/lichess/callback/     Lichess OAuth callback
 GET  /api/lichess/token/        auth required, returns stored Lichess token
 GET  /api/lichess/status/       public, returns connection status
+GET  /api/slops/                    mission list (paginated)
+GET  /api/slops/<id>/               single mission detail
+GET  /api/slops/<id>/trace/         trace file contents
+POST /api/slops/submit/             submit prompt (rate-limited, 1/hr/IP)
+POST /api/slops/<id>/approve/       auth required, approve + queue
+POST /api/slops/<id>/reject/        auth required, reject
+GET  /api/slops/stats/              aggregate stats
 ```
 
 ## Auth
