@@ -307,6 +307,7 @@ export default function BetsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BetsSearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -338,26 +339,29 @@ export default function BetsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => {
-    if (searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+  const doSearch = async () => {
+    if (searchQuery.length < 2) return;
     setSearching(true);
-    const timer = setTimeout(() => {
+    setSearchError(null);
+    try {
       const token = store("adminToken");
-      fetch(`${API}/api/bets/search/?q=${encodeURIComponent(searchQuery)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (Array.isArray(data)) setSearchResults(data);
-        })
-        .catch(console.error)
-        .finally(() => setSearching(false));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+      const r = await fetch(
+        `${API}/api/bets/search/?q=${encodeURIComponent(searchQuery)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        setSearchResults(data);
+      } else if (data.error) {
+        setSearchError(data.error);
+        setSearchResults([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -517,9 +521,16 @@ export default function BetsPage() {
         >
           <input
             autoFocus
-            placeholder="Search ticker (e.g. VWCE, Bitcoin)..."
+            placeholder="Search ticker and press Enter..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchResults([]);
+              setSearchError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") doSearch();
+            }}
             style={{
               background: "#111",
               border: "1px solid #333",
@@ -535,11 +546,19 @@ export default function BetsPage() {
               Searching...
             </div>
           )}
-          {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
-            <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
-              No results
+          {searchError && (
+            <div style={{ fontSize: 12, color: RED, marginTop: 8 }}>
+              {searchError}
             </div>
           )}
+          {!searching &&
+            !searchError &&
+            searchQuery.length >= 2 &&
+            searchResults.length === 0 && (
+              <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
+                Press Enter to search
+              </div>
+            )}
           {searchResults.length > 0 && (
             <div
               style={{

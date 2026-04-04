@@ -57,6 +57,10 @@ def _refine_asset_type(base_type: str, name: str) -> str:
     return base_type
 
 
+class AlphaVantageQuotaError(Exception):
+    pass
+
+
 def search_alpha_vantage(query: str) -> list[dict]:
     """Search Alpha Vantage SYMBOL_SEARCH for stocks/ETFs. Returns unified result dicts."""
     api_key = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
@@ -70,6 +74,9 @@ def search_alpha_vantage(query: str) -> list[dict]:
         data = resp.json()
     except Exception:
         return []
+
+    if "Information" in data:
+        raise AlphaVantageQuotaError("Alpha Vantage API quota exceeded — try again tomorrow")
 
     results = []
     for match in data.get("bestMatches", []):
