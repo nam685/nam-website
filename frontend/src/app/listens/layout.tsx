@@ -14,7 +14,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.08)";
+const PANEL_BG = "transparent";
 
 const TABS = [
   { label: "History", href: "/listens" },
@@ -60,7 +60,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
       <p
         style={{
           fontStyle: "italic",
-          color: "#555",
+          color: "#888",
           fontSize: "0.85rem",
           letterSpacing: "0.02em",
           marginBottom: "1rem",
@@ -87,7 +87,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             </div>
             <div
               style={{
-                color: "#555",
+                color: "#888",
                 fontSize: 8,
                 letterSpacing: 1,
                 fontFamily: "monospace",
@@ -102,7 +102,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             </div>
             <div
               style={{
-                color: "#555",
+                color: "#888",
                 fontSize: 8,
                 letterSpacing: 1,
                 fontFamily: "monospace",
@@ -117,7 +117,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             </div>
             <div
               style={{
-                color: "#555",
+                color: "#888",
                 fontSize: 8,
                 letterSpacing: 1,
                 fontFamily: "monospace",
@@ -237,7 +237,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 </div>
                 <div
                   style={{
-                    color: "#555",
+                    color: "#888",
                     fontSize: 11,
                     marginTop: 4,
                     fontFamily: "monospace",
@@ -285,7 +285,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
               )}
             </div>
           ) : (
-            <div style={{ color: "#555", marginBottom: 24 }}>
+            <div style={{ color: "#888", marginBottom: 24 }}>
               Not enough data for recommendations yet.
             </div>
           )}
@@ -417,7 +417,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 </div>
                 <div
                   style={{
-                    color: "#555",
+                    color: "#888",
                     fontSize: 10,
                     letterSpacing: 2,
                     fontFamily: "monospace",
@@ -445,7 +445,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     </div>
                     <div
                       style={{
-                        color: "#555",
+                        color: "#888",
                         fontSize: 9,
                         letterSpacing: 1,
                         fontFamily: "monospace",
@@ -466,7 +466,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     </div>
                     <div
                       style={{
-                        color: "#555",
+                        color: "#888",
                         fontSize: 9,
                         letterSpacing: 1,
                         fontFamily: "monospace",
@@ -482,7 +482,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                   <>
                     <div
                       style={{
-                        color: "#555",
+                        color: "#888",
                         fontSize: 9,
                         letterSpacing: 1,
                         fontFamily: "monospace",
@@ -522,7 +522,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                   <>
                     <div
                       style={{
-                        color: "#555",
+                        color: "#888",
                         fontSize: 9,
                         letterSpacing: 1,
                         fontFamily: "monospace",
@@ -582,7 +582,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                               </div>
                               <div
                                 style={{
-                                  color: "#555",
+                                  color: "#888",
                                   fontSize: 10,
                                   fontFamily: "monospace",
                                 }}

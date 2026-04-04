@@ -8,7 +8,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.08)";
+const PANEL_BG = "transparent";
 const PAGE_SIZE = 20;
 
 export default function ListensHistoryPage() {
@@ -53,7 +53,7 @@ export default function ListensHistoryPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         Loading...
       </div>
     );
@@ -61,7 +61,7 @@ export default function ListensHistoryPage() {
 
   if (tracks.length === 0) {
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         No listening history yet.
       </div>
     );
