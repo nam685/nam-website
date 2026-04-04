@@ -1039,11 +1039,11 @@ export default function WatchesPage() {
           position: "fixed",
           bottom: "1.5rem",
           left: "1.5rem",
-          zIndex: 10,
           fontStyle: "italic",
           color: "#444",
           fontSize: "0.8rem",
           margin: 0,
+          width: "fit-content",
           pointerEvents: "none",
         }}
       >
