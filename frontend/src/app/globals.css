@@ -57,6 +57,7 @@ body {
   color: #e5e2e1;
   line-height: 1.6;
   overflow-x: hidden;
+  isolation: isolate;
 }
 
 a {
