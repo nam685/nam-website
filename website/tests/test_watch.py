@@ -62,6 +62,18 @@ class TestWatchVideo:
         v.refresh_from_db()
         assert v.channel is None
 
+    def test_stats_fields_defaults(self):
+        v = WatchVideo.objects.create(
+            youtube_video_id="vid_stats",
+            title="Stats Video",
+        )
+        assert v.view_count == 0
+        assert v.like_count == 0
+        assert v.comment_count == 0
+        assert v.description == ""
+        assert v.duration == ""
+        assert v.stats_updated_at is None
+
 
 @pytest.fixture()
 def visible_channels(db):  # noqa: ARG001
