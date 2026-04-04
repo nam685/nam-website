@@ -32,6 +32,7 @@ from .thought import thought_create, thought_list
 from .todo import todo_list
 from .watch import (
     watch_auth,
+    watch_backfill_stats,
     watch_callback,
     watch_channel_delete,
     watch_channel_order,
@@ -85,6 +86,7 @@ __all__ = [
     "thought_list",
     "todo_list",
     "watch_auth",
+    "watch_backfill_stats",
     "watch_callback",
     "watch_channel_delete",
     "watch_channel_order",
