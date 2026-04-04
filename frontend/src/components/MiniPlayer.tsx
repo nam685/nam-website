@@ -54,7 +54,7 @@ export default function MiniPlayer() {
         onClick={() => router.push("/listens")}
         style={{
           position: "fixed",
-          bottom: "5rem",
+          bottom: "1.5rem",
           right: "1.5rem",
           zIndex: 140,
           display: "flex",
@@ -107,7 +107,7 @@ export default function MiniPlayer() {
     <div
       style={{
         position: "fixed",
-        bottom: isMobile ? 0 : "5rem",
+        bottom: isMobile ? 0 : "1.5rem",
         right: isMobile ? 0 : "1.5rem",
         left: isMobile ? 0 : "auto",
         zIndex: 140,

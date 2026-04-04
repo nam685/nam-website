@@ -106,7 +106,16 @@ export default function PlaysClient() {
       className="page"
       style={{ maxWidth: "72rem", position: "relative", zIndex: 1 }}
     >
-      <h1>Plays</h1>
+      <p
+        style={{
+          fontStyle: "italic",
+          color: "#666",
+          fontSize: "0.9rem",
+          letterSpacing: "0.04em",
+        }}
+      >
+        i spent waaay too much time on this
+      </p>
 
       {/* Tab bar */}
       <div
