@@ -73,12 +73,22 @@ def listen_sync(request):
         import os
 
         from ytmusicapi import YTMusic
+        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
         auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
         if not os.path.isfile(auth_path):
             return JsonResponse({"error": "Browser auth not configured. Run: ytmusicapi browser"}, status=500)
 
-        yt = YTMusic(auth_path)
+        # ytmusicapi v1.11.5 requires an authorization header with SAPISIDHASH
+        # to detect browser auth, but `ytmusicapi browser` doesn't generate it.
+        # Compute it from the __Secure-3PAPISID cookie before passing to YTMusic.
+        with open(auth_path) as f:
+            headers = json.load(f)
+        if "authorization" not in headers and "cookie" in headers:
+            sapisid = sapisid_from_cookie(headers["cookie"])
+            origin = headers.get("origin", "https://music.youtube.com")
+            headers["authorization"] = get_authorization(sapisid + " " + origin)
+        yt = YTMusic(headers)
         history = yt.get_history()
     except Exception:
         logger.exception("Failed to fetch YouTube Music history")
