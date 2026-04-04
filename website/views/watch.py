@@ -636,6 +636,62 @@ def watch_sync_status(_request):
     )
 
 
+@require_admin
+def watch_channel_uploads(_request, channel_id):
+    """Admin: fetch recent uploads for a channel from YouTube API."""
+    try:
+        channel = WatchChannel.objects.get(pk=channel_id)
+    except WatchChannel.DoesNotExist:
+        return JsonResponse({"error": "Channel not found"}, status=404)
+
+    yt_id = channel.youtube_channel_id
+    if not yt_id.startswith("UC"):
+        return JsonResponse({"videos": [], "message": "Channel ID format not supported"})
+
+    access_token = _refresh_access_token()
+    if not access_token:
+        return JsonResponse({"error": "YouTube not connected"}, status=400)
+
+    playlist_id = "UU" + yt_id[2:]
+    try:
+        data = _youtube_api_get(
+            "playlistItems",
+            access_token,
+            params={"playlistId": playlist_id, "part": "snippet", "maxResults": 20},
+        )
+    except Exception:
+        logger.exception("Failed to fetch uploads for channel %s", channel.name)
+        return JsonResponse({"videos": [], "message": "Failed to fetch uploads"})
+
+    yt_video_ids = []
+    for item in data.get("items", []):
+        vid_id = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+        if vid_id:
+            yt_video_ids.append(vid_id)
+
+    existing_ids = set(
+        WatchVideo.objects.filter(youtube_video_id__in=yt_video_ids).values_list("youtube_video_id", flat=True)
+    )
+
+    videos = []
+    for item in data.get("items", []):
+        snippet = item.get("snippet", {})
+        vid_id = snippet.get("resourceId", {}).get("videoId")
+        if not vid_id or vid_id in existing_ids:
+            continue
+        thumbs = snippet.get("thumbnails", {})
+        thumb_url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url", "")
+        videos.append(
+            {
+                "youtube_video_id": vid_id,
+                "title": snippet.get("title", ""),
+                "thumbnail_url": thumb_url,
+            }
+        )
+
+    return JsonResponse({"videos": videos})
+
+
 @csrf_exempt
 @require_admin
 def watch_backfill_stats(_request):

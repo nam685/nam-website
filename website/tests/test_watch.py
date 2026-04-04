@@ -603,3 +603,98 @@ class TestWatchBackfillStats:
         resp = client.post("/api/watches/backfill-stats/", **auth_headers)
         assert resp.status_code == 400
         assert "not connected" in resp.json()["error"].lower()
+
+
+@pytest.mark.django_db
+class TestWatchChannelUploads:
+    def test_requires_auth(self, client):
+        assert client.get("/api/watches/channels/1/uploads/").status_code == 401
+
+    def test_channel_not_found(self, client, auth_headers):
+        resp = client.get("/api/watches/channels/9999/uploads/", **auth_headers)
+        assert resp.status_code == 404
+
+    def test_non_uc_channel_returns_empty(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="NOT_UC", name="Odd")
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["videos"] == []
+
+    def test_no_youtube_connection(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["error"].lower()
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_returns_uploads(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        mock_api.return_value = {
+            "items": [
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_upload1"},
+                        "title": "Upload One",
+                        "thumbnails": {"high": {"url": "https://thumb1.jpg"}},
+                    }
+                },
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_upload2"},
+                        "title": "Upload Two",
+                        "thumbnails": {"high": {"url": "https://thumb2.jpg"}},
+                    }
+                },
+            ]
+        }
+
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 200
+        videos = resp.json()["videos"]
+        assert len(videos) == 2
+        assert videos[0]["youtube_video_id"] == "vid_upload1"
+        assert videos[0]["title"] == "Upload One"
+        assert videos[0]["thumbnail_url"] == "https://thumb1.jpg"
+
+        mock_api.assert_called_once()
+        call_args = mock_api.call_args
+        assert call_args[0][0] == "playlistItems"
+        assert call_args[1]["params"]["playlistId"] == "UUtest123"
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_excludes_already_existing_videos(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        WatchVideo.objects.create(youtube_video_id="vid_existing", title="Already There", channel=ch)
+        mock_api.return_value = {
+            "items": [
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_existing"},
+                        "title": "Already There",
+                        "thumbnails": {"high": {"url": "https://existing.jpg"}},
+                    }
+                },
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_new"},
+                        "title": "New Upload",
+                        "thumbnails": {"high": {"url": "https://new.jpg"}},
+                    }
+                },
+            ]
+        }
+
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        videos = resp.json()["videos"]
+        assert len(videos) == 1
+        assert videos[0]["youtube_video_id"] == "vid_new"
