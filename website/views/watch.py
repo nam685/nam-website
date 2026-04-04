@@ -58,6 +58,11 @@ def watch_list(request):
                     "title": v.title,
                     "thumbnail_url": v.thumbnail_url,
                     "note": v.note,
+                    "view_count": v.view_count,
+                    "like_count": v.like_count,
+                    "comment_count": v.comment_count,
+                    "description": v.description,
+                    "duration": v.duration,
                 }
                 for v in pinned_videos
             ],

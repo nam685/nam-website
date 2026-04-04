@@ -135,6 +135,25 @@ class TestWatchList:
         tiers = [c["tier"] for c in data["channels"]]
         assert tiers == ["never_miss", "regular"]
 
+    def test_video_includes_stats_fields(self, client, visible_channels):  # noqa: ARG002
+        # Update the pinned video with stats data
+        v = WatchVideo.objects.get(youtube_video_id="vid_pinned")
+        v.view_count = 1500000
+        v.like_count = 50000
+        v.comment_count = 3000
+        v.description = "A great video about testing"
+        v.duration = "PT15M30S"
+        v.save()
+
+        data = client.get("/api/watches/").json()
+        top = next(c for c in data["channels"] if c["name"] == "Top Channel")
+        video = top["videos"][0]
+        assert video["view_count"] == 1500000
+        assert video["like_count"] == 50000
+        assert video["comment_count"] == 3000
+        assert video["description"] == "A great video about testing"
+        assert video["duration"] == "PT15M30S"
+
     def test_pagination(self, client, db):  # noqa: ARG002
         for i in range(35):
             WatchChannel.objects.create(youtube_channel_id=f"UC_{i}", name=f"Channel {i}", tier="regular")
