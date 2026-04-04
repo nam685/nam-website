@@ -402,7 +402,7 @@ function HeroPanel({
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        padding: "0",
+        padding: "0 0 5rem",
       }}
     >
       {/* Video area */}
@@ -857,14 +857,14 @@ export default function WatchesPage() {
   }
 
   /* ── Responsive column detection ─────────────────── */
-  const [cols, setCols] = useState(5);
+  const [cols, setCols] = useState(4);
 
   useEffect(() => {
     function updateCols() {
       const w = window.innerWidth;
       if (w < 768) setCols(2);
       else if (w < 1024) setCols(3);
-      else setCols(5);
+      else setCols(4);
     }
     updateCols();
     window.addEventListener("resize", updateCols);
@@ -913,7 +913,7 @@ export default function WatchesPage() {
           z-index: 1;
         }
         .watches-hero {
-          width: 50%;
+          width: 60%;
           flex-shrink: 0;
           position: sticky;
           top: 80px;
@@ -938,15 +938,15 @@ export default function WatchesPage() {
         }
         .watches-grid {
           display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 0.65rem;
         }
         @media (max-width: 1023px) {
           .watches-hero {
-            width: 45%;
+            width: 55%;
           }
           .watches-grid-container {
-            width: 50%;
+            width: 40%;
           }
           .watches-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
