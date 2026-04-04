@@ -153,7 +153,12 @@ def slops_reject(request, mission_id):
 
 
 def slops_trace(request, mission_id):
-    """GET /api/slops/<id>/trace/ — reads trace file from disk."""
+    """GET /api/slops/<id>/trace/ — return trace file contents.
+
+    v1: Returns full trace as JSON. Not streaming — reads entire file into memory.
+    Acceptable for v1 traces which are small. If traces grow large, switch to
+    StreamingHttpResponse with application/x-ndjson.
+    """
     if request.method != "GET":
         return JsonResponse({"error": "GET required"}, status=405)
 
@@ -163,16 +168,18 @@ def slops_trace(request, mission_id):
         return JsonResponse({"error": "Not found"}, status=404)
 
     if not m.trace_path:
-        return JsonResponse({"error": "No trace available"}, status=404)
+        return JsonResponse({"trace": None})
 
-    trace_file = m.trace_path
+    trace_file = os.path.join(m.trace_path, "trace.json")
     if not os.path.isfile(trace_file):
-        return JsonResponse({"error": "Trace file not found"}, status=404)
+        return JsonResponse({"trace": None})
 
     try:
         with open(trace_file) as f:
-            content = f.read()
-    except OSError:
+            import json
+
+            content = json.load(f)
+    except (OSError, json.JSONDecodeError):
         return JsonResponse({"error": "Failed to read trace file"}, status=500)
 
     return JsonResponse({"trace": content})

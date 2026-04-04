@@ -141,6 +141,31 @@ class TestSlopsReject:
 
 
 @pytest.mark.django_db
+class TestSlopsTrace:
+    def test_trace_no_path(self, client):
+        m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1")
+        resp = client.get(f"/api/slops/{m.id}/trace/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trace"] is None
+
+    def test_trace_not_found(self, client):
+        resp = client.get("/api/slops/999/trace/")
+        assert resp.status_code == 404
+
+    def test_trace_file_exists(self, client, tmp_path):
+        trace_dir = tmp_path / "task-1"
+        trace_dir.mkdir()
+        trace_file = trace_dir / "trace.json"
+        trace_file.write_text('{"messages": [{"role": "user", "content": "hello"}]}')
+        m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1", trace_path=str(trace_dir))
+        resp = client.get(f"/api/slops/{m.id}/trace/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trace"]["messages"][0]["content"] == "hello"
+
+
+@pytest.mark.django_db
 class TestSlopsStats:
     def test_stats_empty(self, client):
         resp = client.get("/api/slops/stats/")
