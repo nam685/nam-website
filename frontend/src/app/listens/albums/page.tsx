@@ -7,7 +7,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.08)";
+const PANEL_BG = "transparent";
 const PAGE_SIZE = 30;
 
 export default function ListensAlbumsPage() {
@@ -41,13 +41,13 @@ export default function ListensAlbumsPage() {
 
   if (loading)
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         Loading...
       </div>
     );
   if (albums.length === 0)
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         No albums yet.
       </div>
     );
@@ -127,7 +127,7 @@ export default function ListensAlbumsPage() {
                   {album.name}
                 </div>
                 <div style={{ color: "#888", fontSize: 10, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{album.artist}</div>
-                <div style={{ color: "#555", fontSize: 10, fontFamily: "monospace" }}>
+                <div style={{ color: "#888", fontSize: 10, fontFamily: "monospace" }}>
                   {album.play_count}× · {album.track_count} {album.track_count === 1 ? "track" : "tracks"}
                 </div>
               </div>

@@ -6,7 +6,7 @@ import { store } from "@/lib/auth";
 import { usePlayer } from "@/lib/player";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.08)";
+const PANEL_BG = "transparent";
 const PAGE_SIZE = 50;
 
 function topTrackToListenTrack(t: ListenTopTrack): ListenTrack {
@@ -52,13 +52,13 @@ export default function ListensTracksPage() {
 
   if (loading)
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         Loading...
       </div>
     );
   if (tracks.length === 0)
     return (
-      <div style={{ padding: 40, textAlign: "center", color: "#555", fontFamily: "monospace", fontSize: 12 }}>
+      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
         No tracks yet.
       </div>
     );
