@@ -102,6 +102,11 @@ export interface WatchVideo {
   title: string;
   thumbnail_url: string;
   note: string;
+  view_count: number;
+  like_count: number;
+  comment_count: number;
+  description: string;
+  duration: string;
 }
 
 export interface WatchChannel {
@@ -150,6 +155,22 @@ export interface WatchSyncStatus {
   cooldown_remaining: number;
   connected: boolean;
   last_synced: string | null;
+}
+
+export interface WatchRecommended {
+  video: {
+    id: number;
+    youtube_video_id: string;
+    title: string;
+    thumbnail_url: string;
+    view_count: number;
+    like_count: number;
+    comment_count: number;
+    description: string;
+    duration: string;
+    channel_name: string;
+    channel_thumbnail_url: string;
+  } | null;
 }
 
 export interface LichessStatus {
