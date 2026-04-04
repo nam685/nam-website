@@ -139,7 +139,7 @@ class TestListenStats:
         assert isinstance(data["daily"], list)
 
 
-# ── Sync endpoint (browser auth) ─────────────────────
+# ── Sync endpoint (OAuth auth) ─────────────────────
 
 
 @pytest.mark.django_db
@@ -149,10 +149,10 @@ class TestListenSync:
         assert resp.status_code == 405
 
     @patch("os.path.isfile", return_value=False)
-    def test_missing_browser_json(self, _mock_isfile, client, auth_headers):
+    def test_missing_oauth_json(self, _mock_isfile, client, auth_headers):
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 500
-        assert "Browser auth not configured" in resp.json()["error"]
+        assert "OAuth not configured" in resp.json()["error"]
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from website.models import ListenTrack
 
-BROWSER_JSON_PATH = "browser.json"
+OAUTH_JSON_PATH = "oauth.json"
 VIEW_COUNT_RE = re.compile(r"^[\d,.]+\s+views?$", re.IGNORECASE)
 
 
@@ -16,10 +16,10 @@ class Command(BaseCommand):
     def handle(self, *_args, **_options):
         from ytmusicapi import YTMusic
 
-        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
+        auth_path = os.environ.get("YTMUSIC_OAUTH_JSON", OAUTH_JSON_PATH)
         if not os.path.isfile(auth_path):
             self.stderr.write(f"Auth file not found: {auth_path}")
-            self.stderr.write("Run: ytmusicapi browser")
+            self.stderr.write("Run: uv run ytmusicapi oauth")
             return
 
         yt = YTMusic(auth_path)
