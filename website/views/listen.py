@@ -135,6 +135,8 @@ def listen_sync(request):
 
     if new_tracks:
         ListenTrack.objects.bulk_create(new_tracks)
+        redis_cache.delete("listen_stats")
+        redis_cache.delete("listen_total_count")
 
     _last_sync = now
 
@@ -340,7 +342,7 @@ def listen_top_albums(request):
 
     albums = (
         ListenTrack.objects.exclude(album="")
-        .values("album", "artist")
+        .values("album")
         .annotate(
             play_count=Count("id"),
             track_count=Count("video_id", distinct=True),
@@ -352,8 +354,18 @@ def listen_top_albums(request):
     page = list(albums[offset : offset + limit])
 
     for entry in page:
+        # Pick the most common artist for this album (handles collab variations)
+        top_artist = (
+            ListenTrack.objects.filter(album=entry["album"])
+            .values("artist")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt")
+            .values_list("artist", flat=True)
+            .first()
+        )
+        entry["artist"] = top_artist or "Unknown"
         track = (
-            ListenTrack.objects.filter(album=entry["album"], artist=entry["artist"])
+            ListenTrack.objects.filter(album=entry["album"])
             .exclude(thumbnail_url="")
             .values_list("thumbnail_url", flat=True)
             .first()
