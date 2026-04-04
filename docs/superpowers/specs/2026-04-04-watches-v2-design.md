@@ -132,8 +132,33 @@ Modify `watch_staging()` to return all channels instead of just hidden ones. Sor
 - `frontend/src/app/watches/staging/page.tsx` — grouped channel display, pin video popup, brighter buttons
 - `frontend/src/lib/api.ts` — add types for uploads response and pin-videos request
 
+### 11. Recommended Video — Expand Pool and Filter Shorts
+
+**Current:** `watch_recommended()` only samples from pinned+visible videos, weighted by channel tier.
+
+**Change:** Expand the recommendation pool to include **all** videos in the database (pinned videos + liked videos), as long as they belong to a non-hidden channel. Keep the tier-based weighting (never_miss: 3, regular: 2, check_out: 1).
+
+**Filter out short-form videos:** Exclude videos with duration <= 60 seconds. The `duration` field stores ISO 8601 format (e.g. `PT5M30S`). Parse this to seconds and skip anything <= 60s. Also skip videos with empty/missing duration (can't verify they're not Shorts).
+
+This keeps the liked video sync useful — those videos feed the recommendation engine even though the staging flat video list is removed.
+
+### 12. Staging Page — Remove Flat Video List
+
+The current staging page shows a flat list of all non-visible videos at the bottom. This is no longer needed since videos are now pinned per-channel via the uploads popup. Remove the videos section entirely from the staging page.
+
+## Files Changed
+
+### Backend
+- `website/views/watch.py` — new `watch_channel_uploads()`, `watch_channel_pin_videos()` endpoints; modify `watch_staging()` to return all channels; modify `watch_recommended()` to sample from all videos and filter Shorts
+- `website/urls.py` — add routes for new endpoints
+
+### Frontend
+- `frontend/src/app/watches/page.tsx` — scrollable grid container with scroll indicator, fixed tagline, remove tier buttons from expanded block, standardize card sizing
+- `frontend/src/app/watches/staging/page.tsx` — grouped channel display, pin video popup, brighter buttons, remove flat video list
+- `frontend/src/lib/api.ts` — add types for uploads response and pin-videos request
+
 ## Out of Scope
 - Changing the hero player behavior
-- Changing the sync logic (subscriptions + liked videos)
+- Changing the sync logic (subscriptions + liked videos still synced as before)
 - Mobile layout changes beyond what's described (responsive breakpoints stay the same)
 - Video notes or other staging video management
