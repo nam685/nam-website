@@ -109,9 +109,8 @@ function ChannelCard({
         padding: "0.75rem",
         cursor: "pointer",
         transition:
-          "border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease",
+          "border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease",
         opacity: tier.opacity,
-        transform: hovered ? "scale(1.03)" : "scale(1)",
         outline: isExpanded ? `2px solid ${ACCENT}60` : "none",
         outlineOffset: -1,
         display: "flex",
@@ -1022,7 +1021,7 @@ export default function WatchesPage() {
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    height: 60,
+                    height: 32,
                     background: "linear-gradient(transparent, #0a0a0a)",
                     pointerEvents: "none",
                   }}
