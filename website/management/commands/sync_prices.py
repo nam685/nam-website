@@ -16,12 +16,15 @@ class Command(BaseCommand):
     def handle(self, *_args, **_options):
         tickers = Ticker.objects.all()
         errors = []
-        last_provider = None
+        last_av_time: float | None = None
 
         for ticker in tickers:
-            # Rate-limit: 1 req/sec for free API keys (Alpha Vantage)
-            if last_provider == "alpha_vantage" and ticker.provider == "alpha_vantage":
-                time.sleep(1.5)
+            # Rate-limit: 1.5s between Alpha Vantage requests (free key: ~1 req/sec)
+            if ticker.provider == "alpha_vantage" and last_av_time is not None:
+                elapsed = time.monotonic() - last_av_time
+                if elapsed < 1.5:
+                    time.sleep(1.5 - elapsed)
+
             adapter = PROVIDER_ADAPTERS.get(ticker.provider)
             if not adapter:
                 errors.append({"symbol": ticker.symbol, "message": f"Unknown provider: {ticker.provider}"})
@@ -35,7 +38,8 @@ class Command(BaseCommand):
                 errors.append({"symbol": ticker.symbol, "message": str(e)})
                 self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
 
-            last_provider = ticker.provider
+            if ticker.provider == "alpha_vantage":
+                last_av_time = time.monotonic()
 
         status = {
             "last_sync": datetime.now().isoformat(),
