@@ -394,8 +394,8 @@ def listen_import(request):
     if not isinstance(raw, list):
         return JsonResponse({"error": "Expected a JSON array"}, status=400)
 
-    # Filter to YouTube Music entries only
-    entries = [e for e in raw if "YouTube Music" in (e.get("products") or [])]
+    # Filter to YouTube Music entries — the "header" field (not "products") distinguishes YTM from YouTube
+    entries = [e for e in raw if e.get("header") == "YouTube Music"]
 
     imported = 0
     skipped = 0

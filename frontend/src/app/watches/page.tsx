@@ -353,23 +353,19 @@ export default function WatchesPage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: "0.5rem",
+            marginBottom: "2rem",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ color: ACCENT, fontSize: "0.75rem" }}>~</span>
-            <h1
-              style={{
-                fontFamily: "var(--font-headline)",
-                fontSize: "1.25rem",
-                fontWeight: 700,
-                color: ACCENT,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Watches
-            </h1>
-          </div>
+          <p
+            style={{
+              fontStyle: "italic",
+              color: "#555",
+              fontSize: "0.85rem",
+              letterSpacing: "0.02em",
+            }}
+          >
+            at least i don&apos;t doom scroll facebook et al.
+          </p>
 
           {/* Admin controls */}
           {isAdmin && (
@@ -472,18 +468,6 @@ export default function WatchesPage() {
           )}
         </div>
 
-        {/* Tagline */}
-        <p
-          style={{
-            fontStyle: "italic",
-            color: "#555",
-            fontSize: "0.85rem",
-            marginBottom: "2rem",
-          }}
-        >
-          my youtube taste map
-        </p>
-
         {/* Grid */}
         {channels.length === 0 ? (
           <p
@@ -502,7 +486,7 @@ export default function WatchesPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(160px, 100%), 1fr))",
               gap: "0.75rem",
             }}
           >

@@ -431,6 +431,20 @@ export default function DrawsPage() {
             position: "relative",
           }}
         >
+          {/* Tagline */}
+          <p
+            style={{
+              textAlign: "center",
+              fontStyle: "italic",
+              color: "#555",
+              fontSize: "0.85rem",
+              letterSpacing: "0.02em",
+              marginBottom: "2rem",
+            }}
+          >
+            eye candy!
+          </p>
+
           {/* Headers */}
           <div
             style={{
@@ -593,6 +607,20 @@ export default function DrawsPage() {
             minHeight: "100vh",
           }}
         >
+          {/* Tagline */}
+          <p
+            style={{
+              textAlign: "center",
+              fontStyle: "italic",
+              color: "#555",
+              fontSize: "0.85rem",
+              letterSpacing: "0.02em",
+              marginBottom: "1.5rem",
+            }}
+          >
+            eye candy!
+          </p>
+
           {/* Header */}
           <div
             style={{

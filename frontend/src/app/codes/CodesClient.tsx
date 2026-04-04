@@ -475,7 +475,7 @@ export default function CodesClient({
               letterSpacing: "0.04em",
             }}
           >
-            i make spaghetti
+            i embrace the slop
           </p>
         </div>
 

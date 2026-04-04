@@ -444,6 +444,19 @@ export default function BetsPage() {
         zIndex: 1,
       }}
     >
+      {/* Tagline */}
+      <p
+        style={{
+          fontStyle: "italic",
+          color: "#555",
+          fontSize: "0.85rem",
+          letterSpacing: "0.02em",
+          marginBottom: 24,
+        }}
+      >
+        i look here to feel very smart
+      </p>
+
       {/* Header */}
       <div
         style={{
@@ -626,8 +639,8 @@ export default function BetsPage() {
         style={{
           display: "grid",
           gridTemplateColumns: expandedId
-            ? "repeat(auto-fill, minmax(140px, 1fr))"
-            : "repeat(auto-fill, minmax(260px, 1fr))",
+            ? "repeat(auto-fill, minmax(min(140px, 100%), 1fr))"
+            : "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
           gap: 12,
           opacity: expandedId ? 0.6 : 1,
           transition: "opacity 0.2s",
