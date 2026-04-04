@@ -626,8 +626,8 @@ export default function BetsPage() {
         style={{
           display: "grid",
           gridTemplateColumns: expandedId
-            ? "repeat(auto-fill, minmax(140px, 1fr))"
-            : "repeat(auto-fill, minmax(260px, 1fr))",
+            ? "repeat(auto-fill, minmax(min(140px, 100%), 1fr))"
+            : "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
           gap: 12,
           opacity: expandedId ? 0.6 : 1,
           transition: "opacity 0.2s",

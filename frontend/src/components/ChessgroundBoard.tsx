@@ -114,7 +114,8 @@ export default function ChessgroundBoard({
     <div
       ref={boardRef}
       style={{
-        width: "min(400px, 90vw)",
+        width: "min(400px, calc(100vw - 3rem))",
+        maxWidth: "100%",
         aspectRatio: "1",
         border: "1px solid color-mix(in srgb, var(--accent) 30%, #1a1a1a)",
         borderRadius: "4px",

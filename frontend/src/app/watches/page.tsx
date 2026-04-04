@@ -502,7 +502,7 @@ export default function WatchesPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(min(160px, 100%), 1fr))",
               gap: "0.75rem",
             }}
           >

@@ -159,7 +159,7 @@ export default function OpeningExplorer() {
       }}
     >
       {/* Board + controls */}
-      <div style={{ flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, maxWidth: "100%" }}>
         <ChessgroundBoard
           fen={fen}
           orientation={orientation}
@@ -234,7 +234,7 @@ export default function OpeningExplorer() {
       </div>
 
       {/* Explorer panel */}
-      <div style={{ flex: "1 1 280px", minWidth: "280px", maxWidth: "400px" }}>
+      <div style={{ flex: "1 1 280px", minWidth: 0, maxWidth: "400px" }}>
         {/* Opening name */}
         <div
           style={{
