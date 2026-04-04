@@ -146,6 +146,7 @@ export interface UploadVideo {
   youtube_video_id: string;
   title: string;
   thumbnail_url: string;
+  view_count?: number;
 }
 
 export interface ChannelUploadsResponse {

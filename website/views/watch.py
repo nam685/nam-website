@@ -638,7 +638,7 @@ def watch_sync_status(_request):
 
 @require_admin
 def watch_channel_uploads(_request, channel_id):
-    """Admin: fetch recent uploads for a channel from YouTube API."""
+    """Admin: fetch popular uploads for a channel from YouTube API, sorted by view count."""
     try:
         channel = WatchChannel.objects.get(pk=channel_id)
     except WatchChannel.DoesNotExist:
@@ -652,42 +652,80 @@ def watch_channel_uploads(_request, channel_id):
     if not access_token:
         return JsonResponse({"error": "YouTube not connected"}, status=400)
 
+    # Fetch ~150 uploads (3 pages of 50) to find popular videos
     playlist_id = "UU" + yt_id[2:]
-    try:
-        data = _youtube_api_get(
-            "playlistItems",
-            access_token,
-            params={"playlistId": playlist_id, "part": "snippet", "maxResults": 20},
-        )
-    except Exception:
-        logger.exception("Failed to fetch uploads for channel %s", channel.name)
+    all_items = []
+    next_page_token = None
+    for _ in range(3):
+        params = {"playlistId": playlist_id, "part": "snippet", "maxResults": 50}
+        if next_page_token:
+            params["pageToken"] = next_page_token
+        try:
+            data = _youtube_api_get("playlistItems", access_token, params=params)
+        except Exception:
+            logger.exception("Failed to fetch uploads for channel %s", channel.name)
+            break
+        all_items.extend(data.get("items", []))
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
+            break
+
+    if not all_items:
         return JsonResponse({"videos": [], "message": "Failed to fetch uploads"})
 
-    yt_video_ids = []
-    for item in data.get("items", []):
-        vid_id = item.get("snippet", {}).get("resourceId", {}).get("videoId")
-        if vid_id:
-            yt_video_ids.append(vid_id)
-
-    existing_ids = set(
-        WatchVideo.objects.filter(youtube_video_id__in=yt_video_ids).values_list("youtube_video_id", flat=True)
-    )
-
-    videos = []
-    for item in data.get("items", []):
+    # Collect video IDs and filter out already-pinned ones
+    vid_map = {}
+    for item in all_items:
         snippet = item.get("snippet", {})
         vid_id = snippet.get("resourceId", {}).get("videoId")
-        if not vid_id or vid_id in existing_ids:
+        if vid_id:
+            thumbs = snippet.get("thumbnails", {})
+            thumb_url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url", "")
+            vid_map[vid_id] = {"title": snippet.get("title", ""), "thumbnail_url": thumb_url}
+
+    existing_ids = set(
+        WatchVideo.objects.filter(youtube_video_id__in=list(vid_map.keys())).values_list("youtube_video_id", flat=True)
+    )
+    for eid in existing_ids:
+        vid_map.pop(eid, None)
+
+    if not vid_map:
+        return JsonResponse({"videos": []})
+
+    # Batch-fetch stats + duration to sort by view count and filter shorts
+    stats = {}
+    durations = {}
+    vid_ids_list = list(vid_map.keys())
+    for i in range(0, len(vid_ids_list), 50):
+        batch_ids = vid_ids_list[i : i + 50]
+        try:
+            data = _youtube_api_get(
+                "videos", access_token, {"id": ",".join(batch_ids), "part": "statistics,contentDetails"}
+            )
+        except Exception:
+            logger.exception("Failed to fetch video stats for uploads")
             continue
-        thumbs = snippet.get("thumbnails", {})
-        thumb_url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url", "")
+        for item in data.get("items", []):
+            yt_id = item.get("id", "")
+            view_count = int(item.get("statistics", {}).get("viewCount", 0))
+            stats[yt_id] = view_count
+            durations[yt_id] = item.get("contentDetails", {}).get("duration", "")
+
+    # Build response sorted by view count descending, excluding shorts (<=60s)
+    videos = []
+    for vid_id, info in vid_map.items():
+        duration = durations.get(vid_id, "")
+        if duration and parse_iso8601_duration(duration) <= 60:
+            continue
         videos.append(
             {
                 "youtube_video_id": vid_id,
-                "title": snippet.get("title", ""),
-                "thumbnail_url": thumb_url,
+                "title": info["title"],
+                "thumbnail_url": info["thumbnail_url"],
+                "view_count": stats.get(vid_id, 0),
             }
         )
+    videos.sort(key=lambda v: v["view_count"], reverse=True)
 
     return JsonResponse({"videos": videos})
 
