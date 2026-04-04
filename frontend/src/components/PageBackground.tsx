@@ -17,7 +17,7 @@ const BG_MAP: Record<string, string> = {
 
 export default function PageBackground() {
   const pathname = usePathname();
-  const bg = BG_MAP[pathname];
+  const bg = BG_MAP[pathname] ?? BG_MAP["/" + pathname.split("/")[1]];
   const [loaded, setLoaded] = useState<string | null>(null);
 
   useEffect(() => {
