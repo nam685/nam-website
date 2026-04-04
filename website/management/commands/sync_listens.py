@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from website.models import ListenTrack
 
-OAUTH_JSON_PATH = "oauth.json"
+BROWSER_JSON_PATH = "browser.json"
 VIEW_COUNT_RE = re.compile(r"^[\d,.]+\s+views?$", re.IGNORECASE)
 
 
@@ -14,22 +14,24 @@ class Command(BaseCommand):
     help = "Sync YouTube Music listening history via ytmusicapi"
 
     def handle(self, *_args, **_options):
-        from ytmusicapi import OAuthCredentials, YTMusic
+        import json
 
-        auth_path = os.environ.get("YTMUSIC_OAUTH_JSON", OAUTH_JSON_PATH)
+        from ytmusicapi import YTMusic
+        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
+
+        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
         if not os.path.isfile(auth_path):
             self.stderr.write(f"Auth file not found: {auth_path}")
-            self.stderr.write("Run: uv run ytmusicapi oauth")
+            self.stderr.write("Run: ytmusicapi browser")
             return
 
-        client_id = os.environ.get("YTMUSIC_CLIENT_ID", "")
-        client_secret = os.environ.get("YTMUSIC_CLIENT_SECRET", "")
-        if not client_id or not client_secret:
-            self.stderr.write("YTMUSIC_CLIENT_ID and YTMUSIC_CLIENT_SECRET env vars required")
-            return
-
-        oauth_credentials = OAuthCredentials(client_id=client_id, client_secret=client_secret)
-        yt = YTMusic(auth_path, oauth_credentials=oauth_credentials)
+        with open(auth_path) as f:
+            headers = json.load(f)
+        if "authorization" not in headers and "cookie" in headers:
+            sapisid = sapisid_from_cookie(headers["cookie"])
+            origin = headers.get("origin", "https://music.youtube.com")
+            headers["authorization"] = get_authorization(sapisid + " " + origin)
+        yt = YTMusic(headers)
         history = yt.get_history()
         self.stdout.write(f"Fetched {len(history)} tracks from YTM")
 

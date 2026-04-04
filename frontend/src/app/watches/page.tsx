@@ -119,6 +119,8 @@ function ChannelCard({
         alignItems: "center",
         gap: "0.5rem",
         textAlign: "center",
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       {channel.thumbnail_url ? (
@@ -157,8 +159,10 @@ function ChannelCard({
           fontSize: "0.8rem",
           fontWeight: 600,
           overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical" as const,
+          wordBreak: "break-word" as const,
           color: "#e5e2e1",
           width: "100%",
           margin: 0,
@@ -935,7 +939,7 @@ export default function WatchesPage() {
         }
         .watches-grid {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 0.65rem;
         }
         @media (max-width: 1023px) {
@@ -946,7 +950,7 @@ export default function WatchesPage() {
             width: 50%;
           }
           .watches-grid {
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
         @media (max-width: 767px) {
@@ -965,7 +969,7 @@ export default function WatchesPage() {
             width: 100%;
           }
           .watches-grid {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .watches-grid-scroll {
             height: auto;
@@ -1035,11 +1039,11 @@ export default function WatchesPage() {
           position: "fixed",
           bottom: "1.5rem",
           left: "1.5rem",
-          zIndex: 10,
           fontStyle: "italic",
           color: "#444",
           fontSize: "0.8rem",
           margin: 0,
+          width: "fit-content",
           pointerEvents: "none",
         }}
       >
