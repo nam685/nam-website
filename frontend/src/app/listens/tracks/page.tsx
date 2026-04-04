@@ -6,7 +6,7 @@ import { store } from "@/lib/auth";
 import { usePlayer } from "@/lib/player";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.5)";
+const PANEL_BG = "rgba(14, 14, 14, 0.25)";
 const PAGE_SIZE = 50;
 
 function topTrackToListenTrack(t: ListenTopTrack): ListenTrack {

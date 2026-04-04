@@ -247,6 +247,21 @@ export default function PlaysClient() {
           )}
         </>
       )}
+
+      {/* Tagline */}
+      <div style={{ textAlign: "center", marginTop: "3rem" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-headline)",
+            fontSize: "0.6rem",
+            color: "#2a2a2a",
+            letterSpacing: "0.2em",
+            textTransform: "lowercase",
+          }}
+        >
+          i spent waaay too much time on this
+        </span>
+      </div>
     </div>
   );
 }
