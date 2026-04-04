@@ -15,7 +15,7 @@ def fetch_alpha_vantage(provider_id: str, days: int = 365) -> list[tuple[date, D
     params = {
         "function": "TIME_SERIES_DAILY",
         "symbol": provider_id,
-        "outputsize": "full" if days > 100 else "compact",
+        "outputsize": "compact",
         "apikey": api_key,
     }
     series_key = "Time Series (Daily)"
