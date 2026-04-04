@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET
 from website.auth import require_admin
 from website.models import PriceSnapshot, Ticker
 from website.services import search_alpha_vantage, search_coingecko
+from website.services.alpha_vantage import AlphaVantageQuotaError
 from website.utils import parse_json_body
 
 PERIOD_DAYS = {
@@ -219,8 +220,12 @@ def bets_search(request):
     if len(q) < 2:
         return JsonResponse({"error": "Query must be at least 2 characters"}, status=400)
 
+    quota_error = None
     try:
         av_results = search_alpha_vantage(q)
+    except AlphaVantageQuotaError as e:
+        av_results = []
+        quota_error = str(e)
     except Exception:
         av_results = []
 
@@ -241,5 +246,8 @@ def bets_search(request):
         merged.append(item)
         if len(merged) >= 8:
             break
+
+    if not merged and quota_error:
+        return JsonResponse({"error": quota_error}, status=429)
 
     return JsonResponse(merged, safe=False)

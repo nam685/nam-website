@@ -307,6 +307,7 @@ export default function BetsPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<BetsSearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -341,6 +342,7 @@ export default function BetsPage() {
   const doSearch = async () => {
     if (searchQuery.length < 2) return;
     setSearching(true);
+    setSearchError(null);
     try {
       const token = store("adminToken");
       const r = await fetch(
@@ -348,7 +350,12 @@ export default function BetsPage() {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const data = await r.json();
-      if (Array.isArray(data)) setSearchResults(data);
+      if (Array.isArray(data)) {
+        setSearchResults(data);
+      } else if (data.error) {
+        setSearchError(data.error);
+        setSearchResults([]);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -519,6 +526,7 @@ export default function BetsPage() {
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setSearchResults([]);
+              setSearchError(null);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") doSearch();
@@ -538,7 +546,13 @@ export default function BetsPage() {
               Searching...
             </div>
           )}
+          {searchError && (
+            <div style={{ fontSize: 12, color: RED, marginTop: 8 }}>
+              {searchError}
+            </div>
+          )}
           {!searching &&
+            !searchError &&
             searchQuery.length >= 2 &&
             searchResults.length === 0 && (
               <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>
