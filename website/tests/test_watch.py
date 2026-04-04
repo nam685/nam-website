@@ -5,6 +5,33 @@ import pytest
 
 from website.models import WatchChannel, WatchVideo
 from website.views import watch as watch_views
+from website.views.watch import parse_iso8601_duration
+
+
+class TestParseISO8601Duration:
+    def test_minutes_and_seconds(self):
+        assert parse_iso8601_duration("PT5M30S") == 330
+
+    def test_hours_minutes_seconds(self):
+        assert parse_iso8601_duration("PT1H2M3S") == 3723
+
+    def test_minutes_only(self):
+        assert parse_iso8601_duration("PT10M") == 600
+
+    def test_seconds_only(self):
+        assert parse_iso8601_duration("PT45S") == 45
+
+    def test_hours_only(self):
+        assert parse_iso8601_duration("PT2H") == 7200
+
+    def test_empty_string(self):
+        assert parse_iso8601_duration("") == 0
+
+    def test_invalid_format(self):
+        assert parse_iso8601_duration("not a duration") == 0
+
+    def test_zero_duration(self):
+        assert parse_iso8601_duration("PT0S") == 0
 
 
 @pytest.mark.django_db

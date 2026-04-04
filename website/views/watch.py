@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -24,6 +25,19 @@ YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 
 _last_sync: float = 0
 SYNC_COOLDOWN = 300
+
+
+def parse_iso8601_duration(duration: str) -> int:
+    """Parse ISO 8601 duration (e.g. PT5M30S) to total seconds. Returns 0 on invalid input."""
+    if not duration:
+        return 0
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
+    if not match:
+        return 0
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def watch_list(request):
