@@ -13,9 +13,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Show what would change without modifying files")
+        parser.add_argument("--force", action="store_true", help="Reprocess all images, even already-square ones")
 
     def handle(self, **options):
         dry_run = options["dry_run"]
+        force = options["force"]
         drawings = Drawing.objects.all()
         modified = 0
 
@@ -31,7 +33,7 @@ class Command(BaseCommand):
             needs_crop = ratio < 0.8 or ratio > 1.2
             needs_pad = w != h
 
-            if not needs_crop and not needs_pad:
+            if not force and not needs_crop and not needs_pad:
                 continue
 
             if dry_run:
