@@ -135,6 +135,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const pendingVideoRef = useRef<string | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Track whether pause was user-initiated vs YouTube-initiated (ads, throttling, etc.)
+  const userRequestedPauseRef = useRef(false);
+  const resumeAttemptRef = useRef(0);
+
   // Refs that track latest state for use in callbacks
   const queueRef = useRef(queue);
   const currentIndexRef = useRef(currentIndex);
@@ -205,8 +209,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (state === window.YT.PlayerState.PLAYING) {
       setPlaying(true);
       setDuration(event.target.getDuration());
+      resumeAttemptRef.current = 0;
     } else if (state === window.YT.PlayerState.PAUSED) {
-      setPlaying(false);
+      if (userRequestedPauseRef.current) {
+        // User explicitly paused — accept it
+        setPlaying(false);
+      } else if (resumeAttemptRef.current < 2) {
+        // YouTube paused unexpectedly (e.g. navigation, throttling) — try to resume
+        resumeAttemptRef.current += 1;
+        setTimeout(() => {
+          try {
+            playerRef.current?.playVideo();
+          } catch {
+            setPlaying(false);
+          }
+        }, 300);
+      } else {
+        // Exhausted retries — accept the pause
+        setPlaying(false);
+        resumeAttemptRef.current = 0;
+      }
     } else if (state === window.YT.PlayerState.ENDED) {
       handleTrackEnd();
     }
@@ -295,6 +317,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setCurrentIndex(0);
       loadTrackAtIndex(0, q);
     } else {
+      userRequestedPauseRef.current = true; // queue exhausted — don't auto-resume
       setPlaying(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,6 +344,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const play = useCallback(
     (track: ListenTrack, newQueue?: ListenTrack[]) => {
+      userRequestedPauseRef.current = false;
+      resumeAttemptRef.current = 0;
       const q = newQueue ?? [track];
       const idx = q.findIndex(
         (t) => t.video_id === track.video_id && t.played_at === track.played_at,
@@ -344,11 +369,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   );
 
   const pause = useCallback(() => {
+    userRequestedPauseRef.current = true;
     playerRef.current?.pauseVideo();
     setPlaying(false);
   }, []);
 
   const resume = useCallback(() => {
+    userRequestedPauseRef.current = false;
+    resumeAttemptRef.current = 0;
     playerRef.current?.playVideo();
     setPlaying(true);
   }, []);
@@ -360,6 +388,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const rep = repeatRef.current;
 
     if (q.length === 0) return;
+    userRequestedPauseRef.current = false;
+    resumeAttemptRef.current = 0;
 
     if (shuf) {
       if (q.length <= 1) return;
@@ -386,6 +416,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const idx = currentIndexRef.current;
 
     if (q.length === 0) return;
+    userRequestedPauseRef.current = false;
+    resumeAttemptRef.current = 0;
 
     // If more than 3s in, restart current track
     if (playerRef.current) {
@@ -428,6 +460,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const close = useCallback(() => {
+    userRequestedPauseRef.current = true;
     playerRef.current?.stopVideo();
     setPlaying(false);
     setVisible(false);
