@@ -33,6 +33,9 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
   );
   const [stats, setStats] = useState<ListenStats | null>(null);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  const [syncStatus, setSyncStatus] = useState<
+    "idle" | "syncing" | "done" | "error"
+  >("idle");
 
   useEffect(() => {
     Promise.all([
@@ -235,15 +238,31 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
               </div>
               {isAdmin && (
                 <button
-                  onClick={(e) => {
+                  disabled={syncStatus === "syncing"}
+                  onClick={async (e) => {
                     e.stopPropagation();
                     const token = store("adminToken");
-                    if (token) {
-                      fetch(`${API}/api/listens/sync/`, {
+                    if (!token) return;
+                    setSyncStatus("syncing");
+                    try {
+                      const res = await fetch(`${API}/api/listens/sync/`, {
                         method: "POST",
                         headers: { Authorization: `Bearer ${token}` },
                       });
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => null);
+                        console.error("Sync failed:", data?.error || res.status);
+                        setSyncStatus("error");
+                      } else {
+                        const data = await res.json();
+                        console.log(`Synced ${data.synced} tracks`);
+                        setSyncStatus("done");
+                        if (data.synced > 0) window.location.reload();
+                      }
+                    } catch {
+                      setSyncStatus("error");
                     }
+                    setTimeout(() => setSyncStatus("idle"), 3000);
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = `rgba(249,115,22,0.15)`;
@@ -267,7 +286,13 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                     transition: "background 0.15s, border-color 0.15s",
                   }}
                 >
-                  SYNC
+                  {syncStatus === "syncing"
+                    ? "SYNCING..."
+                    : syncStatus === "done"
+                      ? "SYNCED!"
+                      : syncStatus === "error"
+                        ? "FAILED"
+                        : "SYNC"}
                 </button>
               )}
             </div>
