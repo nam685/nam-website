@@ -21,16 +21,13 @@ export default function PageBackground() {
   const [loaded, setLoaded] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!bg) {
-      setLoaded(null);
-      return;
-    }
+    if (!bg) return;
     const img = new Image();
     img.onload = () => setLoaded(bg);
     img.src = bg;
   }, [bg]);
 
-  if (!loaded) return null;
+  if (!bg || loaded !== bg) return null;
 
   return (
     <div

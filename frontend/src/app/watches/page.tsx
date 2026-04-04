@@ -1008,26 +1008,28 @@ export default function WatchesPage() {
               nothing here yet
             </p>
           ) : (
-            <div
-              className="watches-grid-scroll"
-              ref={gridScrollRef}
-              onScroll={handleGridScroll}
-            >
-              <div className="watches-grid">{gridItems}</div>
+            <>
+              <div
+                className="watches-grid-scroll"
+                ref={gridScrollRef}
+                onScroll={handleGridScroll}
+              >
+                <div className="watches-grid">{gridItems}</div>
+              </div>
               {!scrolledToBottom && (
                 <div
                   style={{
-                    position: "sticky",
+                    position: "absolute",
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    height: 32,
+                    height: 60,
                     background: "linear-gradient(transparent, #0a0a0a)",
                     pointerEvents: "none",
                   }}
                 />
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -1037,7 +1039,7 @@ export default function WatchesPage() {
         style={{
           position: "fixed",
           bottom: "1.5rem",
-          left: "1.5rem",
+          left: "4.5rem",
           fontStyle: "italic",
           color: "#444",
           fontSize: "0.8rem",
