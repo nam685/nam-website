@@ -66,6 +66,7 @@ export default function ListensArtistsPage() {
               transition: "border-color 0.15s",
               display: "flex",
               flexDirection: "column" as const,
+              minWidth: 0,
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(249,115,22,0.2)";
