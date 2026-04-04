@@ -84,6 +84,8 @@ GET  /api/watches/auth/         auth required, initiates Google OAuth
 GET  /api/watches/callback/     Google OAuth callback
 POST /api/watches/sync/         auth required, triggers YouTube sync
 GET  /api/watches/sync-status/  auth required
+GET  /api/watches/recommended/    random weighted pinned video for hero
+POST /api/watches/backfill-stats/ auth required, backfills stale video stats
 GET  /api/bets/                    all tickers with latest price + sparkline
 GET  /api/bets/<id>/history/       price history, ?period=1W|1M|3M|1Y|ALL
 POST /api/bets/create/             auth required, body: {symbol, name, asset_type, provider, provider_id, currency}

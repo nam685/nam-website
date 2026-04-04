@@ -1,11 +1,13 @@
 import json
 import logging
 import os
+import random
 import time
 import urllib.parse
 import urllib.request
 
 from django.core.cache import cache as redis_cache
+from django.db.models import Q
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -58,6 +60,11 @@ def watch_list(request):
                     "title": v.title,
                     "thumbnail_url": v.thumbnail_url,
                     "note": v.note,
+                    "view_count": v.view_count,
+                    "like_count": v.like_count,
+                    "comment_count": v.comment_count,
+                    "description": v.description,
+                    "duration": v.duration,
                 }
                 for v in pinned_videos
             ],
@@ -69,6 +76,47 @@ def watch_list(request):
             "total": total,
             "limit": limit,
             "offset": offset,
+        }
+    )
+
+
+def watch_recommended(request):  # noqa: ARG001
+    """Public: return a weighted-random pinned video for the hero section."""
+    visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
+    tier_weights = {"never_miss": 3, "regular": 2, "check_out": 1}
+
+    pinned_videos = WatchVideo.objects.filter(
+        pinned=True,
+        visible=True,
+        channel__isnull=False,
+        channel__tier__in=visible_tiers,
+    ).select_related("channel")
+
+    if not pinned_videos.exists():
+        return JsonResponse({"video": None})
+
+    weighted = []
+    for v in pinned_videos:
+        weight = tier_weights.get(v.channel.tier, 1)
+        weighted.extend([v] * weight)
+
+    chosen = random.choice(weighted)
+
+    return JsonResponse(
+        {
+            "video": {
+                "id": chosen.id,
+                "youtube_video_id": chosen.youtube_video_id,
+                "title": chosen.title,
+                "thumbnail_url": chosen.thumbnail_url,
+                "view_count": chosen.view_count,
+                "like_count": chosen.like_count,
+                "comment_count": chosen.comment_count,
+                "description": chosen.description,
+                "duration": chosen.duration,
+                "channel_name": chosen.channel.name,
+                "channel_thumbnail_url": chosen.channel.thumbnail_url,
+            }
         }
     )
 
@@ -277,6 +325,52 @@ def _refresh_access_token():
     return access_token
 
 
+def _fetch_video_stats(access_token, video_ids):
+    """Fetch statistics, contentDetails, and snippet for video IDs and update DB. Returns count updated."""
+    now = timezone.now()
+    updated = 0
+    for i in range(0, len(video_ids), 50):
+        batch_ids = video_ids[i : i + 50]
+        ids_param = ",".join(batch_ids)
+        try:
+            data = _youtube_api_get(
+                "videos",
+                access_token,
+                {"id": ids_param, "part": "statistics,contentDetails,snippet"},
+            )
+        except Exception:
+            logger.exception("Failed to fetch video stats batch")
+            continue
+
+        for item in data.get("items", []):
+            yt_id = item.get("id", "")
+            if not yt_id:
+                continue
+            try:
+                video = WatchVideo.objects.get(youtube_video_id=yt_id)
+            except WatchVideo.DoesNotExist:
+                continue
+            stats = item.get("statistics", {})
+            video.view_count = int(stats.get("viewCount", 0))
+            video.like_count = int(stats.get("likeCount", 0))
+            video.comment_count = int(stats.get("commentCount", 0))
+            video.description = item.get("snippet", {}).get("description", "")
+            video.duration = item.get("contentDetails", {}).get("duration", "")
+            video.stats_updated_at = now
+            video.save(
+                update_fields=[
+                    "view_count",
+                    "like_count",
+                    "comment_count",
+                    "description",
+                    "duration",
+                    "stats_updated_at",
+                ]
+            )
+            updated += 1
+    return updated
+
+
 def _sync_subscriptions(access_token, max_pages=10):
     """Paginate YouTube subscriptions API, update_or_create WatchChannels. Returns new count."""
     new_count = 0
@@ -329,6 +423,7 @@ def _sync_liked_videos(access_token, max_pages=4):
     new_count = 0
     page_token = None
     total = 0
+    synced_video_ids = []
 
     for _ in range(max_pages):
         params = {"myRating": "like", "part": "snippet", "maxResults": 50}
@@ -367,6 +462,7 @@ def _sync_liked_videos(access_token, max_pages=4):
             )
             if created:
                 new_count += 1
+            synced_video_ids.append(video_id)
             total += 1
 
         if total >= 200:
@@ -375,6 +471,9 @@ def _sync_liked_videos(access_token, max_pages=4):
         page_token = data.get("nextPageToken")
         if not page_token:
             break
+
+    if synced_video_ids:
+        _fetch_video_stats(access_token, synced_video_ids)
 
     return new_count
 
@@ -518,3 +617,22 @@ def watch_sync_status(_request):
             "last_synced": last_synced,
         }
     )
+
+
+@csrf_exempt
+@require_admin
+def watch_backfill_stats(_request):
+    """Admin: backfill video stats from YouTube API for videos with stale or missing stats."""
+    access_token = _refresh_access_token()
+    if not access_token:
+        return JsonResponse({"error": "YouTube not connected"}, status=400)
+
+    threshold = timezone.now() - timezone.timedelta(days=7)
+    stale_videos = list(WatchVideo.objects.filter(Q(stats_updated_at__isnull=True) | Q(stats_updated_at__lt=threshold)))
+
+    if not stale_videos:
+        return JsonResponse({"updated": 0})
+
+    video_ids = [v.youtube_video_id for v in stale_videos]
+    updated = _fetch_video_stats(access_token, video_ids)
+    return JsonResponse({"updated": updated})

@@ -62,6 +62,18 @@ class TestWatchVideo:
         v.refresh_from_db()
         assert v.channel is None
 
+    def test_stats_fields_defaults(self):
+        v = WatchVideo.objects.create(
+            youtube_video_id="vid_stats",
+            title="Stats Video",
+        )
+        assert v.view_count == 0
+        assert v.like_count == 0
+        assert v.comment_count == 0
+        assert v.description == ""
+        assert v.duration == ""
+        assert v.stats_updated_at is None
+
 
 @pytest.fixture()
 def visible_channels(db):  # noqa: ARG001
@@ -122,6 +134,25 @@ class TestWatchList:
         data = client.get("/api/watches/").json()
         tiers = [c["tier"] for c in data["channels"]]
         assert tiers == ["never_miss", "regular"]
+
+    def test_video_includes_stats_fields(self, client, visible_channels):  # noqa: ARG002
+        # Update the pinned video with stats data
+        v = WatchVideo.objects.get(youtube_video_id="vid_pinned")
+        v.view_count = 1500000
+        v.like_count = 50000
+        v.comment_count = 3000
+        v.description = "A great video about testing"
+        v.duration = "PT15M30S"
+        v.save()
+
+        data = client.get("/api/watches/").json()
+        top = next(c for c in data["channels"] if c["name"] == "Top Channel")
+        video = top["videos"][0]
+        assert video["view_count"] == 1500000
+        assert video["like_count"] == 50000
+        assert video["comment_count"] == 3000
+        assert video["description"] == "A great video about testing"
+        assert video["duration"] == "PT15M30S"
 
     def test_pagination(self, client, db):  # noqa: ARG002
         for i in range(35):
@@ -248,6 +279,39 @@ class TestWatchVideoDelete:
         assert WatchVideo.objects.count() == 0
 
 
+@pytest.mark.django_db
+class TestWatchRecommended:
+    def test_empty_when_no_pinned_videos(self, client):
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_returns_pinned_video_from_visible_channel(self, client, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/recommended/").json()
+        video = data["video"]
+        assert video is not None
+        assert video["youtube_video_id"] == "vid_pinned"
+        assert video["title"] == "Great Video"
+        assert video["channel_name"] == "Top Channel"
+        assert video["channel_thumbnail_url"] is not None
+        assert "view_count" in video
+        assert "like_count" in video
+        assert "comment_count" in video
+        assert "description" in video
+        assert "duration" in video
+
+    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
+        hidden_ch = WatchChannel.objects.create(youtube_channel_id="UC_hidden_rec", name="Hidden", tier="hidden")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_hidden_rec",
+            title="Hidden Vid",
+            pinned=True,
+            visible=True,
+            channel=hidden_ch,
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+
 @pytest.fixture(autouse=True)
 def _reset_watch_rate_limit():
     watch_views._last_sync = 0
@@ -309,6 +373,7 @@ class TestWatchSync:
         cache.set("watches_google_access_token", "fake-access")
 
         mock_api_get.side_effect = [
+            # subscriptions call
             {
                 "items": [
                     {
@@ -321,6 +386,7 @@ class TestWatchSync:
                     }
                 ],
             },
+            # liked videos call
             {
                 "items": [
                     {
@@ -330,6 +396,21 @@ class TestWatchSync:
                             "channelId": "UC_test",
                             "thumbnails": {"high": {"url": "https://vthumb.jpg"}},
                         },
+                    }
+                ],
+            },
+            # stats batch call for video IDs
+            {
+                "items": [
+                    {
+                        "id": "vid_test",
+                        "statistics": {
+                            "viewCount": "1000000",
+                            "likeCount": "50000",
+                            "commentCount": "1200",
+                        },
+                        "contentDetails": {"duration": "PT10M5S"},
+                        "snippet": {"description": "A cool video"},
                     }
                 ],
             },
@@ -347,6 +428,12 @@ class TestWatchSync:
         v = WatchVideo.objects.get(youtube_video_id="vid_test")
         assert v.channel == ch
         assert v.visible is False
+        assert v.view_count == 1000000
+        assert v.like_count == 50000
+        assert v.comment_count == 1200
+        assert v.description == "A cool video"
+        assert v.duration == "PT10M5S"
+        assert v.stats_updated_at is not None
 
     @patch("website.views.watch._youtube_api_get")
     def test_sync_rate_limited(self, mock_api_get, client, auth_headers):
@@ -354,7 +441,11 @@ class TestWatchSync:
 
         cache.set("watches_google_refresh_token", "fake-refresh")
         cache.set("watches_google_access_token", "fake-access")
-        mock_api_get.return_value = {"items": []}
+        # First sync: subscriptions + liked videos (no videos synced, so no stats call)
+        mock_api_get.side_effect = [
+            {"items": []},  # subscriptions
+            {"items": []},  # liked videos
+        ]
 
         client.post("/api/watches/sync/", **auth_headers)
         resp = client.post("/api/watches/sync/", **auth_headers)
@@ -371,3 +462,56 @@ class TestWatchSyncStatus:
         assert data["available"] is True
         assert data["cooldown_remaining"] == 0
         assert data["connected"] is False
+
+
+@pytest.mark.django_db
+class TestWatchBackfillStats:
+    def test_requires_auth(self, client):
+        assert client.post("/api/watches/backfill-stats/").status_code == 401
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_backfills_stale_videos(self, mock_api_get, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        v = WatchVideo.objects.create(
+            youtube_video_id="vid_stale",
+            title="Stale Video",
+            pinned=True,
+            visible=True,
+        )
+        assert v.stats_updated_at is None
+
+        mock_api_get.return_value = {
+            "items": [
+                {
+                    "id": "vid_stale",
+                    "statistics": {
+                        "viewCount": "5000000",
+                        "likeCount": "100000",
+                        "commentCount": "2000",
+                    },
+                    "contentDetails": {"duration": "PT12M30S"},
+                    "snippet": {"description": "Video description here"},
+                }
+            ]
+        }
+
+        resp = client.post("/api/watches/backfill-stats/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 1
+
+        v.refresh_from_db()
+        assert v.view_count == 5000000
+        assert v.like_count == 100000
+        assert v.comment_count == 2000
+        assert v.description == "Video description here"
+        assert v.duration == "PT12M30S"
+        assert v.stats_updated_at is not None
+
+    def test_no_youtube_connection(self, client, auth_headers):
+        resp = client.post("/api/watches/backfill-stats/", **auth_headers)
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["error"].lower()

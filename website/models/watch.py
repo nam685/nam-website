@@ -42,6 +42,12 @@ class WatchVideo(models.Model):
     note = models.CharField(max_length=200, blank=True, default="")
     pinned = models.BooleanField(default=False)
     visible = models.BooleanField(default=False)
+    view_count = models.BigIntegerField(default=0)
+    like_count = models.BigIntegerField(default=0)
+    comment_count = models.BigIntegerField(default=0)
+    description = models.TextField(blank=True, default="")
+    duration = models.CharField(max_length=20, blank=True, default="")
+    stats_updated_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     synced_at = models.DateTimeField(auto_now=True)
 
