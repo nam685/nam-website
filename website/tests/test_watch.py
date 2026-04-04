@@ -716,44 +716,56 @@ class TestWatchChannelUploads:
         assert "not connected" in resp.json()["error"].lower()
 
     @patch("website.views.watch._youtube_api_get")
-    def test_returns_uploads(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+    def test_returns_uploads_sorted_by_views(self, mock_api, client, auth_headers, db):  # noqa: ARG002
         from django.core.cache import cache
 
         cache.set("watches_google_refresh_token", "fake-refresh")
         cache.set("watches_google_access_token", "fake-access")
 
         ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
-        mock_api.return_value = {
-            "items": [
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid_upload1"},
-                        "title": "Upload One",
-                        "thumbnails": {"high": {"url": "https://thumb1.jpg"}},
-                    }
-                },
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid_upload2"},
-                        "title": "Upload Two",
-                        "thumbnails": {"high": {"url": "https://thumb2.jpg"}},
-                    }
-                },
-            ]
-        }
+        mock_api.side_effect = [
+            # First call: playlistItems
+            {
+                "items": [
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_upload1"},
+                            "title": "Upload One",
+                            "thumbnails": {"high": {"url": "https://thumb1.jpg"}},
+                        }
+                    },
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_upload2"},
+                            "title": "Upload Two",
+                            "thumbnails": {"high": {"url": "https://thumb2.jpg"}},
+                        }
+                    },
+                ]
+            },
+            # Second call: video stats
+            {
+                "items": [
+                    {"id": "vid_upload1", "statistics": {"viewCount": "100"}},
+                    {"id": "vid_upload2", "statistics": {"viewCount": "5000"}},
+                ]
+            },
+        ]
 
         resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
         assert resp.status_code == 200
         videos = resp.json()["videos"]
         assert len(videos) == 2
-        assert videos[0]["youtube_video_id"] == "vid_upload1"
-        assert videos[0]["title"] == "Upload One"
-        assert videos[0]["thumbnail_url"] == "https://thumb1.jpg"
+        # Sorted by view count descending
+        assert videos[0]["youtube_video_id"] == "vid_upload2"
+        assert videos[0]["view_count"] == 5000
+        assert videos[1]["youtube_video_id"] == "vid_upload1"
+        assert videos[1]["view_count"] == 100
 
-        mock_api.assert_called_once()
-        call_args = mock_api.call_args
-        assert call_args[0][0] == "playlistItems"
-        assert call_args[1]["params"]["playlistId"] == "UUtest123"
+        assert mock_api.call_count == 2
+        assert mock_api.call_args_list[0][0][0] == "playlistItems"
+        assert mock_api.call_args_list[0][1]["params"]["playlistId"] == "UUtest123"
+        assert mock_api.call_args_list[1][0][0] == "videos"
 
     @patch("website.views.watch._youtube_api_get")
     def test_excludes_already_existing_videos(self, mock_api, client, auth_headers, db):  # noqa: ARG002
@@ -764,26 +776,34 @@ class TestWatchChannelUploads:
 
         ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
         WatchVideo.objects.create(youtube_video_id="vid_existing", title="Already There", channel=ch)
-        mock_api.return_value = {
-            "items": [
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid_existing"},
-                        "title": "Already There",
-                        "thumbnails": {"high": {"url": "https://existing.jpg"}},
-                    }
-                },
-                {
-                    "snippet": {
-                        "resourceId": {"videoId": "vid_new"},
-                        "title": "New Upload",
-                        "thumbnails": {"high": {"url": "https://new.jpg"}},
-                    }
-                },
-            ]
-        }
+        mock_api.side_effect = [
+            {
+                "items": [
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_existing"},
+                            "title": "Already There",
+                            "thumbnails": {"high": {"url": "https://existing.jpg"}},
+                        }
+                    },
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_new"},
+                            "title": "New Upload",
+                            "thumbnails": {"high": {"url": "https://new.jpg"}},
+                        }
+                    },
+                ]
+            },
+            {
+                "items": [
+                    {"id": "vid_new", "statistics": {"viewCount": "200"}},
+                ]
+            },
+        ]
 
         resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
         videos = resp.json()["videos"]
         assert len(videos) == 1
         assert videos[0]["youtube_video_id"] == "vid_new"
+        assert videos[0]["view_count"] == 200
