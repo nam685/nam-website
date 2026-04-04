@@ -178,6 +178,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   // On restore, seek to saved position once playback starts
   const seekOnPlayRef = useRef<number | null>(null);
 
+  // Video ID to load when user taps play after a session restore
+  const pendingResumeRef = useRef<string | null>(null);
+
   // Refs that track latest state for use in callbacks
   const queueRef = useRef(queue);
   const currentIndexRef = useRef(currentIndex);
@@ -236,19 +239,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setMinimized(saved.minimized);
     setProgress(saved.progress);
 
+    // Don't auto-play — browsers block autoplay without a user gesture.
+    // Show paused MiniPlayer; user taps play to resume (handled in resume()).
     if (saved.playing) {
       const track = saved.queue[saved.currentIndex];
       if (track) {
         seekOnPlayRef.current = saved.progress > 0 ? saved.progress : null;
-        userRequestedPauseRef.current = false;
-        if (ytReadyRef.current) {
-          createPlayerAndLoad(track.video_id);
-        } else {
-          pendingVideoRef.current = track.video_id;
-        }
+        pendingResumeRef.current = track.video_id;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ── Persist session on meaningful state changes ────────── */
@@ -492,9 +491,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const resume = useCallback(() => {
     userRequestedPauseRef.current = false;
     resumeAttemptRef.current = 0;
+
+    // After a session restore, the YT player doesn't exist yet.
+    // The user's tap is the gesture that allows autoplay.
+    if (!playerRef.current && pendingResumeRef.current) {
+      const videoId = pendingResumeRef.current;
+      pendingResumeRef.current = null;
+      if (ytReadyRef.current) {
+        createPlayerAndLoad(videoId);
+      } else {
+        pendingVideoRef.current = videoId;
+      }
+      setPlaying(true);
+      return;
+    }
+
     playerRef.current?.playVideo();
     setPlaying(true);
-  }, []);
+  }, [createPlayerAndLoad]);
 
   const next = useCallback(() => {
     const q = queueRef.current;
