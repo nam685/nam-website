@@ -56,4 +56,11 @@ urlpatterns = [
     path("watches/videos/<int:video_id>/pin/", views.watch_video_pin),
     path("watches/videos/<int:video_id>/note/", views.watch_video_note),
     path("watches/videos/<int:video_id>/delete/", views.watch_video_delete),
+    path("slops/", views.slops_list),
+    path("slops/submit/", views.slops_submit),
+    path("slops/stats/", views.slops_stats),
+    path("slops/<int:mission_id>/", views.slops_detail),
+    path("slops/<int:mission_id>/approve/", views.slops_approve),
+    path("slops/<int:mission_id>/reject/", views.slops_reject),
+    path("slops/<int:mission_id>/trace/", views.slops_trace),
 ]
