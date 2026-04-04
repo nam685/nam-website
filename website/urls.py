@@ -50,6 +50,8 @@ urlpatterns = [
     path("watches/staging/", views.watch_staging),
     path("watches/channels/<int:channel_id>/tier/", views.watch_channel_tier),
     path("watches/channels/<int:channel_id>/order/", views.watch_channel_order),
+    path("watches/channels/<int:channel_id>/uploads/", views.watch_channel_uploads),
+    path("watches/channels/<int:channel_id>/pin-videos/", views.watch_channel_pin_videos),
     path("watches/channels/<int:channel_id>/delete/", views.watch_channel_delete),
     path("watches/videos/<int:video_id>/pin/", views.watch_video_pin),
     path("watches/videos/<int:video_id>/note/", views.watch_video_note),
