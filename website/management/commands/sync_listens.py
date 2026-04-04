@@ -14,7 +14,10 @@ class Command(BaseCommand):
     help = "Sync YouTube Music listening history via ytmusicapi"
 
     def handle(self, *_args, **_options):
+        import json
+
         from ytmusicapi import YTMusic
+        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
         auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
         if not os.path.isfile(auth_path):
@@ -22,7 +25,13 @@ class Command(BaseCommand):
             self.stderr.write("Run: ytmusicapi browser")
             return
 
-        yt = YTMusic(auth_path)
+        with open(auth_path) as f:
+            headers = json.load(f)
+        if "authorization" not in headers and "cookie" in headers:
+            sapisid = sapisid_from_cookie(headers["cookie"])
+            origin = headers.get("origin", "https://music.youtube.com")
+            headers["authorization"] = get_authorization(sapisid + " " + origin)
+        yt = YTMusic(headers)
         history = yt.get_history()
         self.stdout.write(f"Fetched {len(history)} tracks from YTM")
 

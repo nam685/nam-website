@@ -73,12 +73,22 @@ def listen_sync(request):
         import os
 
         from ytmusicapi import YTMusic
+        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
         auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
         if not os.path.isfile(auth_path):
-            return JsonResponse({"error": "Browser auth not configured. Run ytmusicapi browser on server."}, status=500)
+            return JsonResponse({"error": "Browser auth not configured. Run: ytmusicapi browser"}, status=500)
 
-        yt = YTMusic(auth_path)
+        # ytmusicapi v1.11.5 requires an authorization header with SAPISIDHASH
+        # to detect browser auth, but `ytmusicapi browser` doesn't generate it.
+        # Compute it from the __Secure-3PAPISID cookie before passing to YTMusic.
+        with open(auth_path) as f:
+            headers = json.load(f)
+        if "authorization" not in headers and "cookie" in headers:
+            sapisid = sapisid_from_cookie(headers["cookie"])
+            origin = headers.get("origin", "https://music.youtube.com")
+            headers["authorization"] = get_authorization(sapisid + " " + origin)
+        yt = YTMusic(headers)
         history = yt.get_history()
     except Exception:
         logger.exception("Failed to fetch YouTube Music history")
@@ -125,6 +135,8 @@ def listen_sync(request):
 
     if new_tracks:
         ListenTrack.objects.bulk_create(new_tracks)
+        redis_cache.delete("listen_stats")
+        redis_cache.delete("listen_total_count")
 
     _last_sync = now
 
@@ -330,7 +342,7 @@ def listen_top_albums(request):
 
     albums = (
         ListenTrack.objects.exclude(album="")
-        .values("album", "artist")
+        .values("album")
         .annotate(
             play_count=Count("id"),
             track_count=Count("video_id", distinct=True),
@@ -342,8 +354,18 @@ def listen_top_albums(request):
     page = list(albums[offset : offset + limit])
 
     for entry in page:
+        # Pick the most common artist for this album (handles collab variations)
+        top_artist = (
+            ListenTrack.objects.filter(album=entry["album"])
+            .values("artist")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt")
+            .values_list("artist", flat=True)
+            .first()
+        )
+        entry["artist"] = top_artist or "Unknown"
         track = (
-            ListenTrack.objects.filter(album=entry["album"], artist=entry["artist"])
+            ListenTrack.objects.filter(album=entry["album"])
             .exclude(thumbnail_url="")
             .values_list("thumbnail_url", flat=True)
             .first()

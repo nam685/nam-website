@@ -5,6 +5,33 @@ import pytest
 
 from website.models import WatchChannel, WatchVideo
 from website.views import watch as watch_views
+from website.views.watch import parse_iso8601_duration
+
+
+class TestParseISO8601Duration:
+    def test_minutes_and_seconds(self):
+        assert parse_iso8601_duration("PT5M30S") == 330
+
+    def test_hours_minutes_seconds(self):
+        assert parse_iso8601_duration("PT1H2M3S") == 3723
+
+    def test_minutes_only(self):
+        assert parse_iso8601_duration("PT10M") == 600
+
+    def test_seconds_only(self):
+        assert parse_iso8601_duration("PT45S") == 45
+
+    def test_hours_only(self):
+        assert parse_iso8601_duration("PT2H") == 7200
+
+    def test_empty_string(self):
+        assert parse_iso8601_duration("") == 0
+
+    def test_invalid_format(self):
+        assert parse_iso8601_duration("not a duration") == 0
+
+    def test_zero_duration(self):
+        assert parse_iso8601_duration("PT0S") == 0
 
 
 @pytest.mark.django_db
@@ -169,12 +196,30 @@ class TestWatchStaging:
     def test_requires_auth(self, client):
         assert client.get("/api/watches/staging/").status_code == 401
 
-    def test_returns_hidden_channels_and_videos(self, client, auth_headers, visible_channels):  # noqa: ARG002
+    def test_returns_all_channels_grouped_by_tier(self, client, auth_headers, visible_channels):  # noqa: ARG002
         data = client.get("/api/watches/staging/", **auth_headers).json()
         channel_names = [c["name"] for c in data["channels"]]
+        assert "Top Channel" in channel_names
+        assert "Regular Channel" in channel_names
         assert "Hidden Channel" in channel_names
-        assert "Top Channel" not in channel_names
-        assert any(v["title"] == "Hidden Video" for v in data["videos"])
+
+    def test_channels_sorted_by_tier_weight_then_order(self, client, auth_headers, db):  # noqa: ARG002
+        WatchChannel.objects.create(youtube_channel_id="UC_a", name="A", tier="check_out", display_order=1)
+        WatchChannel.objects.create(youtube_channel_id="UC_b", name="B", tier="never_miss", display_order=0)
+        WatchChannel.objects.create(youtube_channel_id="UC_c", name="C", tier="hidden", display_order=0)
+        WatchChannel.objects.create(youtube_channel_id="UC_d", name="D", tier="regular", display_order=0)
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        tiers = [c["tier"] for c in data["channels"]]
+        assert tiers == ["never_miss", "regular", "check_out", "hidden"]
+
+    def test_includes_pinned_count(self, client, auth_headers, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        top = next(c for c in data["channels"] if c["name"] == "Top Channel")
+        assert top["pinned_count"] == 1
+
+    def test_no_videos_key(self, client, auth_headers, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        assert "videos" not in data
 
 
 @pytest.mark.django_db
@@ -281,32 +326,75 @@ class TestWatchVideoDelete:
 
 @pytest.mark.django_db
 class TestWatchRecommended:
-    def test_empty_when_no_pinned_videos(self, client):
+    def test_empty_when_no_videos(self, client):
         data = client.get("/api/watches/recommended/").json()
         assert data["video"] is None
 
-    def test_returns_pinned_video_from_visible_channel(self, client, visible_channels):  # noqa: ARG002
+    def test_returns_pinned_video(self, client, visible_channels):  # noqa: ARG002
+        WatchVideo.objects.filter(youtube_video_id="vid_pinned").update(duration="PT5M30S")
         data = client.get("/api/watches/recommended/").json()
-        video = data["video"]
-        assert video is not None
-        assert video["youtube_video_id"] == "vid_pinned"
-        assert video["title"] == "Great Video"
-        assert video["channel_name"] == "Top Channel"
-        assert video["channel_thumbnail_url"] is not None
-        assert "view_count" in video
-        assert "like_count" in video
-        assert "comment_count" in video
-        assert "description" in video
-        assert "duration" in video
+        assert data["video"] is not None
+        assert data["video"]["title"] == "Great Video"
 
-    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
-        hidden_ch = WatchChannel.objects.create(youtube_channel_id="UC_hidden_rec", name="Hidden", tier="hidden")
+    def test_includes_liked_non_pinned_video(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_rec", name="Rec Ch", tier="regular")
         WatchVideo.objects.create(
-            youtube_video_id="vid_hidden_rec",
-            title="Hidden Vid",
+            youtube_video_id="vid_liked",
+            title="Liked Video",
+            thumbnail_url="https://i.ytimg.com/vi/vid_liked/hqdefault.jpg",
+            channel=ch,
+            pinned=False,
+            visible=False,
+            duration="PT10M",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is not None
+        assert data["video"]["title"] == "Liked Video"
+
+    def test_excludes_shorts(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_short", name="Shorts Ch", tier="never_miss")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_short",
+            title="Short Video",
+            thumbnail_url="https://i.ytimg.com/vi/vid_short/hqdefault.jpg",
+            channel=ch,
             pinned=True,
             visible=True,
-            channel=hidden_ch,
+            duration="PT30S",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_empty_duration(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_nodur", name="No Dur", tier="never_miss")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_nodur",
+            title="No Duration",
+            channel=ch,
+            pinned=True,
+            visible=True,
+            duration="",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_videos_from_hidden_channels(self, client, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC_hid", name="Hidden", tier="hidden")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_hid",
+            title="Hidden Vid",
+            channel=ch,
+            duration="PT5M",
+        )
+        data = client.get("/api/watches/recommended/").json()
+        assert data["video"] is None
+
+    def test_excludes_videos_without_channel(self, client, db):  # noqa: ARG002
+        WatchVideo.objects.create(
+            youtube_video_id="vid_orphan",
+            title="Orphan",
+            channel=None,
+            duration="PT5M",
         )
         data = client.get("/api/watches/recommended/").json()
         assert data["video"] is None
@@ -515,3 +603,187 @@ class TestWatchBackfillStats:
         resp = client.post("/api/watches/backfill-stats/", **auth_headers)
         assert resp.status_code == 400
         assert "not connected" in resp.json()["error"].lower()
+
+
+@pytest.mark.django_db
+class TestWatchChannelPinVideos:
+    def test_requires_auth(self, client):
+        assert client.post("/api/watches/channels/1/pin-videos/").status_code == 401
+
+    def test_channel_not_found(self, client, auth_headers):
+        resp = client.post(
+            "/api/watches/channels/9999/pin-videos/",
+            data=json.dumps({"videos": []}),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 404
+
+    def test_pins_new_videos(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps(
+                {
+                    "videos": [
+                        {
+                            "youtube_video_id": "vid_new1",
+                            "title": "New Video 1",
+                            "thumbnail_url": "https://thumb1.jpg",
+                        },
+                        {
+                            "youtube_video_id": "vid_new2",
+                            "title": "New Video 2",
+                            "thumbnail_url": "https://thumb2.jpg",
+                        },
+                    ]
+                }
+            ),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 2
+
+        v1 = WatchVideo.objects.get(youtube_video_id="vid_new1")
+        assert v1.pinned is True
+        assert v1.visible is True
+        assert v1.channel == ch
+        assert v1.title == "New Video 1"
+
+    def test_pins_existing_video(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        WatchVideo.objects.create(
+            youtube_video_id="vid_exist",
+            title="Old Title",
+            pinned=False,
+            visible=False,
+        )
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps(
+                {
+                    "videos": [
+                        {
+                            "youtube_video_id": "vid_exist",
+                            "title": "Updated Title",
+                            "thumbnail_url": "https://new_thumb.jpg",
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        v = WatchVideo.objects.get(youtube_video_id="vid_exist")
+        assert v.pinned is True
+        assert v.visible is True
+        assert v.channel == ch
+        assert v.title == "Updated Title"
+
+    def test_empty_videos_list(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UC1", name="Ch")
+        resp = client.post(
+            f"/api/watches/channels/{ch.id}/pin-videos/",
+            data=json.dumps({"videos": []}),
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["pinned"] == 0
+
+
+@pytest.mark.django_db
+class TestWatchChannelUploads:
+    def test_requires_auth(self, client):
+        assert client.get("/api/watches/channels/1/uploads/").status_code == 401
+
+    def test_channel_not_found(self, client, auth_headers):
+        resp = client.get("/api/watches/channels/9999/uploads/", **auth_headers)
+        assert resp.status_code == 404
+
+    def test_non_uc_channel_returns_empty(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="NOT_UC", name="Odd")
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["videos"] == []
+
+    def test_no_youtube_connection(self, client, auth_headers, db):  # noqa: ARG002
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["error"].lower()
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_returns_uploads(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        mock_api.return_value = {
+            "items": [
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_upload1"},
+                        "title": "Upload One",
+                        "thumbnails": {"high": {"url": "https://thumb1.jpg"}},
+                    }
+                },
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_upload2"},
+                        "title": "Upload Two",
+                        "thumbnails": {"high": {"url": "https://thumb2.jpg"}},
+                    }
+                },
+            ]
+        }
+
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        assert resp.status_code == 200
+        videos = resp.json()["videos"]
+        assert len(videos) == 2
+        assert videos[0]["youtube_video_id"] == "vid_upload1"
+        assert videos[0]["title"] == "Upload One"
+        assert videos[0]["thumbnail_url"] == "https://thumb1.jpg"
+
+        mock_api.assert_called_once()
+        call_args = mock_api.call_args
+        assert call_args[0][0] == "playlistItems"
+        assert call_args[1]["params"]["playlistId"] == "UUtest123"
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_excludes_already_existing_videos(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        WatchVideo.objects.create(youtube_video_id="vid_existing", title="Already There", channel=ch)
+        mock_api.return_value = {
+            "items": [
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_existing"},
+                        "title": "Already There",
+                        "thumbnails": {"high": {"url": "https://existing.jpg"}},
+                    }
+                },
+                {
+                    "snippet": {
+                        "resourceId": {"videoId": "vid_new"},
+                        "title": "New Upload",
+                        "thumbnails": {"high": {"url": "https://new.jpg"}},
+                    }
+                },
+            ]
+        }
+
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        videos = resp.json()["videos"]
+        assert len(videos) == 1
+        assert videos[0]["youtube_video_id"] == "vid_new"
