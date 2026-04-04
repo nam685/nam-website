@@ -19,7 +19,7 @@ from ..models import ListenTrack
 
 logger = logging.getLogger(__name__)
 
-OAUTH_JSON_PATH = "oauth.json"
+BROWSER_JSON_PATH = "browser.json"
 VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Rate limit: 1 sync per 5 minutes
@@ -56,7 +56,7 @@ def listen_list(request):
 @csrf_exempt
 @require_admin
 def listen_sync(request):
-    """Sync YouTube Music history using OAuth credentials."""
+    """Sync YouTube Music history using browser auth credentials."""
     global _last_sync
 
     if request.method != "POST":
@@ -68,23 +68,17 @@ def listen_sync(request):
         remaining = int(SYNC_COOLDOWN - (now - _last_sync))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
-    # Fetch history using OAuth token file
+    # Fetch history using browser auth file
     try:
         import os
 
-        from ytmusicapi import OAuthCredentials, YTMusic
+        from ytmusicapi import YTMusic
 
-        auth_path = os.environ.get("YTMUSIC_OAUTH_JSON", OAUTH_JSON_PATH)
+        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
         if not os.path.isfile(auth_path):
-            return JsonResponse({"error": "OAuth not configured. Run: uv run ytmusicapi oauth"}, status=500)
+            return JsonResponse({"error": "Browser auth not configured. Run: ytmusicapi browser"}, status=500)
 
-        client_id = os.environ.get("YTMUSIC_CLIENT_ID", "")
-        client_secret = os.environ.get("YTMUSIC_CLIENT_SECRET", "")
-        if not client_id or not client_secret:
-            return JsonResponse({"error": "YTMUSIC_CLIENT_ID and YTMUSIC_CLIENT_SECRET env vars required"}, status=500)
-
-        oauth_credentials = OAuthCredentials(client_id=client_id, client_secret=client_secret)
-        yt = YTMusic(auth_path, oauth_credentials=oauth_credentials)
+        yt = YTMusic(auth_path)
         history = yt.get_history()
     except Exception:
         logger.exception("Failed to fetch YouTube Music history")
