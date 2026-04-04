@@ -95,18 +95,28 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 ## Watches
 
-- [ ] Page loads and shows glow grid of channels (if any exist)
-- [ ] Channels are sorted by tier (never_miss first, then regular, then check_out)
-- [ ] Tier visual intensity differs (glow, border, opacity, avatar size)
-- [ ] Clicking a channel expands it in-place showing pinned videos
-- [ ] Clicking again collapses the expanded card
-- [ ] Video thumbnails link to YouTube in a new tab
-- [ ] Channel avatars link to YouTube channel in a new tab
-- [ ] "Show more" button appears when total > page size
-- [ ] Show more loads additional channels without duplicates
-- [ ] Mobile: grid collapses to fewer columns, expanded cards span full width
+### Layout
+- [ ] Two-column layout renders correctly on desktop (50/50 split, hero sticky)
+- [ ] Two-column layout works on tablet (3-col grid)
+- [ ] Mobile layout stacks hero on top, 2-col grid below
+
+### Hero player
+- [ ] Hero loads recommended video on page load
+- [ ] Click recommended video thumbnail → YouTube embed plays
+- [ ] Admin: sync button and staging link visible in hero panel
+
+### Channel grid
+- [ ] Channel cards show randomized order on page refresh
+- [ ] Channel cards respond to hover (border glow, background tint, scale)
+- [ ] Click channel card → expanded block appears below row with proper grid reflow
+- [ ] Expanded card shows avatar, name, description, pinned videos, YouTube link
+- [ ] Click pinned video in expanded card → loads in hero player
+- [ ] Clicking expanded channel card again collapses it
+- [ ] Mobile: video click scrolls to hero and plays
+
+### Admin
+- [ ] Admin: tier selector in expanded card changes tier
 - [ ] Admin: "connect youtube" button visible when logged in and not connected
-- [ ] Admin: "sync" button visible when connected
 - [ ] Admin: sync rate limiting shows cooldown
 - [ ] Admin: staging link navigates to /watches/staging
 - [ ] Staging: hidden channels shown with tier promote buttons
