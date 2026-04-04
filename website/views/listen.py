@@ -19,7 +19,7 @@ from ..models import ListenTrack
 
 logger = logging.getLogger(__name__)
 
-BROWSER_JSON_PATH = "browser.json"
+OAUTH_JSON_PATH = "oauth.json"
 VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Rate limit: 1 sync per 5 minutes
@@ -74,9 +74,9 @@ def listen_sync(request):
 
         from ytmusicapi import YTMusic
 
-        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
+        auth_path = os.environ.get("YTMUSIC_OAUTH_JSON", OAUTH_JSON_PATH)
         if not os.path.isfile(auth_path):
-            return JsonResponse({"error": "Browser auth not configured. Run ytmusicapi browser on server."}, status=500)
+            return JsonResponse({"error": "OAuth not configured. Run: uv run ytmusicapi oauth"}, status=500)
 
         yt = YTMusic(auth_path)
         history = yt.get_history()
