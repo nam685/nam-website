@@ -134,20 +134,23 @@ export interface StagingChannel {
   description: string;
   thumbnail_url: string;
   tier: string;
-}
-
-export interface StagingVideo {
-  id: number;
-  youtube_video_id: string;
-  title: string;
-  thumbnail_url: string;
-  channel_name: string | null;
-  pinned: boolean;
+  display_order: number;
+  pinned_count: number;
 }
 
 export interface WatchStagingResponse {
   channels: StagingChannel[];
-  videos: StagingVideo[];
+}
+
+export interface UploadVideo {
+  youtube_video_id: string;
+  title: string;
+  thumbnail_url: string;
+}
+
+export interface ChannelUploadsResponse {
+  videos: UploadVideo[];
+  message?: string;
 }
 
 export interface WatchSyncStatus {
