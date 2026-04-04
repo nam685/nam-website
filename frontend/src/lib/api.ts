@@ -220,3 +220,48 @@ export interface BetsSearchResult {
   currency: string;
   match_score: number;
 }
+
+/* ── Slops (Agent Showcase) ────────────────────────── */
+
+export type MissionStatus =
+  | "pending"
+  | "approved"
+  | "running"
+  | "done"
+  | "failed"
+  | "rejected";
+
+export interface Mission {
+  id: number;
+  prompt: string;
+  status: MissionStatus;
+  workspace: string;
+  token_count: number;
+  tool_calls: number;
+  summary: string;
+  error: string;
+  created_at: string;
+  approved_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MissionListResponse {
+  missions: Mission[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MissionStats {
+  total_missions: number;
+  total_tokens: number;
+  total_tool_calls: number;
+  success_rate: number;
+  pending_count: number;
+}
+
+export interface MissionTrace {
+  trace: Record<string, unknown> | null;
+  status: MissionStatus;
+}

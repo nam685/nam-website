@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
   { label: "plays", href: "/plays", accent: "#06b6d4" },
   { label: "watches", href: "/watches", accent: "#1e40af" },
   { label: "bets", href: "/bets", accent: "#db2777" },
+  { label: "slops", href: "/slops", accent: "#39ff14" },
 ] as const;
 
 export const NAV_DEG = 30;
