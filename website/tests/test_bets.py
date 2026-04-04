@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -369,8 +369,6 @@ class TestSyncPricesCommand:
 
 # --- API endpoint tests ---
 
-from datetime import timedelta  # noqa: E402
-
 
 @pytest.mark.django_db
 class TestBetsListEndpoint:
@@ -452,12 +450,14 @@ class TestBetsHistoryEndpoint:
             provider="coingecko",
             provider_id="bitcoin",
         )
+        today = date.today()
         for i in range(40):
-            d = date(2026, 2, 22) + timedelta(days=i)
+            d = today - timedelta(days=39 - i)
             PriceSnapshot.objects.create(ticker=t, date=d, price=Decimal("80000") + i)
 
         data = client.get(f"/api/bets/{t.id}/history/?period=1W").json()
-        assert len(data["prices"]) == 7
+        # 1W = last 7 days: today minus 7 through today = 8 dates inclusive
+        assert len(data["prices"]) == 8
 
     def test_not_found(self, client):
         resp = client.get("/api/bets/999/history/")
