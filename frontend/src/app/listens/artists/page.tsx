@@ -54,7 +54,7 @@ export default function ListensArtistsPage() {
 
   return (
     <div style={{ background: PANEL_BG, backdropFilter: "blur(12px)", borderRadius: "0 0 8px 8px", padding: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: bp === "mobile" ? "1fr" : bp === "tablet" ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: bp === "mobile" ? "1fr" : bp === "tablet" ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 12 }}>
         {artists.map((artist) => (
           <div
             key={artist.name}
@@ -64,6 +64,8 @@ export default function ListensArtistsPage() {
               borderRadius: 8,
               padding: 16,
               transition: "border-color 0.15s",
+              display: "flex",
+              flexDirection: "column" as const,
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(249,115,22,0.2)";
@@ -139,7 +141,7 @@ export default function ListensArtistsPage() {
               )}
             </div>
             {artist.top_tracks.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
                 {artist.top_tracks.map((t) => (
                   <div key={t.video_id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {t.thumbnail_url ? (
