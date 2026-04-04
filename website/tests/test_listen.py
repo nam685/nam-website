@@ -139,24 +139,36 @@ class TestListenStats:
         assert isinstance(data["daily"], list)
 
 
-# ── Sync endpoint (browser auth) ─────────────────────
+# ── Sync endpoint (OAuth auth) ─────────────────────
+
+
+YTMUSIC_ENV = {"YTMUSIC_CLIENT_ID": "test-client-id", "YTMUSIC_CLIENT_SECRET": "test-client-secret"}
 
 
 @pytest.mark.django_db
+@patch("ytmusicapi.OAuthCredentials")
 class TestListenSync:
-    def test_get_not_allowed(self, client, auth_headers):
+    def test_get_not_allowed(self, _mock_creds, client, auth_headers):
         resp = client.get("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 405
 
     @patch("os.path.isfile", return_value=False)
-    def test_missing_browser_json(self, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_missing_oauth_json(self, _mock_isfile, _mock_creds, client, auth_headers):
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 500
-        assert "Browser auth not configured" in resp.json()["error"]
+        assert "OAuth not configured" in resp.json()["error"]
+
+    @patch("os.path.isfile", return_value=True)
+    def test_missing_client_credentials(self, _mock_isfile, _mock_creds, client, auth_headers):
+        resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 500
+        assert "YTMUSIC_CLIENT_ID" in resp.json()["error"]
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_syncs_tracks(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_syncs_tracks(self, mock_ytmusic_cls, _mock_isfile, _mock_creds, client, auth_headers):
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = MOCK_HISTORY
         mock_ytmusic_cls.return_value = mock_yt
@@ -170,7 +182,8 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_deduplicates(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_deduplicates(self, mock_ytmusic_cls, _mock_isfile, _mock_creds, client, auth_headers):
         ListenTrack.objects.create(video_id="abc123", title="Old", artist="Old", played_at=timezone.now())
 
         mock_yt = MagicMock()
@@ -183,7 +196,8 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_rate_limited(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_rate_limited(self, mock_ytmusic_cls, _mock_isfile, _mock_creds, client, auth_headers):
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = []
         mock_ytmusic_cls.return_value = mock_yt
@@ -195,14 +209,16 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_ytmusic_error(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_ytmusic_error(self, mock_ytmusic_cls, _mock_isfile, _mock_creds, client, auth_headers):
         mock_ytmusic_cls.side_effect = Exception("Auth failed")
         resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 502
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_filters_view_counts_from_artist(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+    @patch.dict("os.environ", YTMUSIC_ENV)
+    def test_filters_view_counts_from_artist(self, mock_ytmusic_cls, _mock_isfile, _mock_creds, client, auth_headers):
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = [
             {
