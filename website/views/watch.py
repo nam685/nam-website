@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -24,6 +25,19 @@ YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 
 _last_sync: float = 0
 SYNC_COOLDOWN = 300
+
+
+def parse_iso8601_duration(duration: str) -> int:
+    """Parse ISO 8601 duration (e.g. PT5M30S) to total seconds. Returns 0 on invalid input."""
+    if not duration:
+        return 0
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
+    if not match:
+        return 0
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def watch_list(request):
@@ -81,26 +95,28 @@ def watch_list(request):
 
 
 def watch_recommended(request):  # noqa: ARG001
-    """Public: return a weighted-random pinned video for the hero section."""
+    """Public: return a uniform-random video for the hero section.
+
+    Pool: all videos belonging to a non-hidden channel with duration > 60s.
+    """
     visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
-    tier_weights = {"never_miss": 3, "regular": 2, "check_out": 1}
 
-    pinned_videos = WatchVideo.objects.filter(
-        pinned=True,
-        visible=True,
-        channel__isnull=False,
-        channel__tier__in=visible_tiers,
-    ).select_related("channel")
+    all_videos = (
+        WatchVideo.objects.filter(
+            channel__isnull=False,
+            channel__tier__in=visible_tiers,
+        )
+        .exclude(duration="")
+        .select_related("channel")
+    )
 
-    if not pinned_videos.exists():
+    # Filter out Shorts (<=60s) in Python since duration is stored as ISO 8601 string
+    candidates = [v for v in all_videos if parse_iso8601_duration(v.duration) > 60]
+
+    if not candidates:
         return JsonResponse({"video": None})
 
-    weighted = []
-    for v in pinned_videos:
-        weight = tier_weights.get(v.channel.tier, 1)
-        weighted.extend([v] * weight)
-
-    chosen = random.choice(weighted)
+    chosen = random.choice(candidates)
 
     return JsonResponse(
         {
@@ -123,9 +139,15 @@ def watch_recommended(request):  # noqa: ARG001
 
 @require_admin
 def watch_staging(_request):
-    """Admin: return hidden channels and non-visible videos."""
-    hidden_channels = WatchChannel.objects.filter(tier="hidden").order_by("name")
-    non_visible_videos = WatchVideo.objects.filter(visible=False).order_by("-created_at")
+    """Admin: return all channels sorted by tier weight, with pinned counts."""
+    from django.db.models import Count, Q
+
+    channels = WatchChannel.objects.annotate(
+        pinned_count=Count("videos", filter=Q(videos__pinned=True)),
+    )
+
+    # Sort by tier weight in Python (simple, avoids raw SQL for the custom weight map)
+    sorted_channels = sorted(channels, key=lambda ch: (ch.tier_weight, ch.display_order, ch.name))
 
     return JsonResponse(
         {
@@ -138,21 +160,9 @@ def watch_staging(_request):
                     "thumbnail_url": ch.thumbnail_url,
                     "tier": ch.tier,
                     "display_order": ch.display_order,
+                    "pinned_count": ch.pinned_count,
                 }
-                for ch in hidden_channels
-            ],
-            "videos": [
-                {
-                    "id": v.id,
-                    "youtube_video_id": v.youtube_video_id,
-                    "title": v.title,
-                    "thumbnail_url": v.thumbnail_url,
-                    "note": v.note,
-                    "pinned": v.pinned,
-                    "visible": v.visible,
-                    "channel_id": v.channel_id,
-                }
-                for v in non_visible_videos
+                for ch in sorted_channels
             ],
         }
     )
@@ -230,6 +240,13 @@ def watch_video_pin(_request, video_id):
     if video.pinned:
         video.visible = True
     video.save(update_fields=["pinned", "visible"])
+
+    # Fetch stats if pinning and stats are missing
+    if video.pinned and not video.stats_updated_at:
+        access_token = _refresh_access_token()
+        if access_token:
+            _fetch_video_stats(access_token, [video.youtube_video_id])
+
     return JsonResponse({"ok": True, "pinned": video.pinned, "visible": video.visible})
 
 
@@ -617,6 +634,105 @@ def watch_sync_status(_request):
             "last_synced": last_synced,
         }
     )
+
+
+@require_admin
+def watch_channel_uploads(_request, channel_id):
+    """Admin: fetch recent uploads for a channel from YouTube API."""
+    try:
+        channel = WatchChannel.objects.get(pk=channel_id)
+    except WatchChannel.DoesNotExist:
+        return JsonResponse({"error": "Channel not found"}, status=404)
+
+    yt_id = channel.youtube_channel_id
+    if not yt_id.startswith("UC"):
+        return JsonResponse({"videos": [], "message": "Channel ID format not supported"})
+
+    access_token = _refresh_access_token()
+    if not access_token:
+        return JsonResponse({"error": "YouTube not connected"}, status=400)
+
+    playlist_id = "UU" + yt_id[2:]
+    try:
+        data = _youtube_api_get(
+            "playlistItems",
+            access_token,
+            params={"playlistId": playlist_id, "part": "snippet", "maxResults": 20},
+        )
+    except Exception:
+        logger.exception("Failed to fetch uploads for channel %s", channel.name)
+        return JsonResponse({"videos": [], "message": "Failed to fetch uploads"})
+
+    yt_video_ids = []
+    for item in data.get("items", []):
+        vid_id = item.get("snippet", {}).get("resourceId", {}).get("videoId")
+        if vid_id:
+            yt_video_ids.append(vid_id)
+
+    existing_ids = set(
+        WatchVideo.objects.filter(youtube_video_id__in=yt_video_ids).values_list("youtube_video_id", flat=True)
+    )
+
+    videos = []
+    for item in data.get("items", []):
+        snippet = item.get("snippet", {})
+        vid_id = snippet.get("resourceId", {}).get("videoId")
+        if not vid_id or vid_id in existing_ids:
+            continue
+        thumbs = snippet.get("thumbnails", {})
+        thumb_url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url", "")
+        videos.append(
+            {
+                "youtube_video_id": vid_id,
+                "title": snippet.get("title", ""),
+                "thumbnail_url": thumb_url,
+            }
+        )
+
+    return JsonResponse({"videos": videos})
+
+
+@csrf_exempt
+@require_admin
+def watch_channel_pin_videos(request, channel_id):
+    """Admin: bulk pin videos to a channel."""
+    try:
+        channel = WatchChannel.objects.get(pk=channel_id)
+    except WatchChannel.DoesNotExist:
+        return JsonResponse({"error": "Channel not found"}, status=404)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    videos_data = body.get("videos", [])
+    pinned_count = 0
+
+    pinned_yt_ids = []
+    for vdata in videos_data:
+        yt_id = vdata.get("youtube_video_id")
+        if not yt_id:
+            continue
+        video, _ = WatchVideo.objects.get_or_create(
+            youtube_video_id=yt_id,
+            defaults={"title": vdata.get("title", ""), "thumbnail_url": vdata.get("thumbnail_url", "")},
+        )
+        video.channel = channel
+        video.title = vdata.get("title", video.title)
+        video.thumbnail_url = vdata.get("thumbnail_url", video.thumbnail_url)
+        video.pinned = True
+        video.visible = True
+        video.save(update_fields=["channel", "title", "thumbnail_url", "pinned", "visible"])
+        pinned_yt_ids.append(yt_id)
+        pinned_count += 1
+
+    # Fetch stats (view/like/comment counts, description, duration) for newly pinned videos
+    if pinned_yt_ids:
+        access_token = _refresh_access_token()
+        if access_token:
+            _fetch_video_stats(access_token, pinned_yt_ids)
+
+    return JsonResponse({"pinned": pinned_count})
 
 
 @csrf_exempt

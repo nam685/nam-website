@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 
 import {
+  type ChannelUploadsResponse,
   type StagingChannel,
-  type StagingVideo,
+  type UploadVideo,
   type WatchStagingResponse,
   API,
 } from "@/lib/api";
@@ -13,21 +14,29 @@ import { getAdminToken } from "@/lib/auth";
 const ACCENT = "#1e40af";
 const RED = "#f87171";
 
-type ChannelTier = "never_miss" | "regular" | "check_out";
+type ChannelTier = "never_miss" | "regular" | "check_out" | "hidden";
 
 const TIER_LABELS: Record<ChannelTier, string> = {
   never_miss: "never miss",
   regular: "regular",
   check_out: "check out",
+  hidden: "hidden",
 };
 
-/* ── Shared button styles ──────────────────────────── */
+const TIER_SECTIONS: { tier: ChannelTier; label: string }[] = [
+  { tier: "never_miss", label: "NEVER MISS" },
+  { tier: "regular", label: "ROTATION" },
+  { tier: "check_out", label: "CHECK OUT" },
+  { tier: "hidden", label: "HIDDEN" },
+];
+
+/* -- Shared button styles -------------------------------- */
 function accentBtnStyle(active = false) {
   return {
     padding: "0.2rem 0.6rem",
-    border: `1px solid ${active ? ACCENT : `${ACCENT}40`}`,
-    background: active ? `${ACCENT}20` : "none",
-    color: active ? ACCENT : `${ACCENT}80`,
+    border: `1px solid ${active ? ACCENT : `${ACCENT}50`}`,
+    background: active ? `${ACCENT}35` : "none",
+    color: active ? "#e5e2e1" : `${ACCENT}aa`,
     fontFamily: "var(--font-headline)" as const,
     fontSize: "0.6rem" as const,
     textTransform: "uppercase" as const,
@@ -41,9 +50,9 @@ function accentBtnStyle(active = false) {
 function redBtnStyle() {
   return {
     padding: "0.2rem 0.6rem",
-    border: `1px solid ${RED}40`,
+    border: `1px solid ${RED}50`,
     background: "none",
-    color: `${RED}99`,
+    color: `${RED}bb`,
     fontFamily: "var(--font-headline)" as const,
     fontSize: "0.6rem" as const,
     textTransform: "uppercase" as const,
@@ -54,15 +63,17 @@ function redBtnStyle() {
   };
 }
 
-/* ── Staging Channel Row ───────────────────────────── */
+/* -- Channel Row ----------------------------------------- */
 function ChannelRow({
   channel,
-  onPromote,
+  onTierChange,
   onDelete,
+  onPinVideo,
 }: {
   channel: StagingChannel;
-  onPromote: (channelId: number, tier: ChannelTier) => void;
+  onTierChange: (channelId: number, tier: ChannelTier) => void;
   onDelete: (channelId: number) => void;
+  onPinVideo: (channel: StagingChannel) => void;
 }) {
   return (
     <div
@@ -71,11 +82,10 @@ function ChannelRow({
         alignItems: "center",
         gap: "0.75rem",
         padding: "0.6rem 0",
-        borderBottom: `1px solid #1a1a1a`,
+        borderBottom: "1px solid #1a1a1a",
         flexWrap: "wrap",
       }}
     >
-      {/* Avatar */}
       {channel.thumbnail_url ? (
         <img
           src={channel.thumbnail_url}
@@ -108,60 +118,87 @@ function ChannelRow({
         </div>
       )}
 
-      {/* Name */}
-      <a
-        href={`https://www.youtube.com/channel/${channel.youtube_channel_id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          flex: 1,
-          minWidth: 120,
-          fontSize: "0.85rem",
-          color: "#ccc",
-          textDecoration: "none",
-          fontWeight: 500,
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = ACCENT;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = "#ccc";
-        }}
-      >
-        {channel.name}
-      </a>
-
-      {/* Tier promote buttons */}
-      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-        {(["never_miss", "regular", "check_out"] as ChannelTier[]).map(
-          (tier) => (
-            <button
-              key={tier}
-              onClick={() => onPromote(channel.id, tier)}
-              style={accentBtnStyle(channel.tier === tier)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = ACCENT;
-                e.currentTarget.style.color = ACCENT;
-                e.currentTarget.style.background = `${ACCENT}15`;
-              }}
-              onMouseLeave={(e) => {
-                const active = channel.tier === tier;
-                e.currentTarget.style.borderColor = active
-                  ? ACCENT
-                  : `${ACCENT}40`;
-                e.currentTarget.style.color = active ? ACCENT : `${ACCENT}80`;
-                e.currentTarget.style.background = active
-                  ? `${ACCENT}20`
-                  : "none";
-              }}
-            >
-              {TIER_LABELS[tier]}
-            </button>
-          ),
+      <div style={{ flex: 1, minWidth: 120 }}>
+        <a
+          href={`https://www.youtube.com/channel/${channel.youtube_channel_id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: "0.85rem",
+            color: "#ccc",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = ACCENT;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "#ccc";
+          }}
+        >
+          {channel.name}
+        </a>
+        {channel.pinned_count > 0 && (
+          <span
+            style={{
+              fontSize: "0.65rem",
+              color: "#555",
+              marginLeft: "0.5rem",
+            }}
+          >
+            {channel.pinned_count} pinned
+          </span>
         )}
       </div>
 
-      {/* Delete */}
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+        {(
+          ["never_miss", "regular", "check_out", "hidden"] as ChannelTier[]
+        ).map((tier) => (
+          <button
+            key={tier}
+            onClick={() => onTierChange(channel.id, tier)}
+            style={accentBtnStyle(channel.tier === tier)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = ACCENT;
+              e.currentTarget.style.color = "#e5e2e1";
+              e.currentTarget.style.background = `${ACCENT}20`;
+            }}
+            onMouseLeave={(e) => {
+              const active = channel.tier === tier;
+              e.currentTarget.style.borderColor = active
+                ? ACCENT
+                : `${ACCENT}50`;
+              e.currentTarget.style.color = active ? "#e5e2e1" : `${ACCENT}aa`;
+              e.currentTarget.style.background = active
+                ? `${ACCENT}35`
+                : "none";
+            }}
+          >
+            {TIER_LABELS[tier]}
+          </button>
+        ))}
+      </div>
+
+      {channel.tier !== "hidden" && (
+        <button
+          onClick={() => onPinVideo(channel)}
+          style={accentBtnStyle()}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = ACCENT;
+            e.currentTarget.style.color = "#e5e2e1";
+            e.currentTarget.style.background = `${ACCENT}20`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = `${ACCENT}50`;
+            e.currentTarget.style.color = `${ACCENT}aa`;
+            e.currentTarget.style.background = "none";
+          }}
+        >
+          pin video
+        </button>
+      )}
+
       <button
         onClick={() => onDelete(channel.id)}
         style={redBtnStyle()}
@@ -170,8 +207,8 @@ function ChannelRow({
           e.currentTarget.style.color = RED;
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = `${RED}40`;
-          e.currentTarget.style.color = `${RED}99`;
+          e.currentTarget.style.borderColor = `${RED}50`;
+          e.currentTarget.style.color = `${RED}bb`;
         }}
       >
         delete
@@ -180,140 +217,276 @@ function ChannelRow({
   );
 }
 
-/* ── Staging Video Row ─────────────────────────────── */
-function VideoRow({
-  video,
-  onPin,
-  onDelete,
+/* -- Pin Video Popup ------------------------------------- */
+function PinVideoPopup({
+  channel,
+  onClose,
+  onPinned,
 }: {
-  video: StagingVideo;
-  onPin: (videoId: number) => void;
-  onDelete: (videoId: number) => void;
+  channel: StagingChannel;
+  onClose: () => void;
+  onPinned: (channelId: number, count: number) => void;
 }) {
+  const [uploads, setUploads] = useState<UploadVideo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pinning, setPinning] = useState(false);
+
+  useEffect(() => {
+    const token = getAdminToken();
+    if (!token) return;
+    fetch(`${API}/api/watches/channels/${channel.id}/uploads/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data: ChannelUploadsResponse = await res.json();
+        setUploads(data.videos);
+      })
+      .catch(() => setUploads([]))
+      .finally(() => setLoading(false));
+  }, [channel.id]);
+
+  function toggleSelect(videoId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(videoId)) next.delete(videoId);
+      else next.add(videoId);
+      return next;
+    });
+  }
+
+  async function handlePin() {
+    const token = getAdminToken();
+    if (!token || selected.size === 0) return;
+    setPinning(true);
+    try {
+      const videosToPin = uploads.filter((v) =>
+        selected.has(v.youtube_video_id),
+      );
+      const res = await fetch(
+        `${API}/api/watches/channels/${channel.id}/pin-videos/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ videos: videosToPin }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        onPinned(channel.id, data.pinned);
+      }
+    } finally {
+      setPinning(false);
+    }
+  }
+
   return (
     <div
+      onClick={onClose}
       style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        zIndex: 100,
         display: "flex",
         alignItems: "center",
-        gap: "0.75rem",
-        padding: "0.6rem 0",
-        borderBottom: `1px solid #1a1a1a`,
-        flexWrap: "wrap",
+        justifyContent: "center",
+        padding: "1rem",
       }}
     >
-      {/* Thumbnail */}
-      <a
-        href={`https://www.youtube.com/watch?v=${video.youtube_video_id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ flexShrink: 0, display: "block" }}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#111",
+          border: `1px solid ${ACCENT}30`,
+          borderRadius: 8,
+          maxWidth: 600,
+          width: "100%",
+          maxHeight: "80vh",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
       >
-        {video.thumbnail_url ? (
-          <img
-            src={video.thumbnail_url}
-            alt={video.title}
-            style={{
-              width: 64,
-              height: 36,
-              objectFit: "cover",
-              borderRadius: 2,
-              background: "#1a1a1a",
-              border: `1px solid #222`,
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              width: 64,
-              height: 36,
-              borderRadius: 2,
-              background: "#1a1a1a",
-              border: `1px solid #222`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#444",
-              fontSize: "0.6rem",
-              fontFamily: "monospace",
-            }}
-          >
-            no img
-          </div>
-        )}
-      </a>
-
-      {/* Title + channel */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p
+        <div
           style={{
-            fontSize: "0.8rem",
-            color: "#ccc",
-            fontWeight: 500,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            padding: "1rem 1.25rem",
+            borderBottom: `1px solid ${ACCENT}20`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          {video.title}
-        </p>
-        {video.channel_name && (
-          <p
+          <h3
             style={{
-              fontSize: "0.7rem",
-              color: "#555",
               fontFamily: "var(--font-headline)",
-              marginTop: 2,
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              color: "#e5e2e1",
+              margin: 0,
             }}
           >
-            {video.channel_name}
-          </p>
+            Pin videos — {channel.name}
+          </h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#666",
+              cursor: "pointer",
+              fontSize: "1.2rem",
+              padding: "0 0.25rem",
+            }}
+          >
+            x
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.25rem" }}>
+          {loading ? (
+            <p
+              style={{
+                color: "#555",
+                fontSize: "0.8rem",
+                fontStyle: "italic",
+                fontFamily: "monospace",
+              }}
+            >
+              loading uploads...
+            </p>
+          ) : uploads.length === 0 ? (
+            <p
+              style={{
+                color: "#555",
+                fontSize: "0.8rem",
+                fontStyle: "italic",
+                fontFamily: "monospace",
+              }}
+            >
+              no new uploads found
+            </p>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: "0.75rem",
+              }}
+            >
+              {uploads.map((video) => {
+                const isSelected = selected.has(video.youtube_video_id);
+                return (
+                  <div
+                    key={video.youtube_video_id}
+                    onClick={() => toggleSelect(video.youtube_video_id)}
+                    style={{
+                      cursor: "pointer",
+                      border: `2px solid ${isSelected ? ACCENT : "transparent"}`,
+                      borderRadius: 4,
+                      padding: "0.35rem",
+                      background: isSelected ? `${ACCENT}15` : "transparent",
+                      transition: "border-color 0.15s, background 0.15s",
+                    }}
+                  >
+                    {video.thumbnail_url ? (
+                      <img
+                        src={video.thumbnail_url}
+                        alt={video.title}
+                        style={{
+                          width: "100%",
+                          aspectRatio: "16/9",
+                          objectFit: "cover",
+                          borderRadius: 3,
+                          background: "#1a1a1a",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "100%",
+                          aspectRatio: "16/9",
+                          background: "#1a1a1a",
+                          borderRadius: 3,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#444",
+                          fontSize: "0.7rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        no thumb
+                      </div>
+                    )}
+                    <p
+                      style={{
+                        fontSize: "0.7rem",
+                        color: isSelected ? "#e5e2e1" : "#999",
+                        marginTop: "0.3rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {video.title}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {uploads.length > 0 && (
+          <div
+            style={{
+              padding: "0.75rem 1.25rem",
+              borderTop: `1px solid ${ACCENT}20`,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <button
+              onClick={handlePin}
+              disabled={selected.size === 0 || pinning}
+              style={{
+                padding: "0.35rem 1rem",
+                border: `1px solid ${selected.size > 0 ? ACCENT : `${ACCENT}30`}`,
+                background: selected.size > 0 ? `${ACCENT}25` : "none",
+                color: selected.size > 0 ? "#e5e2e1" : "#555",
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.7rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                cursor:
+                  selected.size > 0 && !pinning ? "pointer" : "not-allowed",
+                borderRadius: 3,
+                transition: "all 0.15s",
+              }}
+            >
+              {pinning ? "pinning..." : `pin selected (${selected.size})`}
+            </button>
+          </div>
         )}
       </div>
-
-      {/* Pin */}
-      <button
-        onClick={() => onPin(video.id)}
-        style={accentBtnStyle(video.pinned)}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = ACCENT;
-          e.currentTarget.style.color = ACCENT;
-          e.currentTarget.style.background = `${ACCENT}15`;
-        }}
-        onMouseLeave={(e) => {
-          const active = video.pinned;
-          e.currentTarget.style.borderColor = active ? ACCENT : `${ACCENT}40`;
-          e.currentTarget.style.color = active ? ACCENT : `${ACCENT}80`;
-          e.currentTarget.style.background = active ? `${ACCENT}20` : "none";
-        }}
-      >
-        {video.pinned ? "pinned" : "pin"}
-      </button>
-
-      {/* Delete */}
-      <button
-        onClick={() => onDelete(video.id)}
-        style={redBtnStyle()}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = RED;
-          e.currentTarget.style.color = RED;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = `${RED}40`;
-          e.currentTarget.style.color = `${RED}99`;
-        }}
-      >
-        delete
-      </button>
     </div>
   );
 }
 
-/* ── Main Page ─────────────────────────────────────── */
+/* -- Main Page ------------------------------------------- */
 export default function WatchesStagingPage() {
   const [channels, setChannels] = useState<StagingChannel[]>([]);
-  const [videos, setVideos] = useState<StagingVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pinPopupChannel, setPinPopupChannel] = useState<StagingChannel | null>(
+    null,
+  );
 
   useEffect(() => {
     const token = getAdminToken();
@@ -326,7 +499,6 @@ export default function WatchesStagingPage() {
         if (!res.ok) throw new Error(`${res.status}`);
         const data: WatchStagingResponse = await res.json();
         setChannels(data.channels);
-        setVideos(data.videos);
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : "Failed to load staging");
@@ -334,7 +506,7 @@ export default function WatchesStagingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function promoteChannel(id: number, tier: ChannelTier) {
+  async function handleTierChange(id: number, tier: ChannelTier) {
     const token = getAdminToken();
     if (!token) return;
     const res = await fetch(`${API}/api/watches/channels/${id}/tier/`, {
@@ -346,11 +518,13 @@ export default function WatchesStagingPage() {
       body: JSON.stringify({ tier }),
     });
     if (res.ok) {
-      setChannels((prev) => prev.filter((c) => c.id !== id));
+      setChannels((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, tier } : c)),
+      );
     }
   }
 
-  async function deleteChannel(id: number) {
+  async function handleDelete(id: number) {
     const token = getAdminToken();
     if (!token) return;
     const res = await fetch(`${API}/api/watches/channels/${id}/delete/`, {
@@ -362,28 +536,15 @@ export default function WatchesStagingPage() {
     }
   }
 
-  async function pinVideo(id: number) {
-    const token = getAdminToken();
-    if (!token) return;
-    const res = await fetch(`${API}/api/watches/videos/${id}/pin/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      setVideos((prev) => prev.filter((v) => v.id !== id));
-    }
-  }
-
-  async function deleteVideo(id: number) {
-    const token = getAdminToken();
-    if (!token) return;
-    const res = await fetch(`${API}/api/watches/videos/${id}/delete/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      setVideos((prev) => prev.filter((v) => v.id !== id));
-    }
+  function handlePinned(channelId: number, count: number) {
+    setChannels((prev) =>
+      prev.map((c) =>
+        c.id === channelId
+          ? { ...c, pinned_count: c.pinned_count + count }
+          : c,
+      ),
+    );
+    setPinPopupChannel(null);
   }
 
   if (loading) {
@@ -419,11 +580,10 @@ export default function WatchesStagingPage() {
           maxWidth: 800,
           margin: "0 auto",
           padding: "2rem 1.5rem 6rem",
-          position: "relative" as const,
+          position: "relative",
           zIndex: 1,
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -464,7 +624,6 @@ export default function WatchesStagingPage() {
           </h1>
         </div>
 
-        {/* Error */}
         {error && (
           <p
             style={{
@@ -478,88 +637,60 @@ export default function WatchesStagingPage() {
           </p>
         )}
 
-        {/* Channels section */}
-        <section style={{ marginBottom: "3rem" }}>
-          <h2
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.75rem",
-              fontWeight: 700,
-              color: `${ACCENT}cc`,
-              textTransform: "uppercase",
-              letterSpacing: "0.15em",
-              marginBottom: "1rem",
-              borderBottom: `1px solid ${ACCENT}20`,
-              paddingBottom: "0.5rem",
-            }}
-          >
-            Channels ({channels.length})
-          </h2>
+        {TIER_SECTIONS.map(({ tier, label }) => {
+          const tierChannels = channels.filter((c) => c.tier === tier);
+          return (
+            <section key={tier} style={{ marginBottom: "2.5rem" }}>
+              <h2
+                style={{
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  color: `${ACCENT}cc`,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.15em",
+                  marginBottom: "1rem",
+                  borderBottom: `1px solid ${ACCENT}20`,
+                  paddingBottom: "0.5rem",
+                }}
+              >
+                {label} ({tierChannels.length})
+              </h2>
 
-          {channels.length === 0 ? (
-            <p
-              style={{
-                fontStyle: "italic",
-                color: "#444",
-                fontSize: "0.8rem",
-                fontFamily: "monospace",
-              }}
-            >
-              no staged channels
-            </p>
-          ) : (
-            channels.map((channel) => (
-              <ChannelRow
-                key={channel.id}
-                channel={channel}
-                onPromote={promoteChannel}
-                onDelete={deleteChannel}
-              />
-            ))
-          )}
-        </section>
-
-        {/* Videos section */}
-        <section>
-          <h2
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.75rem",
-              fontWeight: 700,
-              color: `${ACCENT}cc`,
-              textTransform: "uppercase",
-              letterSpacing: "0.15em",
-              marginBottom: "1rem",
-              borderBottom: `1px solid ${ACCENT}20`,
-              paddingBottom: "0.5rem",
-            }}
-          >
-            Videos ({videos.length})
-          </h2>
-
-          {videos.length === 0 ? (
-            <p
-              style={{
-                fontStyle: "italic",
-                color: "#444",
-                fontSize: "0.8rem",
-                fontFamily: "monospace",
-              }}
-            >
-              no staged videos
-            </p>
-          ) : (
-            videos.map((video) => (
-              <VideoRow
-                key={video.id}
-                video={video}
-                onPin={pinVideo}
-                onDelete={deleteVideo}
-              />
-            ))
-          )}
-        </section>
+              {tierChannels.length === 0 ? (
+                <p
+                  style={{
+                    fontStyle: "italic",
+                    color: "#444",
+                    fontSize: "0.8rem",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  no channels
+                </p>
+              ) : (
+                tierChannels.map((channel) => (
+                  <ChannelRow
+                    key={channel.id}
+                    channel={channel}
+                    onTierChange={handleTierChange}
+                    onDelete={handleDelete}
+                    onPinVideo={(ch) => setPinPopupChannel(ch)}
+                  />
+                ))
+              )}
+            </section>
+          );
+        })}
       </div>
+
+      {pinPopupChannel && (
+        <PinVideoPopup
+          channel={pinPopupChannel}
+          onClose={() => setPinPopupChannel(null)}
+          onPinned={handlePinned}
+        />
+      )}
     </>
   );
 }
