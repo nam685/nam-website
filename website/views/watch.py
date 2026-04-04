@@ -692,13 +692,16 @@ def watch_channel_uploads(_request, channel_id):
     if not vid_map:
         return JsonResponse({"videos": []})
 
-    # Batch-fetch stats to sort by view count
+    # Batch-fetch stats + duration to sort by view count and filter shorts
     stats = {}
+    durations = {}
     vid_ids_list = list(vid_map.keys())
     for i in range(0, len(vid_ids_list), 50):
         batch_ids = vid_ids_list[i : i + 50]
         try:
-            data = _youtube_api_get("videos", access_token, {"id": ",".join(batch_ids), "part": "statistics"})
+            data = _youtube_api_get(
+                "videos", access_token, {"id": ",".join(batch_ids), "part": "statistics,contentDetails"}
+            )
         except Exception:
             logger.exception("Failed to fetch video stats for uploads")
             continue
@@ -706,10 +709,14 @@ def watch_channel_uploads(_request, channel_id):
             yt_id = item.get("id", "")
             view_count = int(item.get("statistics", {}).get("viewCount", 0))
             stats[yt_id] = view_count
+            durations[yt_id] = item.get("contentDetails", {}).get("duration", "")
 
-    # Build response sorted by view count descending
+    # Build response sorted by view count descending, excluding shorts (<=60s)
     videos = []
     for vid_id, info in vid_map.items():
+        duration = durations.get(vid_id, "")
+        if duration and parse_iso8601_duration(duration) <= 60:
+            continue
         videos.append(
             {
                 "youtube_video_id": vid_id,

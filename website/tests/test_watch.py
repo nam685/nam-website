@@ -743,11 +743,11 @@ class TestWatchChannelUploads:
                     },
                 ]
             },
-            # Second call: video stats
+            # Second call: video stats + duration
             {
                 "items": [
-                    {"id": "vid_upload1", "statistics": {"viewCount": "100"}},
-                    {"id": "vid_upload2", "statistics": {"viewCount": "5000"}},
+                    {"id": "vid_upload1", "statistics": {"viewCount": "100"}, "contentDetails": {"duration": "PT5M"}},
+                    {"id": "vid_upload2", "statistics": {"viewCount": "5000"}, "contentDetails": {"duration": "PT10M"}},
                 ]
             },
         ]
@@ -797,7 +797,7 @@ class TestWatchChannelUploads:
             },
             {
                 "items": [
-                    {"id": "vid_new", "statistics": {"viewCount": "200"}},
+                    {"id": "vid_new", "statistics": {"viewCount": "200"}, "contentDetails": {"duration": "PT3M"}},
                 ]
             },
         ]
@@ -807,3 +807,43 @@ class TestWatchChannelUploads:
         assert len(videos) == 1
         assert videos[0]["youtube_video_id"] == "vid_new"
         assert videos[0]["view_count"] == 200
+
+    @patch("website.views.watch._youtube_api_get")
+    def test_excludes_shorts(self, mock_api, client, auth_headers, db):  # noqa: ARG002
+        from django.core.cache import cache
+
+        cache.set("watches_google_refresh_token", "fake-refresh")
+        cache.set("watches_google_access_token", "fake-access")
+
+        ch = WatchChannel.objects.create(youtube_channel_id="UCtest123", name="Ch")
+        mock_api.side_effect = [
+            {
+                "items": [
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_short"},
+                            "title": "A Short",
+                            "thumbnails": {"high": {"url": "https://short.jpg"}},
+                        }
+                    },
+                    {
+                        "snippet": {
+                            "resourceId": {"videoId": "vid_long"},
+                            "title": "A Long Video",
+                            "thumbnails": {"high": {"url": "https://long.jpg"}},
+                        }
+                    },
+                ]
+            },
+            {
+                "items": [
+                    {"id": "vid_short", "statistics": {"viewCount": "999999"}, "contentDetails": {"duration": "PT45S"}},
+                    {"id": "vid_long", "statistics": {"viewCount": "100"}, "contentDetails": {"duration": "PT8M30S"}},
+                ]
+            },
+        ]
+
+        resp = client.get(f"/api/watches/channels/{ch.id}/uploads/", **auth_headers)
+        videos = resp.json()["videos"]
+        assert len(videos) == 1
+        assert videos[0]["youtube_video_id"] == "vid_long"
