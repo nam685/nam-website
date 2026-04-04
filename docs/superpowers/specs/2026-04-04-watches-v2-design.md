@@ -1,234 +1,139 @@
-# Watches Page V2 — Design Spec
+# Watches V2: Card Standardization, Scrollable Grid, and Staging Pin-from-Channel
 
-## Overview
+## Context
 
-Redesign the watches page from a simple channel grid into a curated taste showcase with a two-column layout: a sticky hero panel with an embedded video player on the left, and a scrollable channel grid on the right. The page should feel like a personal editorial recommendation — "here's what I watch and why it's good."
+The watches page was recently redesigned (#130) with a two-column layout: sticky hero player (left 50%) and channel grid (right 50%). This iteration addresses card sizing inconsistency, scrollability, and a critical staging workflow gap — there's no way to pin videos per channel without scrolling through a flat list of liked videos.
 
-## Page Layout
+## Changes
 
-### Desktop (≥1024px)
+### 1. Public Page — Standardize Channel Cards
 
-50/50 horizontal split:
+**Problem:** Cards use `auto-fill minmax(...)` which produces variable widths depending on container size. Some cards are wider than others.
 
-- **Left panel (50%):** Sticky (`position: sticky; top: 0; height: 100vh`). Houses the hero video player, video metadata, stats, description, and tagline.
-- **Right panel (50%):** Scrollable. Contains a 5-column CSS grid of channel cards, all tiers mixed and randomized.
+**Fix:** Switch grid to fixed column count per breakpoint with uniform card dimensions:
+- Desktop (>=1024px): 5 columns, cards fill equally
+- Tablet (768-1023px): 3 columns
+- Mobile (<768px): 2 columns (smaller cards)
 
-### Tablet (768–1023px)
+Card height is standardized by setting a fixed height on the card container. Channel name already has `text-overflow: ellipsis` and `white-space: nowrap` — no change needed there. The fixed card height ensures consistent grid appearance regardless of name length.
 
-Same 50/50 split, right panel drops to 3-column grid.
+### 2. Public Page — Scrollable Grid Container
 
-### Mobile (<768px)
+**Problem:** The channel grid currently extends the full page height, pushing content below the fold with no containment.
 
-Stacked vertically:
-- Hero section on top (not sticky)
-- 2-column grid below
-- All tiers mixed, glow is the only tier differentiator
+**Fix:** The grid container gets a fixed height of `calc(100vh - 100px)` (viewport minus top spacing for navbar), `overflow-y: auto`, and hidden scrollbar.
 
-## Hero Panel (Left Side)
+**Scroll indicator:** A gradient fade overlay at the bottom of the grid container (transparent → page background color). The fade disappears when the user has scrolled to the bottom. Implemented with a pseudo-element or an absolutely-positioned div that tracks scroll position via `onScroll`.
 
-Top to bottom:
-
-1. **Video area** — 16:9 aspect ratio container. Initially shows the recommended video's thumbnail with a centered play button overlay. Clicking replaces the thumbnail with a YouTube iframe embed (`youtube.com/embed/<id>?autoplay=1`). When a video is clicked anywhere on the page (recommended video or pinned video in an expanded channel card), it loads into this same player area.
-2. **Video title** — prominent, white, `font-size: ~1rem`.
-3. **Channel name + duration** — muted, smaller text.
-4. **Stats row** — inline flex: likes, comments, views. Small, muted icons or emoji prefixes. (YouTube API does not expose share counts.)
-5. **Description** — muted text, `max-height` with overflow hidden (expandable on click/tap). Sourced from YouTube video description stored during sync.
-6. **Spacer** — `flex: 1` pushes tagline to bottom.
-7. **Tagline** — bottom-left: "at least i don't doom scroll facebook et al." Italic, very muted (`color: ~#444`), with a faint top border separator.
-
-### Recommended Video Selection
-
-Server-side weighted random from pinned videos across all visible channels:
-- `never_miss` channel videos: weight 3
-- `regular` channel videos: weight 2
-- `check_out` channel videos: weight 1
-
-Returned via a dedicated endpoint `GET /api/watches/recommended/`. Includes video stats and description.
-
-### Hero as Universal Player
-
-The hero panel is the single video player for the entire page. Clicking any video anywhere on the page (the recommended video, or a pinned video in an expanded channel card) loads that video into the hero embed. The hero metadata (title, channel, stats, description) updates to reflect the playing video. On mobile, clicking a video in the grid scrolls back up to the hero and loads the embed.
-
-## Channel Grid (Right Side)
-
-### Card Layout
-
-5-column CSS grid (`grid-template-columns: repeat(5, 1fr)`), `gap: ~0.5rem`.
-
-Each card contains:
-- Circular channel avatar (centered)
-- Channel name below avatar (single line, truncated with ellipsis)
-
-No tier labels. No "Rotation" or "Check Out" text.
-
-### Tier Visual Differentiation
-
-All tiers are mixed together in the grid. Differentiation is visual weight only:
-
-| Tier | Border | Shadow | Opacity |
-|------|--------|--------|---------|
-| `never_miss` | `#1e40af60` | `0 0 12px #1e40af20` | 1.0 |
-| `regular` | `#1e40af25` | none | 0.85 |
-| `check_out` | `#1e40af10` | none | 0.65 |
-
-### Randomized Order
-
-On each page load, shuffle the channel array client-side before rendering. No alphabetical or tier-based grouping. Each visit feels different.
-
-### Card Hover
-
-Medium-intensity interactive hover (transition: 0.2s ease):
-- Border opacity increases (e.g., `never_miss` 60→90, `regular` 25→50, `check_out` 10→30)
-- Background shifts to visible blue tint (`#1e40af08` → `#1e40af15`)
-- Scale up: `transform: scale(1.03)`
-- Cursor: pointer
-
-## Channel Expansion
-
-### Trigger
-
-Click a channel card to expand. Click again to collapse. Clicking a different card collapses the current one and expands the new one.
-
-### Grid Reflow Logic
-
-When a card at grid position N is clicked:
-1. Cards at positions 1 through N stay in place.
-2. Cards after position N in the same row shift forward to fill the remaining spots in that row.
-3. The expanded block appears as a full-width element spanning all 5 columns on the next grid row.
-4. Remaining cards continue in the normal 5-column flow below the expanded block.
-
-This avoids empty gaps in the row above the expanded card.
-
-Implementation: render the card list as a flat array. Insert the expanded block element into the array after the last card of the row containing the clicked card. The expanded block uses `grid-column: 1 / -1`.
-
-### Expanded Card Content
-
-Approximately 3 rows tall. Contains:
-- **Channel avatar** (large, ~56px)
-- **Channel name** (prominent, ~14px, bold)
-- **Channel description** + subscriber count (muted)
-- **Pinned videos** — flex-wrapped row of video thumbnails (130×73px, 16:9). Clicking a pinned video loads it into the hero player (not a YouTube redirect). Title below each thumbnail, single line, truncated.
-- **YouTube channel link** — small external link icon/button
-- **Admin tier selector** (visible only when authenticated) — row of buttons: `never_miss` | `regular` | `check_out`. Active tier highlighted with accent color background.
-
-### Mobile Expansion
-
-Full-width below the tapped card. Same content, single-column layout. Video clicks scroll to hero and load the embed.
-
-## Data Model Changes
-
-### WatchVideo — New Fields
-
-Add to the existing `WatchVideo` model:
-
-```python
-view_count = models.BigIntegerField(default=0)
-like_count = models.BigIntegerField(default=0)
-comment_count = models.BigIntegerField(default=0)
-description = models.TextField(blank=True, default="")
-duration = models.CharField(max_length=20, blank=True, default="")  # ISO 8601 duration, e.g. "PT28M41S"
-stats_updated_at = models.DateTimeField(null=True, blank=True)
+**Scrollbar hiding:**
+```css
+scrollbar-width: none;           /* Firefox */
+&::-webkit-scrollbar { display: none; }  /* Chrome/Safari */
 ```
 
-### Sync Changes
+### 3. Public Page — Tagline Repositioned
 
-During the existing YouTube liked-videos sync:
-- After creating/updating videos, make a batch call to YouTube Data API v3 `videos.list` (part: `statistics,contentDetails,snippet`) for the video IDs.
-- Populate `view_count`, `like_count`, `comment_count`, `description`, `duration`, and set `stats_updated_at`.
-- The API allows up to 50 video IDs per request, so batch accordingly.
+**Current:** The tagline "at least i don't doom scroll facebook et al." sits inside the HeroPanel component, below admin controls.
 
-### Backfill Endpoint
+**Change:** Move to a fixed-position element at the bottom-left of the viewport, outside the hero panel. Styled as:
+- `position: fixed`
+- `bottom: 1.5rem`
+- `left: 1.5rem`
+- `z-index: 10`
+- Same italic, muted style (`color: #444`, `fontSize: 0.8rem`)
 
-`POST /api/watches/backfill-stats/` (auth required):
-- Finds all `WatchVideo` records where `stats_updated_at` is null or older than a configurable threshold (default: 7 days).
-- Fetches fresh stats from YouTube Data API v3 in batches of 50.
-- Updates records. Returns count of updated videos.
-- Subject to the same sync cooldown as the regular sync (5-minute global cooldown).
+On mobile, stays fixed bottom-left but with smaller padding (`bottom: 1rem`, `left: 1rem`).
 
-### Recommended Video Endpoint
+### 4. Public Page — Remove Tier Buttons from Expanded Block
 
-`GET /api/watches/recommended/`:
-- Selects a random pinned+visible video using weighted random based on channel tier.
-- Returns full video data including stats and description.
-- Weights: `never_miss`=3, `regular`=2, `check_out`=1.
+The `ExpandedBlock` component currently shows tier selector buttons when admin is logged in. Remove this — tier management moves exclusively to the staging page. The expanded block on the public page should only show channel info and pinned video thumbnails.
 
-## API Response Changes
+### 5. Staging Page — Show All Channels
 
-### `/api/watches/` Response
+**Current:** `watch_staging()` only returns channels with `tier="hidden"`.
 
-The `WatchVideo` objects in the channel response should now include:
+**Change:** Return ALL channels, grouped by tier. The backend returns them sorted by tier weight (never_miss first, hidden last), then by display_order within each tier.
 
-```json
-{
-  "id": 1,
-  "youtube_video_id": "abc123",
-  "title": "Video Title",
-  "thumbnail_url": "https://...",
-  "note": "",
-  "view_count": 15000000,
-  "like_count": 1200000,
-  "comment_count": 24000,
-  "description": "Video description text...",
-  "duration": "PT28M41S"
-}
-```
+**Frontend:** Display channels grouped under section headers: "NEVER MISS", "ROTATION", "CHECK OUT", "HIDDEN". Each channel row shows its current tier buttons (with the active one highlighted brighter) + a "Pin video" button.
 
-### `/api/watches/recommended/` Response
+### 6. Staging Page — Brighter Button Styling
 
-```json
-{
-  "video": {
-    "id": 1,
-    "youtube_video_id": "abc123",
-    "title": "Why Democracy Is Mathematically Impossible",
-    "thumbnail_url": "https://...",
-    "view_count": 15000000,
-    "like_count": 1200000,
-    "comment_count": 24000,
-    "description": "Full video description...",
-    "duration": "PT28M41S",
-    "channel_name": "Veritasium",
-    "channel_thumbnail_url": "https://..."
-  }
-}
-```
+**Current:** Button text uses `${ACCENT}80` (muted blue) for inactive, `ACCENT` for active.
 
-## Admin Features
+**Change:**
+- Inactive buttons: text color `${ACCENT}aa` (brighter), border `${ACCENT}50`
+- Active/selected tier button: text `#e5e2e1` (near-white), background `${ACCENT}35`, border `ACCENT`
+- Delete buttons: same treatment — `${RED}bb` inactive, `RED` on hover
 
-### Tier Selector
+### 7. Staging Page — Pin Video from Channel Popup
 
-Inside the expanded channel card, visible only when authenticated:
-- Three buttons in a row: `never_miss` | `regular` | `check_out`
-- Active tier has accent-colored background (`#1e40af15`) and border (`#1e40af40`)
-- Clicking a different tier calls `POST /api/watches/channels/<id>/tier/` and updates the card's visual weight in place.
+**Trigger:** "Pin video" button on each channel row (only shown for promoted channels, i.e. non-hidden).
 
-### Sync/Staging Controls
+**Popup behavior:**
+1. Click "Pin video" → popup overlay appears
+2. Popup fetches `GET /api/watches/channels/<id>/uploads/` which calls YouTube `playlistItems.list`
+3. Shows a grid of recent video thumbnails (up to 20) with titles
+4. Each video is selectable (toggle selection with click, visual highlight on selected)
+5. "Pin selected" button at the bottom → `POST` to create/pin each selected video
+6. On success, popup closes, channel row updates to show pinned count
 
-Small controls in the hero panel (below the tagline or as a floating element), only visible when authenticated:
-- Sync button (with cooldown indicator)
-- Link to `/watches/staging`
+**Popup layout:**
+- Modal overlay with dark semi-transparent backdrop
+- Max-width 600px, centered
+- Channel name as header
+- 2-column grid of video thumbnails (each ~240px wide with title below)
+- Loading spinner while fetching
+- "Pin selected (N)" button, disabled when nothing selected
 
-## Styling Notes
+### 8. Backend — Channel Uploads Endpoint
 
-- Accent color: `#1e40af` (unchanged)
-- All styling via inline React style objects (consistent with current approach)
-- Card border-radius: 5-6px
-- Expanded card border-radius: 8px
-- Font sizes: card names ~8-9px (compact), expanded card title ~14px, hero title ~1rem
-- Background: `#0a0a0a` page, `#111` for never_miss cards, `#0e0e0e` for regular, `#0a0a0a` for check_out
+**New endpoint:** `GET /api/watches/channels/<id>/uploads/`
 
-## Removed
+**Auth:** Admin required.
 
-- Tier text labels on cards ("Rotation", "Check Out")
-- "Watches" title at top
-- "my youtube taste map" tagline
-- "Recommended" label in hero
-- Separate tier sections/groupings
-- YouTube redirect for pinned videos (all videos play in hero)
+**Logic:**
+1. Look up the `WatchChannel` by id
+2. Derive the uploads playlist ID: replace `UC` prefix with `UU` in `youtube_channel_id` (standard YouTube channel convention; if the ID doesn't start with `UC`, return an empty list)
+3. Call YouTube API `playlistItems.list` with `playlistId=<uploads_playlist_id>`, `part=snippet`, `maxResults=20`
+4. Return array of `{ youtube_video_id, title, thumbnail_url }` for each item
+5. Exclude videos that are already in the database (already synced/pinned)
+
+**Quota cost:** 1 unit per call. Well within the 10,000/day free tier.
+
+**Error handling:** If the channel has no uploads playlist or the API call fails, return an empty list with a message field.
+
+### 9. Backend — Pin Multiple Videos Endpoint
+
+**New endpoint:** `POST /api/watches/channels/<id>/pin-videos/`
+
+**Auth:** Admin required.
+
+**Body:** `{ "videos": [{ "youtube_video_id": "...", "title": "...", "thumbnail_url": "..." }, ...] }`
+
+**Logic:** For each video in the array:
+1. `get_or_create` a `WatchVideo` with the given `youtube_video_id`
+2. Set `channel` to the given `WatchChannel`, `title`, `thumbnail_url`, `pinned=True`, `visible=True`
+3. Save
+
+Returns `{ "pinned": N }` with count of videos pinned.
+
+### 10. Backend — Update Staging Endpoint
+
+Modify `watch_staging()` to return all channels instead of just hidden ones. Sort by tier weight then display_order. Include a `pinned_count` field per channel (count of pinned videos for that channel).
+
+## Files Changed
+
+### Backend
+- `website/views/watch.py` — new `watch_channel_uploads()`, `watch_channel_pin_videos()` endpoints; modify `watch_staging()` to return all channels
+- `website/urls.py` — add routes for new endpoints
+
+### Frontend
+- `frontend/src/app/watches/page.tsx` — scrollable grid container with scroll indicator, fixed tagline, remove tier buttons from expanded block, standardize card sizing
+- `frontend/src/app/watches/staging/page.tsx` — grouped channel display, pin video popup, brighter buttons
+- `frontend/src/lib/api.ts` — add types for uploads response and pin-videos request
 
 ## Out of Scope
-
-- Custom video player (must use YouTube iframe embed for TOS compliance)
-- Video search or filtering
-- Channel categories/tags
-- Staging page redesign (keep as-is)
+- Changing the hero player behavior
+- Changing the sync logic (subscriptions + liked videos)
+- Mobile layout changes beyond what's described (responsive breakpoints stay the same)
+- Video notes or other staging video management
