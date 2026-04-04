@@ -41,6 +41,21 @@ _AV_TYPE_MAP = {
     "Mutual Fund": "stock",
 }
 
+_BOND_KEYWORDS = {"bond", "govt", "government", "treasury", "gilt", "sovereign", "fixed income"}
+_COMMODITY_KEYWORDS = {"gold", "silver", "platinum", "palladium", "oil", "crude", "commodity", "natural gas"}
+
+
+def _refine_asset_type(base_type: str, name: str) -> str:
+    """Refine asset_type for ETFs based on name keywords (e.g. bond ETFs → 'bond')."""
+    if base_type != "stock":
+        return base_type
+    lower = name.lower()
+    if any(kw in lower for kw in _BOND_KEYWORDS):
+        return "bond"
+    if any(kw in lower for kw in _COMMODITY_KEYWORDS):
+        return "commodity"
+    return base_type
+
 
 def search_alpha_vantage(query: str) -> list[dict]:
     """Search Alpha Vantage SYMBOL_SEARCH for stocks/ETFs. Returns unified result dicts."""
@@ -63,10 +78,12 @@ def search_alpha_vantage(query: str) -> list[dict]:
         if asset_type is None:
             continue
         symbol = match.get("1. symbol", "")
+        name = match.get("2. name", "")
+        asset_type = _refine_asset_type(asset_type, name)
         results.append(
             {
                 "symbol": symbol,
-                "name": match.get("2. name", ""),
+                "name": name,
                 "asset_type": asset_type,
                 "provider": "alpha_vantage",
                 "provider_id": symbol,
