@@ -14,7 +14,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.25)";
+const PANEL_BG = "rgba(14, 14, 14, 0.08)";
 
 const TABS = [
   { label: "History", href: "/listens" },
@@ -77,7 +77,6 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
             justifyContent: "space-around",
             padding: 14,
             background: PANEL_BG,
-            backdropFilter: "blur(12px)",
             borderRadius: "8px 8px 0 0",
             marginBottom: 1,
           }}
@@ -144,7 +143,6 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
         <div
           style={{
             background: PANEL_BG,
-            backdropFilter: "blur(12px)",
             padding: 24,
             borderRadius: isMobile && stats ? 0 : "8px 0 0 8px",
           }}
@@ -401,8 +399,7 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
           <div
             style={{
               background: PANEL_BG,
-              backdropFilter: "blur(12px)",
-              padding: 24,
+                padding: 24,
               borderRadius: "0 8px 8px 0",
             }}
           >
@@ -612,7 +609,6 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
           borderBottom: "1px solid rgba(255,255,255,0.05)",
           marginTop: 1,
           background: PANEL_BG,
-          backdropFilter: "blur(12px)",
           overflowX: "auto",
         }}
       >
