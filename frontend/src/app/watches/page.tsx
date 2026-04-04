@@ -857,14 +857,14 @@ export default function WatchesPage() {
   }
 
   /* ── Responsive column detection ─────────────────── */
-  const [cols, setCols] = useState(4);
+  const [cols, setCols] = useState(5);
 
   useEffect(() => {
     function updateCols() {
       const w = window.innerWidth;
       if (w < 768) setCols(2);
       else if (w < 1024) setCols(3);
-      else setCols(4);
+      else setCols(5);
     }
     updateCols();
     window.addEventListener("resize", updateCols);
@@ -908,21 +908,22 @@ export default function WatchesPage() {
           max-width: 1400px;
           margin: 0 auto;
           padding: 2rem 1.5rem 6rem;
-          gap: 2rem;
+          gap: 0;
           position: relative;
           z-index: 1;
         }
         .watches-hero {
-          width: 60%;
+          width: 50%;
           flex-shrink: 0;
           position: sticky;
           top: 80px;
           align-self: flex-start;
           max-height: calc(100vh - 100px);
           overflow-y: auto;
+          padding-right: 1rem;
         }
         .watches-grid-container {
-          flex: 1;
+          width: 50%;
           min-width: 0;
           position: relative;
         }
@@ -938,15 +939,16 @@ export default function WatchesPage() {
         }
         .watches-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 0.65rem;
         }
         @media (max-width: 1023px) {
           .watches-hero {
-            width: 55%;
+            width: 50%;
+            padding-right: 0.75rem;
           }
           .watches-grid-container {
-            width: 40%;
+            width: 50%;
           }
           .watches-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -960,6 +962,7 @@ export default function WatchesPage() {
           }
           .watches-hero {
             width: 100%;
+            padding-right: 0;
             position: static;
             max-height: none;
             overflow-y: visible;
