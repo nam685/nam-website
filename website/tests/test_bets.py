@@ -452,8 +452,9 @@ class TestBetsHistoryEndpoint:
             provider="coingecko",
             provider_id="bitcoin",
         )
+        today = date.today()
         for i in range(40):
-            d = date(2026, 2, 22) + timedelta(days=i)
+            d = today - timedelta(days=39 - i)
             PriceSnapshot.objects.create(ticker=t, date=d, price=Decimal("80000") + i)
 
         data = client.get(f"/api/bets/{t.id}/history/?period=1W").json()
