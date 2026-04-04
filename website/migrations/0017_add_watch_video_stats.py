@@ -4,40 +4,39 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0016_clean_artist_view_counts'),
+        ("website", "0016_clean_artist_view_counts"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='watchvideo',
-            name='comment_count',
+            model_name="watchvideo",
+            name="comment_count",
             field=models.BigIntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='watchvideo',
-            name='description',
-            field=models.TextField(blank=True, default=''),
+            model_name="watchvideo",
+            name="description",
+            field=models.TextField(blank=True, default=""),
         ),
         migrations.AddField(
-            model_name='watchvideo',
-            name='duration',
-            field=models.CharField(blank=True, default='', max_length=20),
+            model_name="watchvideo",
+            name="duration",
+            field=models.CharField(blank=True, default="", max_length=20),
         ),
         migrations.AddField(
-            model_name='watchvideo',
-            name='like_count',
+            model_name="watchvideo",
+            name="like_count",
             field=models.BigIntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='watchvideo',
-            name='stats_updated_at',
+            model_name="watchvideo",
+            name="stats_updated_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='watchvideo',
-            name='view_count',
+            model_name="watchvideo",
+            name="view_count",
             field=models.BigIntegerField(default=0),
         ),
     ]
