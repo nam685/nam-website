@@ -14,7 +14,7 @@ class Command(BaseCommand):
     help = "Sync YouTube Music listening history via ytmusicapi"
 
     def handle(self, *_args, **_options):
-        from ytmusicapi import YTMusic
+        from ytmusicapi import OAuthCredentials, YTMusic
 
         auth_path = os.environ.get("YTMUSIC_OAUTH_JSON", OAUTH_JSON_PATH)
         if not os.path.isfile(auth_path):
@@ -22,7 +22,14 @@ class Command(BaseCommand):
             self.stderr.write("Run: uv run ytmusicapi oauth")
             return
 
-        yt = YTMusic(auth_path)
+        client_id = os.environ.get("YTMUSIC_CLIENT_ID", "")
+        client_secret = os.environ.get("YTMUSIC_CLIENT_SECRET", "")
+        if not client_id or not client_secret:
+            self.stderr.write("YTMUSIC_CLIENT_ID and YTMUSIC_CLIENT_SECRET env vars required")
+            return
+
+        oauth_credentials = OAuthCredentials(client_id=client_id, client_secret=client_secret)
+        yt = YTMusic(auth_path, oauth_credentials=oauth_credentials)
         history = yt.get_history()
         self.stdout.write(f"Fetched {len(history)} tracks from YTM")
 
