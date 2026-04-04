@@ -7,7 +7,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.25)";
+const PANEL_BG = "rgba(14, 14, 14, 0.08)";
 const PAGE_SIZE = 30;
 
 export default function ListensArtistsPage() {
@@ -53,7 +53,7 @@ export default function ListensArtistsPage() {
     );
 
   return (
-    <div style={{ background: PANEL_BG, backdropFilter: "blur(12px)", borderRadius: "0 0 8px 8px", padding: 20 }}>
+    <div style={{ background: PANEL_BG, borderRadius: "0 0 8px 8px", padding: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: bp === "mobile" ? "1fr" : bp === "tablet" ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 12 }}>
         {artists.map((artist) => (
           <div

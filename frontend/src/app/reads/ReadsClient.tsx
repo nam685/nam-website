@@ -437,40 +437,6 @@ export default function ReadsClient() {
           ))}
         </div>
 
-        {/* ── AI Explorer teaser ────────────────────── */}
-        <div
-          style={{
-            position: "relative",
-            zIndex: 2,
-            border: `1px dashed color-mix(in srgb, ${ACCENT} 20%, #1a1a1a)`,
-            borderRadius: "0.5rem",
-            padding: "2rem",
-            textAlign: "center",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.65rem",
-              fontWeight: 700,
-              letterSpacing: "0.15em",
-              textTransform: "uppercase",
-              color: "#444",
-            }}
-          >
-            {/* AI Explorer — coming soon */}
-          </span>
-          <p
-            style={{
-              color: "#333",
-              fontSize: "0.8rem",
-              marginTop: "0.5rem",
-              fontStyle: "italic",
-            }}
-          >
-            ask questions about anything i&apos;ve read
-          </p>
-        </div>
       </div>
     </>
   );

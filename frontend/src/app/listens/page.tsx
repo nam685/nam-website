@@ -8,7 +8,7 @@ import { usePlayer } from "@/lib/player";
 import { useBreakpoint } from "@/lib/useBreakpoint";
 
 const ACCENT = "#f97316";
-const PANEL_BG = "rgba(14, 14, 14, 0.25)";
+const PANEL_BG = "rgba(14, 14, 14, 0.08)";
 const PAGE_SIZE = 20;
 
 export default function ListensHistoryPage() {
@@ -68,7 +68,7 @@ export default function ListensHistoryPage() {
   }
 
   return (
-    <div style={{ background: PANEL_BG, backdropFilter: "blur(12px)", borderRadius: "0 0 8px 8px", padding: 20 }}>
+    <div style={{ background: PANEL_BG, borderRadius: "0 0 8px 8px", padding: 20 }}>
       {error && (
         <div
           style={{
