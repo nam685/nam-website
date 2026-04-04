@@ -40,31 +40,31 @@ const TIER_STYLE: Record<
   {
     border: string;
     borderHover: string;
+    borderWidth: number;
     shadow: string;
-    opacity: number;
     bg: string;
   }
 > = {
   never_miss: {
-    border: `${ACCENT}60`,
-    borderHover: `${ACCENT}e6`,
-    shadow: `0 0 12px ${ACCENT}20`,
-    opacity: 1,
-    bg: "#111",
+    border: `${ACCENT}50`,
+    borderHover: `${ACCENT}cc`,
+    borderWidth: 2,
+    shadow: `0 0 10px ${ACCENT}18`,
+    bg: `${ACCENT}08`,
   },
   regular: {
     border: `${ACCENT}25`,
-    borderHover: `${ACCENT}80`,
+    borderHover: `${ACCENT}70`,
+    borderWidth: 1,
     shadow: "none",
-    opacity: 0.85,
-    bg: "#0e0e0e",
+    bg: "transparent",
   },
   check_out: {
     border: `${ACCENT}10`,
-    borderHover: `${ACCENT}4d`,
+    borderHover: `${ACCENT}40`,
+    borderWidth: 1,
     shadow: "none",
-    opacity: 0.65,
-    bg: "#0a0a0a",
+    bg: "transparent",
   },
 };
 
@@ -103,14 +103,13 @@ function ChannelCard({
       className="watches-card"
       style={{
         background: hovered ? `${ACCENT}0d` : tier.bg,
-        border: `1px solid ${hovered ? tier.borderHover : tier.border}`,
+        border: `${tier.borderWidth}px solid ${hovered ? tier.borderHover : tier.border}`,
         boxShadow: hovered ? `0 0 12px ${ACCENT}15` : tier.shadow,
         borderRadius: 6,
         padding: "0.75rem",
         cursor: "pointer",
         transition:
           "border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease",
-        opacity: tier.opacity,
         outline: isExpanded ? `2px solid ${ACCENT}60` : "none",
         outlineOffset: -1,
         display: "flex",
@@ -387,12 +386,10 @@ function HeroPanel({
 
   return (
     <div
-      className="watches-hero"
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        padding: 0,
       }}
     >
       {/* Video area */}
@@ -552,6 +549,8 @@ function HeroPanel({
                 fontSize: "0.75rem",
                 color: "#666",
                 lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
                 maxHeight: descExpanded ? "none" : "4.5rem",
                 overflow: "hidden",
                 cursor: "pointer",
