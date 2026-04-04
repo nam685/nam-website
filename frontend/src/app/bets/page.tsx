@@ -444,6 +444,19 @@ export default function BetsPage() {
         zIndex: 1,
       }}
     >
+      {/* Tagline */}
+      <p
+        style={{
+          fontStyle: "italic",
+          color: "#555",
+          fontSize: "0.85rem",
+          letterSpacing: "0.02em",
+          marginBottom: 24,
+        }}
+      >
+        i look here to feel very smart
+      </p>
+
       {/* Header */}
       <div
         style={{

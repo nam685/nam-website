@@ -399,7 +399,7 @@ export default function ReadsClient() {
               letterSpacing: "0.04em",
             }}
           >
-            books, papers, essays, and other things i read
+            i know many words
           </p>
         </div>
 

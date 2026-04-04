@@ -56,6 +56,19 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
         padding: "0.5rem 1.5rem 2rem",
       }}
     >
+      {/* Tagline */}
+      <p
+        style={{
+          fontStyle: "italic",
+          color: "#555",
+          fontSize: "0.85rem",
+          letterSpacing: "0.02em",
+          marginBottom: "1rem",
+        }}
+      >
+        vibing...
+      </p>
+
       {/* ---- Mobile compact stats bar ---- */}
       {isMobile && stats && (
         <div
