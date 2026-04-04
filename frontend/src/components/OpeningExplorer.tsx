@@ -213,6 +213,7 @@ export default function OpeningExplorer() {
               fontFamily: "var(--font-headline)",
               letterSpacing: "0.02em",
               lineHeight: 1.8,
+              maxWidth: "min(400px, calc(100vw - 3rem))",
               maxHeight: "200px",
               overflowY: "auto",
             }}
