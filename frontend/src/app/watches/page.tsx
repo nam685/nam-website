@@ -387,12 +387,10 @@ function HeroPanel({
 
   return (
     <div
-      className="watches-hero"
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
-        padding: 0,
       }}
     >
       {/* Video area */}
