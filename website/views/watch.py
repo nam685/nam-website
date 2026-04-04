@@ -146,9 +146,15 @@ def watch_recommended(request):  # noqa: ARG001
 
 @require_admin
 def watch_staging(_request):
-    """Admin: return hidden channels and non-visible videos."""
-    hidden_channels = WatchChannel.objects.filter(tier="hidden").order_by("name")
-    non_visible_videos = WatchVideo.objects.filter(visible=False).order_by("-created_at")
+    """Admin: return all channels sorted by tier weight, with pinned counts."""
+    from django.db.models import Count, Q
+
+    channels = WatchChannel.objects.annotate(
+        pinned_count=Count("videos", filter=Q(videos__pinned=True)),
+    )
+
+    # Sort by tier weight in Python (simple, avoids raw SQL for the custom weight map)
+    sorted_channels = sorted(channels, key=lambda ch: (ch.tier_weight, ch.display_order, ch.name))
 
     return JsonResponse(
         {
@@ -161,21 +167,9 @@ def watch_staging(_request):
                     "thumbnail_url": ch.thumbnail_url,
                     "tier": ch.tier,
                     "display_order": ch.display_order,
+                    "pinned_count": ch.pinned_count,
                 }
-                for ch in hidden_channels
-            ],
-            "videos": [
-                {
-                    "id": v.id,
-                    "youtube_video_id": v.youtube_video_id,
-                    "title": v.title,
-                    "thumbnail_url": v.thumbnail_url,
-                    "note": v.note,
-                    "pinned": v.pinned,
-                    "visible": v.visible,
-                    "channel_id": v.channel_id,
-                }
-                for v in non_visible_videos
+                for ch in sorted_channels
             ],
         }
     )

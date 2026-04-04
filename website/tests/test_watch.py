@@ -196,12 +196,30 @@ class TestWatchStaging:
     def test_requires_auth(self, client):
         assert client.get("/api/watches/staging/").status_code == 401
 
-    def test_returns_hidden_channels_and_videos(self, client, auth_headers, visible_channels):  # noqa: ARG002
+    def test_returns_all_channels_grouped_by_tier(self, client, auth_headers, visible_channels):  # noqa: ARG002
         data = client.get("/api/watches/staging/", **auth_headers).json()
         channel_names = [c["name"] for c in data["channels"]]
+        assert "Top Channel" in channel_names
+        assert "Regular Channel" in channel_names
         assert "Hidden Channel" in channel_names
-        assert "Top Channel" not in channel_names
-        assert any(v["title"] == "Hidden Video" for v in data["videos"])
+
+    def test_channels_sorted_by_tier_weight_then_order(self, client, auth_headers, db):  # noqa: ARG002
+        WatchChannel.objects.create(youtube_channel_id="UC_a", name="A", tier="check_out", display_order=1)
+        WatchChannel.objects.create(youtube_channel_id="UC_b", name="B", tier="never_miss", display_order=0)
+        WatchChannel.objects.create(youtube_channel_id="UC_c", name="C", tier="hidden", display_order=0)
+        WatchChannel.objects.create(youtube_channel_id="UC_d", name="D", tier="regular", display_order=0)
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        tiers = [c["tier"] for c in data["channels"]]
+        assert tiers == ["never_miss", "regular", "check_out", "hidden"]
+
+    def test_includes_pinned_count(self, client, auth_headers, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        top = next(c for c in data["channels"] if c["name"] == "Top Channel")
+        assert top["pinned_count"] == 1
+
+    def test_no_videos_key(self, client, auth_headers, visible_channels):  # noqa: ARG002
+        data = client.get("/api/watches/staging/", **auth_headers).json()
+        assert "videos" not in data
 
 
 @pytest.mark.django_db
