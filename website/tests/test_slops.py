@@ -94,6 +94,11 @@ class TestSlopsSubmit:
         resp = client.post("/api/slops/submit/", {"prompt": "Second"}, content_type="application/json")
         assert resp.status_code == 429
 
+    def test_submit_admin_bypasses_rate_limit(self, client, auth_headers):
+        client.post("/api/slops/submit/", {"prompt": "First"}, content_type="application/json")
+        resp = client.post("/api/slops/submit/", {"prompt": "Second"}, content_type="application/json", **auth_headers)
+        assert resp.status_code == 201
+
     def test_submit_global_rate_limit(self, client):
         for i in range(10):
             Turn.objects.create(

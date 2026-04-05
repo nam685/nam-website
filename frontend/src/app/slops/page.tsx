@@ -214,9 +214,12 @@ export default function SlopsPage() {
         body.session_id = selectedId;
       }
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+
       const res = await fetch(`${API}/api/slops/submit/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
       });
       if (res.status === 429) {
