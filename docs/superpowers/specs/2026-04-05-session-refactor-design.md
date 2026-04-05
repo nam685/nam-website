@@ -111,7 +111,7 @@ All endpoints stay under `/api/slops/`. Sessions with nested turns.
 
 ### Submission rules
 
-1. **Rate limit:** 1 submission per hour per IP (same as today, checked across all turns).
+1. **Rate limit:** 1 submission per hour per IP, plus a global cap of 10 submissions per hour across all IPs (checked across all turns).
 2. **Max prompt:** 5000 characters.
 3. **One pending turn per session:** If a session already has a turn with status `pending`, `approved`, or `running`, new submissions to that session are rejected with 409.
 4. **New session:** When `session_id` is omitted, a new Session is created with `workspace=""` (set on approval).
