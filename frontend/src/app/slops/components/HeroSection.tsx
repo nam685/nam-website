@@ -29,7 +29,7 @@ export default function HeroSection({ compact }: { compact?: boolean }) {
           klaude
         </span>
         <span style={{ color: "#666", fontSize: 12, fontFamily: "monospace" }}>
-          autonomous agent missions on nam685.de
+          handmade slop machine
         </span>
       </div>
     );
@@ -70,8 +70,7 @@ export default function HeroSection({ compact }: { compact?: boolean }) {
           lineHeight: 1.6,
         }}
       >
-        An autonomous agent that takes community prompts and works on this
-        website. Submit a mission, watch it think, and see what it builds.
+        handmade slop machine
       </p>
 
       <a

@@ -74,6 +74,7 @@ export default function SlopsPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const traceAreaRef = useRef<HTMLDivElement>(null);
 
@@ -266,109 +267,142 @@ export default function SlopsPage() {
           top: 60,
           left: 0,
           bottom: 0,
-          width: 280,
+          width: sidebarCollapsed ? 40 : 280,
           zIndex: 40,
           background: "#0a0a0a",
           borderRight: `1px solid ${ACCENT}15`,
-          overflowY: "auto",
-          transition: "transform 0.2s ease",
+          overflowY: sidebarCollapsed ? "hidden" : "auto",
+          overflowX: "hidden",
+          transition: "width 0.2s ease, transform 0.2s ease",
+          cursor: "pointer",
         }}
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
-        <div
-          style={{
-            padding: "16px 12px 8px",
-            fontSize: 11,
-            color: "#666",
-            textTransform: "uppercase",
-            letterSpacing: 1,
-          }}
-        >
-          Missions
-        </div>
-
-        {missions.length === 0 && (
-          <div style={{ padding: "20px 12px", color: "#555", fontSize: 12 }}>
-            No missions yet. Submit the first one!
-          </div>
-        )}
-
-        {missions.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => selectMission(m.id)}
+        {sidebarCollapsed ? (
+          <div
             style={{
-              display: "block",
+              writingMode: "vertical-rl",
+              padding: "16px 0",
+              fontSize: 11,
+              color: "#666",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              textAlign: "center",
               width: "100%",
-              padding: "10px 12px",
-              background: m.id === selectedId ? `${ACCENT}10` : "transparent",
-              border: "none",
-              borderLeft:
-                m.id === selectedId
-                  ? `2px solid ${ACCENT}`
-                  : "2px solid transparent",
-              cursor: "pointer",
-              textAlign: "left",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              if (m.id !== selectedId)
-                e.currentTarget.style.background = `${ACCENT}08`;
-            }}
-            onMouseLeave={(e) => {
-              if (m.id !== selectedId)
-                e.currentTarget.style.background = "transparent";
+              userSelect: "none",
             }}
           >
+            Missions
+          </div>
+        ) : (
+          <>
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                marginBottom: 4,
+                padding: "16px 12px 8px",
+                fontSize: 11,
+                color: "#666",
+                textTransform: "uppercase",
+                letterSpacing: 1,
               }}
             >
-              <span
+              Missions
+            </div>
+
+            {missions.length === 0 && (
+              <div
+                style={{ padding: "20px 12px", color: "#555", fontSize: 12 }}
+              >
+                No missions yet. Submit the first one!
+              </div>
+            )}
+
+            {missions.map((m) => (
+              <button
+                key={m.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectMission(m.id);
+                }}
                 style={{
-                  color: "#ccc",
-                  fontSize: 12,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flex: 1,
+                  display: "block",
+                  width: "100%",
+                  padding: "10px 12px",
+                  background:
+                    m.id === selectedId ? `${ACCENT}10` : "transparent",
+                  border: "none",
+                  borderLeft:
+                    m.id === selectedId
+                      ? `2px solid ${ACCENT}`
+                      : "2px solid transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  if (m.id !== selectedId)
+                    e.currentTarget.style.background = `${ACCENT}08`;
+                }}
+                onMouseLeave={(e) => {
+                  if (m.id !== selectedId)
+                    e.currentTarget.style.background = "transparent";
                 }}
               >
-                {m.prompt.length > 40
-                  ? m.prompt.slice(0, 40) + "\u2026"
-                  : m.prompt}
-              </span>
-              <StatusBadge status={m.status} />
-            </div>
-            <div style={{ color: "#555", fontSize: 10 }}>
-              {timeAgo(m.created_at)}
-              {m.token_count > 0 && (
-                <span style={{ marginLeft: 8 }}>
-                  {m.token_count.toLocaleString()} tokens
-                </span>
-              )}
-              {m.tool_calls > 0 && (
-                <span style={{ marginLeft: 8 }}>{m.tool_calls} tool calls</span>
-              )}
-            </div>
-          </button>
-        ))}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginBottom: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#ccc",
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      flex: 1,
+                    }}
+                  >
+                    {m.prompt.length > 40
+                      ? m.prompt.slice(0, 40) + "\u2026"
+                      : m.prompt}
+                  </span>
+                  <StatusBadge status={m.status} />
+                </div>
+                <div style={{ color: "#555", fontSize: 10 }}>
+                  {timeAgo(m.created_at)}
+                  {m.token_count > 0 && (
+                    <span style={{ marginLeft: 8 }}>
+                      {m.token_count.toLocaleString()} tokens
+                    </span>
+                  )}
+                  {m.tool_calls > 0 && (
+                    <span style={{ marginLeft: 8 }}>
+                      {m.tool_calls} tool calls
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </>
+        )}
       </aside>
 
       {/* ── Main area ───────────────────────────────────── */}
       <main
-        className="lg:ml-[280px]"
         style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
           height: "100%",
+          marginLeft: sidebarCollapsed ? 40 : 280,
+          transition: "margin-left 0.2s ease",
         }}
+        className="max-lg:!ml-0"
       >
         {/* Hero */}
         <HeroSection compact={selectedId !== null} />
@@ -528,9 +562,12 @@ export default function SlopsPage() {
         {/* ── Prompt box ────────────────────────────────── */}
         <div
           style={{
-            padding: "12px 20px 16px",
+            padding: "12px 40px 16px",
             borderTop: "1px solid #222",
             background: "#0a0a0a",
+            maxWidth: 800,
+            width: "100%",
+            alignSelf: "center",
           }}
         >
           {submitSuccess && (
