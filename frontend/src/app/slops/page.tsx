@@ -109,13 +109,19 @@ export default function SlopsPage() {
   const fetchTrace = useCallback(async (id: number) => {
     setTraceLoading(true);
     try {
-      const res = await fetch(`${API}/api/slops/${id}/`);
-      if (!res.ok) {
+      // Fetch mission detail (for status)
+      const detailRes = await fetch(`${API}/api/slops/${id}/`);
+      if (!detailRes.ok) {
         setTrace(null);
         return;
       }
-      const data = await res.json();
-      setTrace({ trace: data.trace, status: data.status });
+      const detail = await detailRes.json();
+
+      // Fetch trace (ATIF document)
+      const traceRes = await fetch(`${API}/api/slops/${id}/trace/`);
+      const traceData = traceRes.ok ? await traceRes.json() : { trace: null };
+
+      setTrace({ trace: traceData.trace, status: detail.status });
     } catch {
       setTrace(null);
     } finally {
@@ -537,8 +543,7 @@ export default function SlopsPage() {
               </p>
             </div>
           ) : selectedId ===
-          null ? /* No selection — hero takes space, nothing here */
-          null : traceLoading ? (
+            null /* No selection — hero takes space, nothing here */ ? null : traceLoading ? (
             <div
               style={{
                 padding: 40,
@@ -626,9 +631,7 @@ export default function SlopsPage() {
                               color: ACCENT,
                               fontSize: 12,
                               fontFamily: "monospace",
-                              cursor: actionLoading
-                                ? "not-allowed"
-                                : "pointer",
+                              cursor: actionLoading ? "not-allowed" : "pointer",
                               textAlign: "left",
                             }}
                             onMouseEnter={(e) =>
@@ -656,9 +659,7 @@ export default function SlopsPage() {
                               color: "#ef4444",
                               fontSize: 12,
                               fontFamily: "monospace",
-                              cursor: actionLoading
-                                ? "not-allowed"
-                                : "pointer",
+                              cursor: actionLoading ? "not-allowed" : "pointer",
                               textAlign: "left",
                             }}
                             onMouseEnter={(e) =>
@@ -819,9 +820,7 @@ export default function SlopsPage() {
                 opacity: !prompt.trim() || submitting ? 0.3 : 1,
                 transition: "opacity 0.15s, box-shadow 0.15s",
                 boxShadow:
-                  !prompt.trim() || submitting
-                    ? "none"
-                    : `0 0 8px ${ACCENT}30`,
+                  !prompt.trim() || submitting ? "none" : `0 0 8px ${ACCENT}30`,
                 lineHeight: 1,
               }}
               onMouseEnter={(e) => {
@@ -830,9 +829,7 @@ export default function SlopsPage() {
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow =
-                  prompt.trim() && !submitting
-                    ? `0 0 8px ${ACCENT}30`
-                    : "none";
+                  prompt.trim() && !submitting ? `0 0 8px ${ACCENT}30` : "none";
               }}
             >
               {submitting ? "\u2026" : "\u21B5"}
