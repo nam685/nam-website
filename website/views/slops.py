@@ -162,7 +162,7 @@ def slops_approve(request, turn_id):
             workspace = body.get("workspace")
 
         if not workspace:
-            workspace = f"session-{session.id}"
+            workspace = "klaude-playground"
 
         session.workspace = workspace
         session.trace_path = os.path.join("/home/klaude/traces", workspace)
@@ -203,6 +203,22 @@ def slops_reject(request, turn_id):
     _update_session_status(turn.session)
 
     return JsonResponse(_serialize_session(turn.session))
+
+
+@csrf_exempt
+@require_admin
+def slops_delete(request, session_id):
+    """POST /api/slops/<session_id>/delete/ — admin, delete session and all turns."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        session = Session.objects.get(id=session_id)
+    except Session.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    session.delete()
+    return JsonResponse({"ok": True})
 
 
 def slops_trace(request, session_id):
