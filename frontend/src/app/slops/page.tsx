@@ -124,6 +124,8 @@ export default function SlopsPage() {
     }
   }, [selectedId, fetchTrace]);
 
+  /* ── Poll session list while anything is active ──────── */
+
   useEffect(() => {
     const hasActive = sessions.some(
       (s) =>
@@ -133,25 +135,26 @@ export default function SlopsPage() {
     );
 
     if (hasActive) {
-      pollRef.current = setInterval(() => {
-        fetchSessions();
-        if (
-          selectedId !== null &&
-          sessions.find(
-            (s) =>
-              s.id === selectedId &&
-              (s.status === "running" || s.status === "approved"),
-          )
-        ) {
-          fetchTrace(selectedId);
-        }
-      }, 5000);
+      pollRef.current = setInterval(fetchSessions, 5000);
     }
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [sessions, selectedId, fetchSessions, fetchTrace]);
+  }, [sessions, fetchSessions]);
+
+  /* ── Fetch trace when selected session completes ────── */
+
+  const selectedStatus = sessions.find((s) => s.id === selectedId)?.status;
+
+  useEffect(() => {
+    if (
+      selectedId !== null &&
+      (selectedStatus === "done" || selectedStatus === "failed")
+    ) {
+      fetchTrace(selectedId);
+    }
+  }, [selectedId, selectedStatus, fetchTrace]);
 
   const selectSession = (id: number) => {
     setSelectedId(id === selectedId ? null : id);
