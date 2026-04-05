@@ -190,15 +190,20 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 ### Slops (/slops)
 - [ ] Page loads with hero section and neon green accent
-- [ ] Prompt box accepts input, submits, shows rate limit error on second submit
-- [ ] Mission appears in sidebar after submit
-- [ ] Admin: approve button works, mission status changes
-- [ ] Admin: reject button works
-- [ ] Completed mission shows trace with collapsible tool calls
-- [ ] Running mission shows "Running..." status
+- [ ] Prompt box accepts input, submits new session, shows rate limit error on second submit
+- [ ] Session appears in sidebar after submit (shows first turn prompt, status badge)
+- [ ] Selecting a session shows its trace and summary bar
+- [ ] Submit follow-up: when viewing session, submit sends session_id, creates new turn
+- [ ] Active turn blocks submit: input disabled with "Waiting for current turn to complete"
+- [ ] Admin: approve turn via three-dot menu, turn status changes, session status updates
+- [ ] Admin: reject turn, session reverts to latest non-rejected turn status
+- [ ] Completed session shows full ATIF trace with collapsible tool calls
+- [ ] Running session shows live polling (5s interval)
+- [ ] Multi-turn session: sidebar shows turn count, aggregate tokens
+- [ ] Rate limiting: per-IP (1/hr) + global (10/hr) both enforced
 - [ ] Nav wheel includes slops entry
 - [ ] Mobile layout works (sidebar collapses)
-- [ ] Stats endpoint returns correct counts
+- [ ] Stats endpoint returns total_sessions, total_turns, success_rate
 
 ## Mobile
 
