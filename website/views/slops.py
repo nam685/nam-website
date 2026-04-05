@@ -226,8 +226,45 @@ def slops_delete(request, session_id):
     return JsonResponse({"ok": True})
 
 
+def _atif_to_messages(atif):
+    """Convert ATIF steps to OpenAI chat message format for TraceViewer."""
+    messages = []
+    for step in atif.get("steps", []):
+        source = step.get("source")
+        if source == "user":
+            messages.append({"role": "user", "content": step.get("message", "")})
+        elif source == "agent":
+            msg = {"role": "assistant", "content": step.get("message")}
+            if step.get("tool_calls"):
+                msg["tool_calls"] = [
+                    {
+                        "id": tc.get("tool_call_id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("function_name", ""),
+                            "arguments": json.dumps(tc["arguments"])
+                            if isinstance(tc.get("arguments"), dict)
+                            else tc.get("arguments", "{}"),
+                        },
+                    }
+                    for tc in step["tool_calls"]
+                ]
+            messages.append(msg)
+        elif source == "system":
+            results = step.get("observation", {}).get("results", [])
+            for r in results:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": r.get("tool_call_id", ""),
+                        "content": r.get("content", ""),
+                    }
+                )
+    return messages
+
+
 def slops_trace(request, session_id):
-    """GET /api/slops/<id>/trace/ — return ATIF trace file contents."""
+    """GET /api/slops/<id>/trace/ — return ATIF trace with messages for TraceViewer."""
     if request.method != "GET":
         return JsonResponse({"error": "GET required"}, status=405)
 
@@ -241,11 +278,11 @@ def slops_trace(request, session_id):
 
     from website.tasks import _read_atif_trace
 
-    content = _read_atif_trace(s.trace_path)
-    if not content:
+    atif = _read_atif_trace(s.trace_path)
+    if not atif:
         return JsonResponse({"trace": None})
 
-    return JsonResponse({"trace": content})
+    return JsonResponse({"trace": {"messages": _atif_to_messages(atif), "step_count": len(atif.get("steps", []))}})
 
 
 def slops_stats(request):
