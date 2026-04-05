@@ -11,12 +11,19 @@ class TestRunMission:
     def test_sets_status_to_running_then_done(self):
         m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1", status="approved", workspace="task-1")
         with patch("website.tasks._execute_klaude") as mock_exec:
-            mock_exec.return_value = {"summary": "Did stuff", "token_count": 100, "tool_calls": 5, "error": ""}
+            mock_exec.return_value = {
+                "summary": "Did stuff",
+                "token_count": 100,
+                "tool_calls": 5,
+                "error": "",
+                "trace_dir": "/home/klaude/traces/task-1",
+            }
             run_mission(m.id)
         m.refresh_from_db()
         assert m.status == "done"
         assert m.summary == "Did stuff"
         assert m.token_count == 100
+        assert m.trace_path == "/home/klaude/traces/task-1"
         assert m.started_at is not None
         assert m.completed_at is not None
 

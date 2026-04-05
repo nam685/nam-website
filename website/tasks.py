@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 
 from django.utils import timezone
 
@@ -17,6 +18,7 @@ def _execute_klaude(mission):
     """Run klaude CLI as the klaude user. Returns result dict."""
     workspace_dir = os.path.join(WORKSPACE_BASE, mission.workspace)
     trace_dir = os.path.join(TRACES_BASE, mission.workspace)
+    os.makedirs(trace_dir, exist_ok=True)
 
     result = subprocess.run(
         [
@@ -25,45 +27,33 @@ def _execute_klaude(mission):
             KLAUDE_USER,
             KLAUDE_BIN,
             mission.prompt,
-            "--cwd",
-            workspace_dir,
+            "--auto-approve",
+            "--session-dir",
+            trace_dir,
         ],
         capture_output=True,
         text=True,
-        timeout=600,  # 10 minute max
+        timeout=600,
         cwd=workspace_dir,
     )
 
-    # Read session file if it exists (klaude saves to .klaude/sessions/)
-    session_dir = os.path.join(workspace_dir, ".klaude", "sessions")
-    session_data = {}
-    if os.path.isdir(session_dir):
-        sessions = sorted(os.listdir(session_dir))
-        if sessions:
-            with open(os.path.join(session_dir, sessions[-1])) as f:
-                session_data = json.load(f)
+    # Read ATIF trace (newest .json file in trace_dir)
+    atif = {}
+    trace_files = sorted(Path(trace_dir).glob("*.json"), key=lambda f: f.stat().st_mtime)
+    if trace_files:
+        with open(trace_files[-1]) as f:
+            atif = json.load(f)
 
-    # Count tokens and tool calls from session messages
-    token_count = 0
-    tool_calls_count = 0
-    for msg in session_data.get("messages", []):
-        if msg.get("role") == "assistant":
-            content = msg.get("content", "") or ""
-            token_count += len(content) // 4  # rough estimate
-            if msg.get("tool_calls"):
-                tool_calls_count += len(msg["tool_calls"])
+    # Metrics from ATIF final_metrics
+    fm = atif.get("final_metrics", {})
+    token_count = fm.get("total_prompt_tokens", 0) + fm.get("total_completion_tokens", 0)
+    tool_calls_count = sum(len(s.get("tool_calls", [])) for s in atif.get("steps", []) if s.get("source") == "agent")
 
-    # Copy session to traces dir
-    os.makedirs(trace_dir, exist_ok=True)
-    if session_data:
-        with open(os.path.join(trace_dir, "trace.json"), "w") as f:
-            json.dump(session_data, f, indent=2)
-
-    # Extract summary from last assistant message
+    # Summary from last agent step with content
     summary = ""
-    for msg in reversed(session_data.get("messages", [])):
-        if msg.get("role") == "assistant" and msg.get("content"):
-            summary = msg["content"][:500]
+    for step in reversed(atif.get("steps", [])):
+        if step.get("source") == "agent" and step.get("message"):
+            summary = step["message"][:500]
             break
 
     return {
@@ -71,6 +61,7 @@ def _execute_klaude(mission):
         "token_count": token_count,
         "tool_calls": tool_calls_count,
         "error": result.stderr if result.returncode != 0 else "",
+        "trace_dir": trace_dir,
     }
 
 
@@ -96,6 +87,7 @@ def run_mission(mission_id):
         mission.token_count = result["token_count"]
         mission.tool_calls = result["tool_calls"]
         mission.error = result["error"]
+        mission.trace_path = result["trace_dir"]
     except Exception as e:
         mission.status = "failed"
         mission.error = str(e)
