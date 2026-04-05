@@ -39,7 +39,7 @@ const PROJECTS: CodeProject[] = [
     tags: ["python", "ai", "agent", "claude"],
     status: "wip",
     github_url: "https://github.com/nam685/klaude",
-    live_url: "",
+    live_url: "/slops",
   },
 ];
 
@@ -266,8 +266,9 @@ function ProjectCard({
         {project.live_url && (
           <a
             href={project.live_url}
-            target="_blank"
-            rel="noopener noreferrer"
+            {...(project.live_url.startsWith("/")
+              ? {}
+              : { target: "_blank", rel: "noopener noreferrer" })}
             className="code-link"
             style={{
               fontFamily: "var(--font-headline)",
