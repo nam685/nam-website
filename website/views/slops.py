@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import timedelta
 
 from django.db.models import Sum
@@ -9,7 +10,9 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin, verify_token
 from ..models import Session, Turn
-from ..utils import get_client_ip, parse_json_body
+from ..utils import get_client_ip, parse_json_body, parse_pagination
+
+_WORKSPACE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 
 
 def _is_admin(request):
@@ -23,12 +26,11 @@ MAX_PROMPT_LENGTH = 5000
 DEFAULT_LIMIT = 20
 
 
-def _serialize_turn(t):
-    return {
+def _serialize_turn(t, include_ip=False):
+    data = {
         "id": t.id,
         "prompt": t.prompt,
         "status": t.status,
-        "submitter_ip": t.submitter_ip,
         "token_count": t.token_count,
         "tool_calls": t.tool_calls,
         "summary": t.summary,
@@ -38,9 +40,12 @@ def _serialize_turn(t):
         "started_at": t.started_at.isoformat() if t.started_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
     }
+    if include_ip:
+        data["submitter_ip"] = t.submitter_ip
+    return data
 
 
-def _serialize_session(s, turns=None):
+def _serialize_session(s, turns=None, include_ip=False):
     if turns is None:
         turns = s.turns.all()
     return {
@@ -48,7 +53,7 @@ def _serialize_session(s, turns=None):
         "workspace": s.workspace,
         "status": s.status,
         "created_at": s.created_at.isoformat() if s.created_at else None,
-        "turns": [_serialize_turn(t) for t in turns],
+        "turns": [_serialize_turn(t, include_ip=include_ip) for t in turns],
     }
 
 
@@ -64,10 +69,12 @@ def slops_list(request):
     if request.method != "GET":
         return JsonResponse({"error": "GET required"}, status=405)
 
-    limit = min(int(request.GET.get("limit", DEFAULT_LIMIT)), 100)
-    offset = int(request.GET.get("offset", 0))
+    try:
+        limit, offset = parse_pagination(request, default_limit=DEFAULT_LIMIT, max_limit=100)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
-    qs = Session.objects.exclude(status="rejected")
+    qs = Session.objects.exclude(status="rejected").prefetch_related("turns")
     total = qs.count()
     sessions = qs[offset : offset + limit]
 
@@ -85,7 +92,7 @@ def slops_detail(request, session_id):
         return JsonResponse({"error": "GET required"}, status=405)
 
     try:
-        s = Session.objects.get(id=session_id)
+        s = Session.objects.prefetch_related("turns").get(id=session_id)
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
@@ -169,6 +176,10 @@ def slops_approve(request, turn_id):
 
         if not workspace:
             workspace = "klaude-playground"
+        elif not _WORKSPACE_RE.match(workspace):
+            return JsonResponse(
+                {"error": "Invalid workspace name (alphanumeric, dots, hyphens, underscores)"}, status=400
+            )
 
         session.workspace = workspace
         session.trace_path = os.path.join("/home/klaude/traces", workspace, str(session.id))
@@ -185,7 +196,7 @@ def slops_approve(request, turn_id):
 
     run_turn.delay(turn.id)
 
-    return JsonResponse(_serialize_session(session))
+    return JsonResponse(_serialize_session(session, include_ip=True))
 
 
 @csrf_exempt
@@ -208,7 +219,7 @@ def slops_reject(request, turn_id):
 
     _update_session_status(turn.session)
 
-    return JsonResponse(_serialize_session(turn.session))
+    return JsonResponse(_serialize_session(turn.session, include_ip=True))
 
 
 @csrf_exempt
@@ -258,7 +269,7 @@ def slops_cancel(request, turn_id):
 
     _update_session_status(turn.session)
 
-    return JsonResponse(_serialize_session(turn.session))
+    return JsonResponse(_serialize_session(turn.session, include_ip=True))
 
 
 def _atif_to_messages(atif):

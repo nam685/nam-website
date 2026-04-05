@@ -11,9 +11,11 @@ from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt  # used on lichess_disconnect
+from django.views.decorators.http import require_GET
 
 from ..auth import require_admin, verify_token
 from ..models import LichessToken
+from ..utils import create_oauth_nonce, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +25,8 @@ LICHESS_TOKEN_URL = "https://lichess.org/api/token"
 LICHESS_ACCOUNT_URL = "https://lichess.org/api/account"
 SCOPES = "board:play challenge:write challenge:read"
 
-# Rate limit: 1 OAuth flow per 5 minutes
-_last_sync: float = 0
 SYNC_COOLDOWN = 300
+_SYNC_KEY = "lichess_last_sync_ts"
 
 
 def lichess_auth(request):
@@ -39,8 +40,8 @@ def lichess_auth(request):
     digest = hashlib.sha256(code_verifier.encode()).digest()
     code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
-    # Store verifier in Redis cache, keyed by a random nonce
-    nonce = secrets.token_urlsafe(16)
+    # Store verifier in Redis cache, keyed by OAuth nonce
+    nonce = create_oauth_nonce()
     redis_cache.set(f"lichess_pkce_{nonce}", code_verifier, 600)  # 10 min TTL
 
     # Build redirect URI
@@ -56,7 +57,7 @@ def lichess_auth(request):
             "code_challenge_method": "S256",
             "code_challenge": code_challenge,
             "scope": SCOPES,
-            "state": f"{nonce}:{admin_token}",
+            "state": nonce,
         },
     )
     return HttpResponseRedirect(f"{LICHESS_AUTHORIZE_URL}?{params}")
@@ -64,8 +65,6 @@ def lichess_auth(request):
 
 def lichess_callback(request):
     """Lichess OAuth callback: exchange code for token, fetch account, store."""
-    global _last_sync
-
     error = request.GET.get("error", "")
     if error:
         return HttpResponseRedirect(f"/plays?error={urllib.parse.quote(error)}")
@@ -75,17 +74,16 @@ def lichess_callback(request):
     if not code:
         return JsonResponse({"error": "Missing code"}, status=400)
 
-    # Parse state: "nonce:adminToken"
-    if ":" not in state:
+    # Verify one-time nonce (replaces admin token in state param — never send tokens to OAuth providers)
+    if not verify_oauth_nonce(state):
         return JsonResponse({"error": "Unauthorized"}, status=401)
-    nonce, admin_token = state.split(":", 1)
-    if not verify_token(admin_token):
-        return JsonResponse({"error": "Unauthorized"}, status=401)
+    nonce = state
 
-    # Rate limit
+    # Rate limit (Redis-based, works across workers)
+    last_sync = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    if now - _last_sync < SYNC_COOLDOWN:
-        remaining = int(SYNC_COOLDOWN - (now - _last_sync))
+    if now - last_sync < SYNC_COOLDOWN:
+        remaining = int(SYNC_COOLDOWN - (now - last_sync))
         return HttpResponseRedirect(f"/plays?error={urllib.parse.quote(f'Rate limited. Try again in {remaining}s')}")
 
     # Retrieve PKCE verifier from cache
@@ -150,7 +148,7 @@ def lichess_callback(request):
         expires_at=timezone.now() + timezone.timedelta(seconds=expires_in),
     )
 
-    _last_sync = now
+    redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
     return HttpResponseRedirect("/plays")
 
 
@@ -190,6 +188,7 @@ def lichess_disconnect(request):  # noqa: ARG001
     return JsonResponse({"ok": True})
 
 
+@require_GET
 def lichess_status(request):  # noqa: ARG001
     """Public endpoint: return whether a Lichess account is connected."""
     token = LichessToken.objects.first()
@@ -202,6 +201,7 @@ EXPLORER_BASE = "https://explorer.lichess.org"
 EXPLORER_CACHE_TTL = 300  # 5 min
 
 
+@require_GET
 def lichess_explorer(request, db):
     """Proxy Opening Explorer requests, adding the stored Lichess Bearer token.
 

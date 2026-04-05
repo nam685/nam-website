@@ -38,9 +38,11 @@ class TestLichessToken:
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limit():
-    lichess_views._last_sync = 0
+    from django.core.cache import cache
+
+    cache.delete(lichess_views._SYNC_KEY)
     yield
-    lichess_views._last_sync = 0
+    cache.delete(lichess_views._SYNC_KEY)
 
 
 # ── Auth guard ──────────────────────────────────────
@@ -86,14 +88,17 @@ class TestLichessCallback:
         assert resp.status_code == 400
 
     def test_callback_bad_state(self, client):
-        resp = client.get("/api/lichess/callback/?code=test&state=bad:bad")
+        resp = client.get("/api/lichess/callback/?code=test&state=bad-nonce")
         assert resp.status_code == 401
 
     @patch("website.views.lichess.urllib.request.urlopen")
-    def test_callback_exchanges_token(self, mock_urlopen, client, admin_token):
+    def test_callback_exchanges_token(self, mock_urlopen, client):
         from django.core.cache import cache
 
-        cache.set("lichess_pkce_nonce123", "test_verifier_string", 600)
+        # Create a valid OAuth nonce + PKCE verifier
+        nonce = "nonce123"
+        cache.set(f"oauth_nonce:{nonce}", "1", 300)
+        cache.set(f"lichess_pkce_{nonce}", "test_verifier_string", 600)
 
         token_resp = MagicMock()
         token_resp.read.return_value = b'{"access_token":"lip_abc","expires_in":31536000}'
@@ -107,17 +112,19 @@ class TestLichessCallback:
 
         mock_urlopen.side_effect = [token_resp, account_resp]
 
-        resp = client.get(f"/api/lichess/callback/?code=authcode&state=nonce123:{admin_token}")
+        resp = client.get(f"/api/lichess/callback/?code=authcode&state={nonce}")
         assert resp.status_code == 302
         assert resp["Location"] == "/plays"
         assert LichessToken.objects.count() == 1
         assert LichessToken.objects.first().lichess_username == "nam685"
 
     @patch("website.views.lichess.urllib.request.urlopen")
-    def test_callback_rate_limited(self, mock_urlopen, client, admin_token):
+    def test_callback_rate_limited(self, mock_urlopen, client):
         from django.core.cache import cache
 
-        cache.set("lichess_pkce_nonce1", "verifier1", 600)
+        nonce1 = "nonce1"
+        cache.set(f"oauth_nonce:{nonce1}", "1", 300)
+        cache.set(f"lichess_pkce_{nonce1}", "verifier1", 600)
 
         token_resp = MagicMock()
         token_resp.read.return_value = b'{"access_token":"lip_abc","expires_in":31536000}'
@@ -130,10 +137,12 @@ class TestLichessCallback:
         account_resp.__exit__ = MagicMock(return_value=False)
 
         mock_urlopen.side_effect = [token_resp, account_resp]
-        client.get(f"/api/lichess/callback/?code=code1&state=nonce1:{admin_token}")
+        client.get(f"/api/lichess/callback/?code=code1&state={nonce1}")
 
-        cache.set("lichess_pkce_nonce2", "verifier2", 600)
-        resp = client.get(f"/api/lichess/callback/?code=code2&state=nonce2:{admin_token}")
+        nonce2 = "nonce2"
+        cache.set(f"oauth_nonce:{nonce2}", "1", 300)
+        cache.set(f"lichess_pkce_{nonce2}", "verifier2", 600)
+        resp = client.get(f"/api/lichess/callback/?code=code2&state={nonce2}")
         assert resp.status_code == 302
         assert "error=" in resp["Location"]
 

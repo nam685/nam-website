@@ -8,6 +8,8 @@ import {
   type TurnStatus,
   API,
 } from "@/lib/api";
+import { store } from "@/lib/auth";
+import { timeAgo } from "@/lib/date";
 import HeroSection from "./components/HeroSection";
 import MatrixBg from "./components/MatrixBg";
 import TraceViewer from "./components/TraceViewer";
@@ -48,19 +50,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-/* ── Time formatting ──────────────────────────────────── */
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
 /* ── Main Page ────────────────────────────────────────── */
 
 export default function SlopsPage() {
@@ -83,7 +72,7 @@ export default function SlopsPage() {
   const prevStepCountRef = useRef(0);
 
   useEffect(() => {
-    setAdminToken(localStorage.getItem("adminToken"));
+    setAdminToken(store("adminToken"));
   }, []);
 
   const fetchSessions = useCallback(async () => {

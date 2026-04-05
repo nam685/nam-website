@@ -24,15 +24,27 @@ PERIOD_DAYS = {
 }
 
 
+@require_GET
 def bets_list(_request):
     """Public: all tickers with latest price and 30-day sparkline."""
     tickers = Ticker.objects.all()
+
+    # Batch-fetch last 30 snapshots per ticker in one query
+    ticker_ids = [t.id for t in tickers]
+    all_snapshots = (
+        PriceSnapshot.objects.filter(ticker_id__in=ticker_ids)
+        .order_by("ticker_id", "-date")
+        .values_list("ticker_id", "date", "price", "change_pct")
+    )
+    snapshots_by_ticker: dict[int, list] = {}
+    for tid, d, price, change in all_snapshots:
+        bucket = snapshots_by_ticker.setdefault(tid, [])
+        if len(bucket) < 30:
+            bucket.append((d, price, change))
+
     result = []
     for t in tickers:
-        snapshots = list(
-            PriceSnapshot.objects.filter(ticker=t).order_by("-date").values_list("date", "price", "change_pct")[:30]
-        )
-        snapshots.reverse()  # chronological order for sparkline
+        snapshots = list(reversed(snapshots_by_ticker.get(t.id, [])))
         latest_price = None
         latest_change = None
         latest_date = None

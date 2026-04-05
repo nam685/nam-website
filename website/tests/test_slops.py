@@ -173,6 +173,27 @@ class TestSlopsDetail:
         resp = client.get("/api/slops/999/")
         assert resp.status_code == 404
 
+    def test_public_endpoints_hide_submitter_ip(self, client):
+        """Submitter IPs must not be leaked in public list/detail responses."""
+        s = Session.objects.create(status="done")
+        Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4", status="done")
+        for url in ["/api/slops/", f"/api/slops/{s.id}/"]:
+            data = client.get(url).json()
+            turns = data.get("turns") or data["sessions"][0]["turns"]
+            for turn in turns:
+                assert "submitter_ip" not in turn
+
+    def test_admin_endpoints_include_submitter_ip(self, client, auth_headers):
+        """Admin approve/reject responses should include submitter IP for moderation."""
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4")
+        resp = client.post(f"/api/slops/turns/{t.id}/reject/", **auth_headers)
+        assert "submitter_ip" in resp.json()["turns"][0]
+
+    def test_list_rejects_invalid_pagination(self, client):
+        resp = client.get("/api/slops/?limit=abc")
+        assert resp.status_code == 400
+
 
 @pytest.mark.django_db
 class TestSlopsApprove:
@@ -219,6 +240,17 @@ class TestSlopsApprove:
         assert resp.status_code == 200
         s.refresh_from_db()
         assert s.workspace == "playground"
+
+    def test_approve_rejects_path_traversal_workspace(self, client, auth_headers):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="Do it", submitter_ip="127.0.0.1")
+        resp = client.post(
+            f"/api/slops/turns/{t.id}/approve/",
+            {"workspace": "../../../etc"},
+            content_type="application/json",
+            **auth_headers,
+        )
+        assert resp.status_code == 400
 
     def test_approve_followup_keeps_existing_workspace(self, client, auth_headers):
         s = Session.objects.create(workspace="session-1", trace_path="/traces/session-1", status="done")
@@ -287,6 +319,42 @@ class TestSlopsDelete:
     def test_delete_requires_auth(self, client):
         s = Session.objects.create()
         resp = client.post(f"/api/slops/{s.id}/delete/")
+        assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+class TestSlopsCancel:
+    def test_cancel_running_turn(self, client, auth_headers):
+        s = Session.objects.create(status="running", trace_path="/home/klaude/traces/ws/1")
+        t = Turn.objects.create(session=s, prompt="Running", submitter_ip="127.0.0.1", status="running")
+        with patch("subprocess.run") as mock_sub:
+            resp = client.post(f"/api/slops/turns/{t.id}/cancel/", **auth_headers)
+        assert resp.status_code == 200
+        t.refresh_from_db()
+        s.refresh_from_db()
+        assert t.status == "failed"
+        assert t.error == "Cancelled by admin"
+        assert t.completed_at is not None
+        mock_sub.assert_called_once()
+
+    def test_cancel_approved_turn(self, client, auth_headers):
+        s = Session.objects.create(status="approved")
+        t = Turn.objects.create(session=s, prompt="Queued", submitter_ip="127.0.0.1", status="approved")
+        resp = client.post(f"/api/slops/turns/{t.id}/cancel/", **auth_headers)
+        assert resp.status_code == 200
+        t.refresh_from_db()
+        assert t.status == "failed"
+
+    def test_cancel_done_turn_rejected(self, client, auth_headers):
+        s = Session.objects.create(status="done")
+        t = Turn.objects.create(session=s, prompt="Done", submitter_ip="127.0.0.1", status="done")
+        resp = client.post(f"/api/slops/turns/{t.id}/cancel/", **auth_headers)
+        assert resp.status_code == 409
+
+    def test_cancel_requires_auth(self, client):
+        s = Session.objects.create(status="running")
+        t = Turn.objects.create(session=s, prompt="Running", submitter_ip="127.0.0.1", status="running")
+        resp = client.post(f"/api/slops/turns/{t.id}/cancel/")
         assert resp.status_code == 401
 
 
