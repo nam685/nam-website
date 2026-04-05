@@ -19,7 +19,9 @@ def _execute_klaude(turn, is_continuation):
     session = turn.session
     workspace_dir = os.path.join(WORKSPACE_BASE, session.workspace)
     trace_dir = session.trace_path
-    os.makedirs(trace_dir, exist_ok=True)
+
+    # Create trace dir as klaude user (Django runs as nam, can't write to /home/klaude/)
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "mkdir", "-p", trace_dir], check=True)
 
     cmd = ["sudo", "-u", KLAUDE_USER, KLAUDE_BIN]
     if is_continuation:
