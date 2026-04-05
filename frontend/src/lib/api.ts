@@ -262,7 +262,41 @@ export interface MissionStats {
   pending_count: number;
 }
 
+export interface ATIFStep {
+  step_id: number;
+  timestamp: string;
+  source: "user" | "agent" | "system";
+  message: string | null;
+  model_name?: string;
+  tool_calls?: {
+    tool_call_id: string;
+    function_name: string;
+    arguments: Record<string, unknown>;
+  }[];
+  observation?: {
+    results: { tool_call_id: string; content: string }[];
+  };
+  metrics?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
+}
+
+export interface ATIFDocument {
+  schema_version: string;
+  session_id: string;
+  agent: { name: string; version: string; model_name: string };
+  steps: ATIFStep[];
+  final_metrics?: {
+    total_prompt_tokens: number;
+    total_completion_tokens: number;
+    total_cached_tokens: number;
+    total_cost_usd: number;
+    total_steps: number;
+  };
+}
+
 export interface MissionTrace {
-  trace: Record<string, unknown> | null;
+  trace: ATIFDocument | null;
   status: MissionStatus;
 }
