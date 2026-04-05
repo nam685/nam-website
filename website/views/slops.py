@@ -1,4 +1,3 @@
-import os
 from datetime import timedelta
 
 from django.db.models import Sum
@@ -153,12 +152,7 @@ def slops_reject(request, mission_id):
 
 
 def slops_trace(request, mission_id):
-    """GET /api/slops/<id>/trace/ — return trace file contents.
-
-    v1: Returns full trace as JSON. Not streaming — reads entire file into memory.
-    Acceptable for v1 traces which are small. If traces grow large, switch to
-    StreamingHttpResponse with application/x-ndjson.
-    """
+    """GET /api/slops/<id>/trace/ — return trace file contents."""
     if request.method != "GET":
         return JsonResponse({"error": "GET required"}, status=405)
 
@@ -170,14 +164,17 @@ def slops_trace(request, mission_id):
     if not m.trace_path:
         return JsonResponse({"trace": None})
 
-    trace_file = os.path.join(m.trace_path, "trace.json")
-    if not os.path.isfile(trace_file):
+    # Find newest ATIF JSON in trace dir
+    from pathlib import Path
+
+    trace_files = sorted(Path(m.trace_path).glob("*.json"), key=lambda f: f.stat().st_mtime)
+    if not trace_files:
         return JsonResponse({"trace": None})
 
     try:
-        with open(trace_file) as f:
-            import json
+        import json
 
+        with open(trace_files[-1]) as f:
             content = json.load(f)
     except (OSError, json.JSONDecodeError):
         return JsonResponse({"error": "Failed to read trace file"}, status=500)
