@@ -669,7 +669,7 @@ export default function SlopsPage() {
                   handleSubmit();
                 }
               }}
-              placeholder="will code for money"
+              placeholder="will code for food..."
               style={{
                 flex: 1,
                 padding: "10px 14px",
