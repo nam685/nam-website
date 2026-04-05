@@ -75,6 +75,7 @@ export default function SlopsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const traceAreaRef = useRef<HTMLDivElement>(null);
 
@@ -270,7 +271,7 @@ export default function SlopsPage() {
           width: sidebarCollapsed ? 40 : 280,
           zIndex: 40,
           background: "#0a0a0a",
-          borderRight: `1px solid ${ACCENT}15`,
+          borderRight: `1px solid ${ACCENT}40`,
           overflowY: sidebarCollapsed ? "hidden" : "auto",
           overflowX: "hidden",
           transition: "width 0.2s ease, transform 0.2s ease",
@@ -453,54 +454,108 @@ export default function SlopsPage() {
                       {selected.token_count.toLocaleString()} tokens
                     </span>
                   )}
-                </div>
-              )}
 
-              {/* Admin controls */}
-              {showAdminControls && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    padding: "8px 0 12px",
-                  }}
-                >
-                  <button
-                    onClick={() => doAction("approve")}
-                    disabled={actionLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 6,
-                      border: `1px solid ${ACCENT}60`,
-                      background: `${ACCENT}15`,
-                      color: ACCENT,
-                      fontSize: 12,
-                      fontFamily: "monospace",
-                      fontWeight: 600,
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      opacity: actionLoading ? 0.5 : 1,
-                    }}
-                  >
-                    {actionLoading ? "\u2026" : "Approve"}
-                  </button>
-                  <button
-                    onClick={() => doAction("reject")}
-                    disabled={actionLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 6,
-                      border: "1px solid #ef444460",
-                      background: "#ef444415",
-                      color: "#ef4444",
-                      fontSize: 12,
-                      fontFamily: "monospace",
-                      fontWeight: 600,
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      opacity: actionLoading ? 0.5 : 1,
-                    }}
-                  >
-                    {actionLoading ? "\u2026" : "Reject"}
-                  </button>
+                  {/* Admin three-dot menu */}
+                  {showAdminControls && (
+                    <div style={{ position: "relative" }}>
+                      <button
+                        onClick={() => setMenuOpen(!menuOpen)}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: `1px solid ${ACCENT}40`,
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: ACCENT,
+                          cursor: "pointer",
+                          fontSize: 14,
+                          lineHeight: 1,
+                        }}
+                      >
+                        &#8942;
+                      </button>
+                      {menuOpen && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "100%",
+                            right: 0,
+                            marginTop: 4,
+                            background: "#111",
+                            border: `1px solid ${ACCENT}40`,
+                            borderRadius: 4,
+                            zIndex: 50,
+                            minWidth: 120,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              doAction("approve");
+                            }}
+                            disabled={actionLoading}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              padding: "8px 12px",
+                              border: "none",
+                              background: "transparent",
+                              color: ACCENT,
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              cursor: actionLoading
+                                ? "not-allowed"
+                                : "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background = `${ACCENT}15`)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "transparent")
+                            }
+                          >
+                            {actionLoading ? "\u2026" : "Approve"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              doAction("reject");
+                            }}
+                            disabled={actionLoading}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              padding: "8px 12px",
+                              border: "none",
+                              borderTop: "1px solid #222",
+                              background: "transparent",
+                              color: "#ef4444",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              cursor: actionLoading
+                                ? "not-allowed"
+                                : "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background =
+                                "rgba(239,68,68,0.1)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "transparent")
+                            }
+                          >
+                            {actionLoading ? "\u2026" : "Reject"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -634,22 +689,34 @@ export default function SlopsPage() {
               onClick={handleSubmit}
               disabled={!prompt.trim() || submitting}
               style={{
-                padding: "10px 20px",
+                padding: "10px 14px",
                 borderRadius: 8,
-                border: "none",
-                background: ACCENT,
-                color: "#000",
-                fontSize: 13,
-                fontFamily: "monospace",
-                fontWeight: 700,
+                border: `1px solid ${ACCENT}44`,
+                background: "#000",
+                color: ACCENT,
+                fontSize: 16,
                 cursor:
                   !prompt.trim() || submitting ? "not-allowed" : "pointer",
-                opacity: !prompt.trim() || submitting ? 0.4 : 1,
-                transition: "opacity 0.15s",
-                whiteSpace: "nowrap",
+                opacity: !prompt.trim() || submitting ? 0.3 : 1,
+                transition: "opacity 0.15s, box-shadow 0.15s",
+                boxShadow:
+                  !prompt.trim() || submitting
+                    ? "none"
+                    : `0 0 8px ${ACCENT}30`,
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => {
+                if (prompt.trim() && !submitting)
+                  e.currentTarget.style.boxShadow = `0 0 14px ${ACCENT}50`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow =
+                  prompt.trim() && !submitting
+                    ? `0 0 8px ${ACCENT}30`
+                    : "none";
               }}
             >
-              {submitting ? "Sending\u2026" : "Submit"}
+              {submitting ? "\u2026" : "\u21B5"}
             </button>
           </div>
         </div>
