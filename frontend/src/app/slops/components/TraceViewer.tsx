@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type MissionTrace } from "@/lib/api";
+import { type SessionTrace } from "@/lib/api";
 
 const ACCENT = "#39ff14";
 
@@ -162,7 +162,7 @@ function ToolResult({ content }: { content: string }) {
 
 /* ── TraceViewer ──────────────────────────────────────── */
 
-export default function TraceViewer({ trace }: { trace: MissionTrace }) {
+export default function TraceViewer({ trace, status }: { trace: SessionTrace; status: string }) {
   const messages: TraceMessage[] =
     (trace.trace as { messages?: TraceMessage[] })?.messages ?? [];
 
@@ -177,10 +177,10 @@ export default function TraceViewer({ trace }: { trace: MissionTrace }) {
           fontSize: 12,
         }}
       >
-        {trace.status === "running" || trace.status === "approved"
+        {status === "running" || status === "approved"
           ? "Waiting for trace data\u2026"
-          : trace.status === "pending"
-            ? "Mission awaiting approval"
+          : status === "pending"
+            ? "Awaiting approval"
             : "No trace data available"}
       </div>
     );

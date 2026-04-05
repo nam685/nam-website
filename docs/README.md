@@ -39,11 +39,13 @@ Mini Bloomberg — tracks stocks (VWCE), gold, Bitcoin, EU bond yields with dail
 
 ### Slops
 
-Agent showcase page for klaude, a DIY Claude Code harness powered by open-source LLMs. Visitors submit prompts which go into a pending queue. The admin approves tasks, and klaude executes them in a sandboxed environment. Full agent traces (tool calls, reasoning, file changes) are recorded and displayed publicly.
+Agent showcase page for klaude, a DIY Claude Code harness powered by open-source LLMs. Visitors submit prompts which go into a pending queue. The admin approves turns, and klaude executes them in a sandboxed environment. Sessions support multi-turn conversations via klaude's `-c` resume feature. Full agent traces (tool calls, reasoning, file changes) are recorded and displayed publicly.
 
-- Three-panel layout mirroring claude.ai (mission sidebar, trace viewer, prompt box)
-- Admin: approve/reject pending missions, view live traces
-- Security: separate Linux user, scoped GitHub access, network restrictions, rate limiting
+- Three-panel layout mirroring claude.ai (session sidebar, trace viewer, prompt box)
+- Multi-turn sessions: submit follow-up prompts to continue existing sessions
+- Admin: approve/reject pending turns, view live traces
+- Rate limiting: 1 submission/hr per IP + 10/hr global cap
+- Security: separate Linux user, scoped GitHub access, network restrictions
 
 ## Feedback
 

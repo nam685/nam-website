@@ -16,14 +16,15 @@ export interface Dot {
 export const DOTS: Dot[] = [
   // Ordered by color wavelength (hue angle) — creates a smooth rainbow around the orbit
   { label: "listens", href: "/listens", color: "#f97316", size: 7, angle: 0, desc: "vibing...", breatheDur: 4.4, breatheDelay: 0.6 },
-  { label: "grinds", href: "/grinds", color: "#f59e0b", size: 8, angle: 40, desc: "i press buttons to pay rent", breatheDur: 3.5, breatheDelay: 1.2 },
-  { label: "codes", href: "/codes", color: "#22c55e", size: 9, angle: 80, desc: "i embrace the slop", breatheDur: 4.1, breatheDelay: 0.8 },
-  { label: "plays", href: "/plays", color: "#06b6d4", size: 9, angle: 120, desc: "i spent waaay too much time on this", breatheDur: 3.6, breatheDelay: 0.3 },
-  { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 160, desc: "i know many words", breatheDur: 3.9, breatheDelay: 1.5 },
-  { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 200, desc: "at least i don't doom scroll facebook et al.", breatheDur: 4.2, breatheDelay: 1.0 },
-  { label: "draws", href: "/draws", color: "#a855f7", size: 10, angle: 240, desc: "eye candy!", breatheDur: 3.8, breatheDelay: 0.4 },
-  { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 280, desc: "i look here to feel very smart", breatheDur: 3.4, breatheDelay: 0.7 },
-  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 320, desc: "sometimes, some of my neurons fire", breatheDur: 3.2, breatheDelay: 0 },
+  { label: "grinds", href: "/grinds", color: "#f59e0b", size: 8, angle: 36, desc: "i press buttons to pay rent", breatheDur: 3.5, breatheDelay: 1.2 },
+  { label: "codes", href: "/codes", color: "#22c55e", size: 9, angle: 72, desc: "i embrace the slop", breatheDur: 4.1, breatheDelay: 0.8 },
+  { label: "slops", href: "/slops", color: "#39ff14", size: 8, angle: 108, desc: "handmade slop machine", breatheDur: 3.7, breatheDelay: 1.1 },
+  { label: "plays", href: "/plays", color: "#06b6d4", size: 9, angle: 144, desc: "i spent waaay too much time on this", breatheDur: 3.6, breatheDelay: 0.3 },
+  { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 180, desc: "i know many words", breatheDur: 3.9, breatheDelay: 1.5 },
+  { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 216, desc: "at least i don't doom scroll facebook et al.", breatheDur: 4.2, breatheDelay: 1.0 },
+  { label: "draws", href: "/draws", color: "#a855f7", size: 10, angle: 252, desc: "eye candy!", breatheDur: 3.8, breatheDelay: 0.4 },
+  { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 288, desc: "i look here to feel very smart", breatheDur: 3.4, breatheDelay: 0.7 },
+  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 324, desc: "sometimes, some of my neurons fire", breatheDur: 3.2, breatheDelay: 0 },
 ];
 
 /* ── Angle + color math ───────────────────────────────── */

@@ -224,7 +224,7 @@ export interface BetsSearchResult {
 
 /* ── Slops (Agent Showcase) ────────────────────────── */
 
-export type MissionStatus =
+export type TurnStatus =
   | "pending"
   | "approved"
   | "running"
@@ -232,11 +232,11 @@ export type MissionStatus =
   | "failed"
   | "rejected";
 
-export interface Mission {
+export interface Turn {
   id: number;
   prompt: string;
-  status: MissionStatus;
-  workspace: string;
+  status: TurnStatus;
+  submitter_ip: string;
   token_count: number;
   tool_calls: number;
   summary: string;
@@ -247,22 +247,27 @@ export interface Mission {
   completed_at: string | null;
 }
 
-export interface MissionListResponse {
-  missions: Mission[];
-  total: number;
-  limit: number;
-  offset: number;
+export interface Session {
+  id: number;
+  workspace: string;
+  status: string;
+  created_at: string;
+  turns: Turn[];
 }
 
-export interface MissionStats {
-  total_missions: number;
+export interface SessionListResponse {
+  sessions: Session[];
+  total: number;
+}
+
+export interface SessionTrace {
+  trace: Record<string, unknown> | null;
+}
+
+export interface SlopsStats {
+  total_sessions: number;
+  total_turns: number;
   total_tokens: number;
   total_tool_calls: number;
   success_rate: number;
-  pending_count: number;
-}
-
-export interface MissionTrace {
-  trace: Record<string, unknown> | null;
-  status: MissionStatus;
 }
