@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
+from ..utils import parse_pagination
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +24,14 @@ BROWSER_JSON_PATH = "browser.json"
 VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Rate limit: 1 sync per 5 minutes
-_last_sync: float = 0
 SYNC_COOLDOWN = 300
+_SYNC_KEY = "listens_last_sync_ts"
 
 
 def listen_list(request):
     """Return recently played tracks (paginated, public)."""
     try:
-        limit = min(max(int(request.GET.get("limit", "50")), 1), 200)
-        offset = max(int(request.GET.get("offset", "0")), 0)
+        limit, offset = parse_pagination(request)
     except (ValueError, TypeError):
         return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
@@ -57,15 +57,14 @@ def listen_list(request):
 @require_admin
 def listen_sync(request):
     """Sync YouTube Music history using browser auth credentials."""
-    global _last_sync
-
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
-    # Rate limit
+    # Rate limit (Redis-based, works across workers)
+    last_sync = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    if now - _last_sync < SYNC_COOLDOWN:
-        remaining = int(SYNC_COOLDOWN - (now - _last_sync))
+    if now - last_sync < SYNC_COOLDOWN:
+        remaining = int(SYNC_COOLDOWN - (now - last_sync))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     # Fetch history using browser auth file
@@ -138,7 +137,7 @@ def listen_sync(request):
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
 
-    _last_sync = now
+    redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
     return JsonResponse({"synced": len(new_tracks)})
 
@@ -262,8 +261,10 @@ def listen_recommended(_request):
 @require_GET
 def listen_top_tracks(request):
     """Return tracks ranked by play count (public)."""
-    limit = min(int(request.GET.get("limit", 50)), 200)
-    offset = int(request.GET.get("offset", 0))
+    try:
+        limit, offset = parse_pagination(request)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
     tracks = (
         ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
@@ -283,8 +284,10 @@ def listen_top_artists(request):
     Collab tracks stored as "Artist A, Artist B" are split and each artist
     is credited independently.
     """
-    limit = min(int(request.GET.get("limit", 50)), 200)
-    offset = int(request.GET.get("offset", 0))
+    try:
+        limit, offset = parse_pagination(request)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
     # Fetch all tracks — personal site, at most a few thousand rows
     all_tracks = list(ListenTrack.objects.values_list("id", "video_id", "title", "artist", "thumbnail_url"))
@@ -337,8 +340,10 @@ def listen_top_artists(request):
 @require_GET
 def listen_top_albums(request):
     """Return albums ranked by play count (public)."""
-    limit = min(int(request.GET.get("limit", 50)), 200)
-    offset = int(request.GET.get("offset", 0))
+    try:
+        limit, offset = parse_pagination(request)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
     albums = (
         ListenTrack.objects.exclude(album="")
@@ -353,25 +358,31 @@ def listen_top_albums(request):
     total = albums.count()
     page = list(albums[offset : offset + limit])
 
+    # Batch-fetch artist + thumbnail for all albums on this page (avoids N+1)
+    album_names = [e["album"] for e in page]
+    artist_qs = (
+        ListenTrack.objects.filter(album__in=album_names)
+        .values("album", "artist")
+        .annotate(cnt=Count("id"))
+        .order_by("album", "-cnt")
+    )
+    album_top_artist: dict[str, str] = {}
+    for row in artist_qs:
+        album_top_artist.setdefault(row["album"], row["artist"])
+
+    thumb_qs = (
+        ListenTrack.objects.filter(album__in=album_names)
+        .exclude(thumbnail_url="")
+        .values_list("album", "thumbnail_url")
+    )
+    album_thumb: dict[str, str] = {}
+    for album, thumb in thumb_qs:
+        album_thumb.setdefault(album, thumb)
+
     for entry in page:
-        # Pick the most common artist for this album (handles collab variations)
-        top_artist = (
-            ListenTrack.objects.filter(album=entry["album"])
-            .values("artist")
-            .annotate(cnt=Count("id"))
-            .order_by("-cnt")
-            .values_list("artist", flat=True)
-            .first()
-        )
-        entry["artist"] = top_artist or "Unknown"
-        track = (
-            ListenTrack.objects.filter(album=entry["album"])
-            .exclude(thumbnail_url="")
-            .values_list("thumbnail_url", flat=True)
-            .first()
-        )
+        entry["artist"] = album_top_artist.get(entry["album"], "Unknown")
+        entry["thumbnail_url"] = album_thumb.get(entry["album"], "")
         entry["name"] = entry.pop("album")
-        entry["thumbnail_url"] = track or ""
 
     return JsonResponse({"albums": page, "total": total})
 
@@ -379,9 +390,9 @@ def listen_top_albums(request):
 @require_admin
 def listen_sync_status(_request):
     """Check sync availability and last update time."""
-    global _last_sync
+    last_sync = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    elapsed = now - _last_sync
+    elapsed = now - last_sync
     available = elapsed >= SYNC_COOLDOWN
     remaining = max(0, int(SYNC_COOLDOWN - elapsed)) if not available else 0
 

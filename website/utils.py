@@ -34,6 +34,13 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR", "")
 
 
+def parse_pagination(request, default_limit=50, max_limit=200):
+    """Parse and validate limit/offset from GET params. Returns (limit, offset) or raises ValueError."""
+    limit = min(max(int(request.GET.get("limit", default_limit)), 1), max_limit)
+    offset = max(int(request.GET.get("offset", 0)), 0)
+    return limit, offset
+
+
 def parse_json_body(request):
     """Parse JSON request body. Returns (body_dict, error_response)."""
     try:

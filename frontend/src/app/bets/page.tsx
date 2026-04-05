@@ -314,7 +314,7 @@ export default function BetsPage() {
   useEffect(() => {
     setIsAdmin(!!store("adminToken"));
     fetch(`${API}/api/bets/`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(setTickers)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -326,7 +326,7 @@ export default function BetsPage() {
       return;
     }
     fetch(`${API}/api/bets/${expandedId}/history/?period=${historyPeriod}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(setHistory)
       .catch(console.error);
   }, [expandedId, historyPeriod]);
@@ -372,7 +372,7 @@ export default function BetsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const r = await fetch(`${API}/api/bets/`);
-      setTickers(await r.json());
+      if (r.ok) setTickers(await r.json());
     } catch (e) {
       console.error(e);
     } finally {
@@ -395,7 +395,7 @@ export default function BetsPage() {
       setSearchQuery("");
       setSearchResults([]);
       const r = await fetch(`${API}/api/bets/`);
-      setTickers(await r.json());
+      if (r.ok) setTickers(await r.json());
     }
   };
 

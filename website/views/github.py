@@ -4,6 +4,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 
 from ..auth import require_admin, verify_token
@@ -15,9 +16,9 @@ GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_USERNAME = "nam685"
 
-# Simple in-memory rate limit: 1 refresh per 10 minutes
-_last_refresh: float = 0
+# Rate limit: 1 refresh per 10 minutes (Redis-based, works across workers)
 REFRESH_COOLDOWN = 600
+_SYNC_KEY = "github_last_refresh_ts"
 
 
 def contributions(_request):
@@ -49,8 +50,6 @@ def github_auth(request):
 
 def github_callback(request):
     """GitHub OAuth callback: exchange code, fetch contributions, store, redirect."""
-    global _last_refresh
-
     code = request.GET.get("code", "")
     state = request.GET.get("state", "")
 
@@ -61,10 +60,11 @@ def github_callback(request):
     if not verify_oauth_nonce(state):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
-    # Rate limit
+    # Rate limit (Redis-based, works across workers)
+    last_refresh = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    if now - _last_refresh < REFRESH_COOLDOWN:
-        remaining = int(REFRESH_COOLDOWN - (now - _last_refresh))
+    if now - last_refresh < REFRESH_COOLDOWN:
+        remaining = int(REFRESH_COOLDOWN - (now - last_refresh))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     # Exchange code for access token
@@ -153,7 +153,7 @@ def github_callback(request):
         defaults={"data": store_data},
     )
 
-    _last_refresh = now
+    redis_cache.set(_SYNC_KEY, now, REFRESH_COOLDOWN + 60)
 
     # Token is discarded here — never stored
     return HttpResponseRedirect("/codes")
@@ -162,9 +162,9 @@ def github_callback(request):
 @require_admin
 def refresh_status(_request):
     """Check if refresh is available (rate limit status)."""
-    global _last_refresh
+    last_refresh = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    elapsed = now - _last_refresh
+    elapsed = now - last_refresh
     available = elapsed >= REFRESH_COOLDOWN
     remaining = max(0, int(REFRESH_COOLDOWN - elapsed)) if not available else 0
 

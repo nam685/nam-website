@@ -8,14 +8,14 @@ import urllib.parse
 import urllib.request
 
 from django.core.cache import cache as redis_cache
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin, verify_token
 from ..models import WatchChannel, WatchVideo
-from ..utils import create_oauth_nonce, parse_json_body, verify_oauth_nonce
+from ..utils import create_oauth_nonce, parse_json_body, parse_pagination, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 
-_last_sync: float = 0
 SYNC_COOLDOWN = 300
+_SYNC_KEY = "watches_last_sync_ts"
 
 
 def parse_iso8601_duration(duration: str) -> int:
@@ -43,14 +43,18 @@ def parse_iso8601_duration(duration: str) -> int:
 def watch_list(request):
     """Public: return visible channels with their pinned videos, sorted by tier weight."""
     try:
-        limit = min(max(int(request.GET.get("limit", "30")), 1), 100)
-        offset = max(int(request.GET.get("offset", "0")), 0)
+        limit, offset = parse_pagination(request, default_limit=30, max_limit=100)
     except (ValueError, TypeError):
         return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
-    # Filter out hidden channels, sort by tier weight then display_order then name
+    # Filter out hidden channels, prefetch pinned videos in one query
     visible_tiers = [t for t, _ in WatchChannel.Tier.choices if t != "hidden"]
-    qs = WatchChannel.objects.filter(tier__in=visible_tiers)
+    pinned_prefetch = Prefetch(
+        "videos",
+        queryset=WatchVideo.objects.filter(pinned=True, visible=True),
+        to_attr="pinned_videos",
+    )
+    qs = WatchChannel.objects.filter(tier__in=visible_tiers).prefetch_related(pinned_prefetch)
     total = qs.count()
 
     # Sort by TIER_WEIGHT mapping, then display_order, then name
@@ -58,7 +62,6 @@ def watch_list(request):
     channels = channels[offset : offset + limit]
 
     def serialize_channel(ch):
-        pinned_videos = WatchVideo.objects.filter(channel=ch, pinned=True, visible=True)
         return {
             "id": ch.id,
             "youtube_channel_id": ch.youtube_channel_id,
@@ -80,7 +83,7 @@ def watch_list(request):
                     "description": v.description,
                     "duration": v.duration,
                 }
-                for v in pinned_videos
+                for v in ch.pinned_videos
             ],
         }
 
@@ -140,7 +143,7 @@ def watch_recommended(request):  # noqa: ARG001
 @require_admin
 def watch_staging(_request):
     """Admin: return all channels sorted by tier weight, with pinned counts."""
-    from django.db.models import Count, Q
+    from django.db.models import Count
 
     channels = WatchChannel.objects.annotate(
         pinned_count=Count("videos", filter=Q(videos__pinned=True)),
@@ -467,7 +470,7 @@ def _sync_liked_videos(access_token, max_pages=4):
             if channel_yt_id:
                 channel = WatchChannel.objects.filter(youtube_channel_id=channel_yt_id).first()
 
-            _, created = WatchVideo.objects.update_or_create(
+            video, created = WatchVideo.objects.get_or_create(
                 youtube_video_id=video_id,
                 defaults={
                     "title": snippet.get("title", ""),
@@ -477,7 +480,14 @@ def _sync_liked_videos(access_token, max_pages=4):
                     "pinned": False,
                 },
             )
-            if created:
+            if not created:
+                # Update metadata but preserve pinned/visible state
+                video.title = snippet.get("title", video.title)
+                video.thumbnail_url = thumbnail_url or video.thumbnail_url
+                if channel:
+                    video.channel = channel
+                video.save(update_fields=["title", "thumbnail_url", "channel"])
+            else:
                 new_count += 1
             synced_video_ids.append(video_id)
             total += 1
@@ -592,15 +602,14 @@ def watch_callback(request):
 @require_admin
 def watch_sync(_request):
     """Trigger a YouTube subscription + liked video sync."""
-    global _last_sync
-
     access_token = _refresh_access_token()
     if not access_token:
         return JsonResponse({"error": "YouTube not connected"}, status=400)
 
+    last_sync = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    if now - _last_sync < SYNC_COOLDOWN:
-        remaining = int(SYNC_COOLDOWN - (now - _last_sync))
+    if now - last_sync < SYNC_COOLDOWN:
+        remaining = int(SYNC_COOLDOWN - (now - last_sync))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     try:
@@ -610,7 +619,7 @@ def watch_sync(_request):
         logger.exception("YouTube sync failed")
         return JsonResponse({"error": "Sync failed"}, status=500)
 
-    _last_sync = now
+    redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
     redis_cache.set("watches_last_synced", timezone.now().isoformat(), None)
 
     return JsonResponse({"ok": True, "new_channels": new_channels, "new_videos": new_videos})
@@ -619,8 +628,9 @@ def watch_sync(_request):
 @require_admin
 def watch_sync_status(_request):
     """Check sync availability and connection status."""
+    last_sync = redis_cache.get(_SYNC_KEY) or 0
     now = time.time()
-    elapsed = now - _last_sync
+    elapsed = now - last_sync
     available = elapsed >= SYNC_COOLDOWN
     remaining = max(0, int(SYNC_COOLDOWN - elapsed)) if not available else 0
     connected = bool(redis_cache.get("watches_google_refresh_token"))

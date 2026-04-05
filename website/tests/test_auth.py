@@ -54,6 +54,24 @@ class TestCheckEndpoint:
         assert resp.json()["authenticated"] is False
 
 
+@pytest.mark.django_db
+class TestLoginRateLimit:
+    def test_rate_limit_triggers(self, client, settings):
+        settings.ADMIN_SECRET = "test-secret"
+        for _ in range(15):
+            client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
+        resp = client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
+        assert resp.status_code == 429
+
+    def test_correct_login_after_rate_limit_blocked(self, client, settings):
+        """Even correct credentials should be blocked once rate limit is hit."""
+        settings.ADMIN_SECRET = "test-secret"
+        for _ in range(16):
+            client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
+        resp = client.post("/api/auth/login/", json.dumps({"secret": "test-secret"}), content_type="application/json")
+        assert resp.status_code == 429
+
+
 class TestTokenFunctions:
     def test_create_and_verify(self):
         token = create_token()
