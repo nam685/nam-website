@@ -367,7 +367,7 @@ export default function SlopsPage() {
                 </span>
               </div>
               <div style={{ color: "#555", fontSize: 10 }}>
-                default target for all missions
+                klaude works here!
               </div>
             </button>
 
