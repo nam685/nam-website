@@ -420,14 +420,13 @@ class TestSyncPricesCommand:
         fresh = Ticker.objects.create(
             symbol="BTC", name="Bitcoin", asset_type="crypto", provider="coingecko", provider_id="bitcoin"
         )
-        stale = Ticker.objects.create(
+        Ticker.objects.create(
             symbol="ETH", name="Ethereum", asset_type="crypto", provider="coingecko", provider_id="ethereum"
         )
         # Give BTC a recent snapshot so ETH (no data) should sync first
         PriceSnapshot.objects.create(ticker=fresh, date=date.today(), price=Decimal("80000"))
 
         call_order = []
-        original_get = mock_get
 
         def track_calls(*args, **kwargs):
             url = args[0] if args else kwargs.get("url", "")
