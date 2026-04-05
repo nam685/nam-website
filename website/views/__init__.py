@@ -28,6 +28,7 @@ from .listen import (
     listen_top_tracks,
 )
 from .project import project_list
+from .slops import slops_approve, slops_detail, slops_list, slops_reject, slops_stats, slops_submit, slops_trace
 from .thought import thought_create, thought_list
 from .todo import todo_list
 from .watch import (
@@ -84,6 +85,13 @@ __all__ = [
     "listen_top_artists",
     "listen_top_tracks",
     "project_list",
+    "slops_approve",
+    "slops_detail",
+    "slops_list",
+    "slops_reject",
+    "slops_stats",
+    "slops_submit",
+    "slops_trace",
     "thought_create",
     "thought_list",
     "todo_list",

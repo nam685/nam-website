@@ -188,6 +188,18 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Mobile: cards stack single column, expanded card full width
 - [ ] Empty state shows message when no tickers exist
 
+### Slops (/slops)
+- [ ] Page loads with hero section and neon green accent
+- [ ] Prompt box accepts input, submits, shows rate limit error on second submit
+- [ ] Mission appears in sidebar after submit
+- [ ] Admin: approve button works, mission status changes
+- [ ] Admin: reject button works
+- [ ] Completed mission shows trace with collapsible tool calls
+- [ ] Running mission shows "Running..." status
+- [ ] Nav wheel includes slops entry
+- [ ] Mobile layout works (sidebar collapses)
+- [ ] Stats endpoint returns correct counts
+
 ## Mobile
 
 - [ ] All pages render correctly on mobile viewport (375px)

@@ -14,6 +14,7 @@ dependencies = [
     "redis>=5.0",
     "ytmusicapi>=1.9",
     "httpx>=0.28.1",
+    "celery[redis]>=5.4",
 ]
 
 [tool.uv]
