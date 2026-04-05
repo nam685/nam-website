@@ -34,6 +34,7 @@ jobs:
             uv run python manage.py collectstatic --noinput
             uv run python manage.py migrate --noinput
             sudo systemctl restart django
+            sudo systemctl restart celery
 
             # Frontend
             cd frontend
