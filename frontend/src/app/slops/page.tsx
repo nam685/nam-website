@@ -9,6 +9,7 @@ import {
   API,
 } from "@/lib/api";
 import HeroSection from "./components/HeroSection";
+import MatrixBg from "./components/MatrixBg";
 import TraceViewer from "./components/TraceViewer";
 
 const ACCENT = "#39ff14";
@@ -74,6 +75,8 @@ export default function SlopsPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const traceAreaRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +237,8 @@ export default function SlopsPage() {
         overflow: "hidden",
       }}
     >
+      <MatrixBg />
+
       {/* ── Mobile sidebar toggle ───────────────────────── */}
       <button
         className="lg:hidden"
@@ -266,109 +271,142 @@ export default function SlopsPage() {
           top: 60,
           left: 0,
           bottom: 0,
-          width: 280,
+          width: sidebarCollapsed ? 40 : 280,
           zIndex: 40,
           background: "#0a0a0a",
-          borderRight: `1px solid ${ACCENT}15`,
-          overflowY: "auto",
-          transition: "transform 0.2s ease",
+          borderRight: `1px solid ${ACCENT}40`,
+          overflowY: sidebarCollapsed ? "hidden" : "auto",
+          overflowX: "hidden",
+          transition: "width 0.2s ease, transform 0.2s ease",
+          cursor: "pointer",
         }}
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
-        <div
-          style={{
-            padding: "16px 12px 8px",
-            fontSize: 11,
-            color: "#666",
-            textTransform: "uppercase",
-            letterSpacing: 1,
-          }}
-        >
-          Missions
-        </div>
-
-        {missions.length === 0 && (
-          <div style={{ padding: "20px 12px", color: "#555", fontSize: 12 }}>
-            No missions yet. Submit the first one!
-          </div>
-        )}
-
-        {missions.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => selectMission(m.id)}
+        {sidebarCollapsed ? (
+          <div
             style={{
-              display: "block",
+              writingMode: "vertical-rl",
+              padding: "16px 0",
+              fontSize: 11,
+              color: "#666",
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              textAlign: "center",
               width: "100%",
-              padding: "10px 12px",
-              background: m.id === selectedId ? `${ACCENT}10` : "transparent",
-              border: "none",
-              borderLeft:
-                m.id === selectedId
-                  ? `2px solid ${ACCENT}`
-                  : "2px solid transparent",
-              cursor: "pointer",
-              textAlign: "left",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => {
-              if (m.id !== selectedId)
-                e.currentTarget.style.background = `${ACCENT}08`;
-            }}
-            onMouseLeave={(e) => {
-              if (m.id !== selectedId)
-                e.currentTarget.style.background = "transparent";
+              userSelect: "none",
             }}
           >
+            Missions
+          </div>
+        ) : (
+          <>
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                marginBottom: 4,
+                padding: "16px 12px 8px",
+                fontSize: 11,
+                color: "#666",
+                textTransform: "uppercase",
+                letterSpacing: 1,
               }}
             >
-              <span
+              Missions
+            </div>
+
+            {missions.length === 0 && (
+              <div
+                style={{ padding: "20px 12px", color: "#555", fontSize: 12 }}
+              >
+                No missions yet. Submit the first one!
+              </div>
+            )}
+
+            {missions.map((m) => (
+              <button
+                key={m.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectMission(m.id);
+                }}
                 style={{
-                  color: "#ccc",
-                  fontSize: 12,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  flex: 1,
+                  display: "block",
+                  width: "100%",
+                  padding: "10px 12px",
+                  background:
+                    m.id === selectedId ? `${ACCENT}10` : "transparent",
+                  border: "none",
+                  borderLeft:
+                    m.id === selectedId
+                      ? `2px solid ${ACCENT}`
+                      : "2px solid transparent",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  if (m.id !== selectedId)
+                    e.currentTarget.style.background = `${ACCENT}08`;
+                }}
+                onMouseLeave={(e) => {
+                  if (m.id !== selectedId)
+                    e.currentTarget.style.background = "transparent";
                 }}
               >
-                {m.prompt.length > 40
-                  ? m.prompt.slice(0, 40) + "\u2026"
-                  : m.prompt}
-              </span>
-              <StatusBadge status={m.status} />
-            </div>
-            <div style={{ color: "#555", fontSize: 10 }}>
-              {timeAgo(m.created_at)}
-              {m.token_count > 0 && (
-                <span style={{ marginLeft: 8 }}>
-                  {m.token_count.toLocaleString()} tokens
-                </span>
-              )}
-              {m.tool_calls > 0 && (
-                <span style={{ marginLeft: 8 }}>{m.tool_calls} tool calls</span>
-              )}
-            </div>
-          </button>
-        ))}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginBottom: 4,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#ccc",
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      flex: 1,
+                    }}
+                  >
+                    {m.prompt.length > 40
+                      ? m.prompt.slice(0, 40) + "\u2026"
+                      : m.prompt}
+                  </span>
+                  <StatusBadge status={m.status} />
+                </div>
+                <div style={{ color: "#555", fontSize: 10 }}>
+                  {timeAgo(m.created_at)}
+                  {m.token_count > 0 && (
+                    <span style={{ marginLeft: 8 }}>
+                      {m.token_count.toLocaleString()} tokens
+                    </span>
+                  )}
+                  {m.tool_calls > 0 && (
+                    <span style={{ marginLeft: 8 }}>
+                      {m.tool_calls} tool calls
+                    </span>
+                  )}
+                </div>
+              </button>
+            ))}
+          </>
+        )}
       </aside>
 
       {/* ── Main area ───────────────────────────────────── */}
       <main
-        className="lg:ml-[280px]"
         style={{
           flex: 1,
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
           height: "100%",
+          marginLeft: sidebarCollapsed ? 40 : 280,
+          transition: "margin-left 0.2s ease",
         }}
+        className="max-lg:!ml-0"
       >
         {/* Hero */}
         <HeroSection compact={selectedId !== null} />
@@ -419,54 +457,108 @@ export default function SlopsPage() {
                       {selected.token_count.toLocaleString()} tokens
                     </span>
                   )}
-                </div>
-              )}
 
-              {/* Admin controls */}
-              {showAdminControls && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    padding: "8px 0 12px",
-                  }}
-                >
-                  <button
-                    onClick={() => doAction("approve")}
-                    disabled={actionLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 6,
-                      border: `1px solid ${ACCENT}60`,
-                      background: `${ACCENT}15`,
-                      color: ACCENT,
-                      fontSize: 12,
-                      fontFamily: "monospace",
-                      fontWeight: 600,
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      opacity: actionLoading ? 0.5 : 1,
-                    }}
-                  >
-                    {actionLoading ? "\u2026" : "Approve"}
-                  </button>
-                  <button
-                    onClick={() => doAction("reject")}
-                    disabled={actionLoading}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 6,
-                      border: "1px solid #ef444460",
-                      background: "#ef444415",
-                      color: "#ef4444",
-                      fontSize: 12,
-                      fontFamily: "monospace",
-                      fontWeight: 600,
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                      opacity: actionLoading ? 0.5 : 1,
-                    }}
-                  >
-                    {actionLoading ? "\u2026" : "Reject"}
-                  </button>
+                  {/* Admin three-dot menu */}
+                  {showAdminControls && (
+                    <div style={{ position: "relative" }}>
+                      <button
+                        onClick={() => setMenuOpen(!menuOpen)}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: `1px solid ${ACCENT}40`,
+                          borderRadius: 4,
+                          background: "transparent",
+                          color: ACCENT,
+                          cursor: "pointer",
+                          fontSize: 14,
+                          lineHeight: 1,
+                        }}
+                      >
+                        &#8942;
+                      </button>
+                      {menuOpen && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "100%",
+                            right: 0,
+                            marginTop: 4,
+                            background: "#111",
+                            border: `1px solid ${ACCENT}40`,
+                            borderRadius: 4,
+                            zIndex: 50,
+                            minWidth: 120,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              doAction("approve");
+                            }}
+                            disabled={actionLoading}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              padding: "8px 12px",
+                              border: "none",
+                              background: "transparent",
+                              color: ACCENT,
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              cursor: actionLoading
+                                ? "not-allowed"
+                                : "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background = `${ACCENT}15`)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "transparent")
+                            }
+                          >
+                            {actionLoading ? "\u2026" : "Approve"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              doAction("reject");
+                            }}
+                            disabled={actionLoading}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              padding: "8px 12px",
+                              border: "none",
+                              borderTop: "1px solid #222",
+                              background: "transparent",
+                              color: "#ef4444",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              cursor: actionLoading
+                                ? "not-allowed"
+                                : "pointer",
+                              textAlign: "left",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background =
+                                "rgba(239,68,68,0.1)")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "transparent")
+                            }
+                          >
+                            {actionLoading ? "\u2026" : "Reject"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -528,9 +620,12 @@ export default function SlopsPage() {
         {/* ── Prompt box ────────────────────────────────── */}
         <div
           style={{
-            padding: "12px 20px 16px",
+            padding: "12px 40px 16px",
             borderTop: "1px solid #222",
             background: "#0a0a0a",
+            maxWidth: 800,
+            width: "100%",
+            alignSelf: "center",
           }}
         >
           {submitSuccess && (
@@ -597,22 +692,34 @@ export default function SlopsPage() {
               onClick={handleSubmit}
               disabled={!prompt.trim() || submitting}
               style={{
-                padding: "10px 20px",
+                padding: "10px 14px",
                 borderRadius: 8,
-                border: "none",
-                background: ACCENT,
-                color: "#000",
-                fontSize: 13,
-                fontFamily: "monospace",
-                fontWeight: 700,
+                border: `1px solid ${ACCENT}44`,
+                background: "#000",
+                color: ACCENT,
+                fontSize: 16,
                 cursor:
                   !prompt.trim() || submitting ? "not-allowed" : "pointer",
-                opacity: !prompt.trim() || submitting ? 0.4 : 1,
-                transition: "opacity 0.15s",
-                whiteSpace: "nowrap",
+                opacity: !prompt.trim() || submitting ? 0.3 : 1,
+                transition: "opacity 0.15s, box-shadow 0.15s",
+                boxShadow:
+                  !prompt.trim() || submitting
+                    ? "none"
+                    : `0 0 8px ${ACCENT}30`,
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => {
+                if (prompt.trim() && !submitting)
+                  e.currentTarget.style.boxShadow = `0 0 14px ${ACCENT}50`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow =
+                  prompt.trim() && !submitting
+                    ? `0 0 8px ${ACCENT}30`
+                    : "none";
               }}
             >
-              {submitting ? "Sending\u2026" : "Submit"}
+              {submitting ? "\u2026" : "\u21B5"}
             </button>
           </div>
         </div>

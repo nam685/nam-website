@@ -30,12 +30,12 @@ describe("lerpDotColor", () => {
   });
 
   it("returns second dot color at its exact angle", () => {
-    // DOTS[1] is grinds at 40°, color #f59e0b = rgb(245, 158, 11)
-    expect(lerpDotColor(40)).toEqual([245, 158, 11]);
+    // DOTS[1] is grinds at 36°, color #f59e0b = rgb(245, 158, 11)
+    expect(lerpDotColor(36)).toEqual([245, 158, 11]);
   });
 
   it("returns interpolated color at midpoint between two dots", () => {
-    const [r, g, b] = lerpDotColor(20);
+    const [r, g, b] = lerpDotColor(18);
     // Should be a blend — not equal to either endpoint
     expect([r, g, b]).not.toEqual([249, 115, 22]);
     expect([r, g, b]).not.toEqual([245, 158, 11]);
@@ -45,8 +45,8 @@ describe("lerpDotColor", () => {
   });
 
   it("wraps correctly between last dot and first dot", () => {
-    const [r, g, b] = lerpDotColor(340);
-    // 340° is between bets (320°, #db2777) and thinks (0°, #FF1744)
+    const [r, g, b] = lerpDotColor(342);
+    // 342° is between thinks (324°, #FF1744) and listens (0°, #f97316)
     // Should be valid channel values
     expect(r).toBeGreaterThanOrEqual(0);
     expect(r).toBeLessThanOrEqual(255);
@@ -56,8 +56,8 @@ describe("lerpDotColor", () => {
 });
 
 describe("DOTS", () => {
-  it("has 9 entries", () => {
-    expect(DOTS).toHaveLength(9);
+  it("has 10 entries", () => {
+    expect(DOTS).toHaveLength(10);
   });
 
   it("each dot has required fields", () => {
@@ -73,9 +73,9 @@ describe("DOTS", () => {
     }
   });
 
-  it("dots are spaced 40° apart", () => {
+  it("dots are spaced 36° apart", () => {
     for (let i = 0; i < DOTS.length; i++) {
-      expect(DOTS[i].angle).toBe(i * 40);
+      expect(DOTS[i].angle).toBe(i * 36);
     }
   });
 });
