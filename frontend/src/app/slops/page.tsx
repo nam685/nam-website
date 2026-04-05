@@ -178,6 +178,29 @@ export default function SlopsPage() {
     }
   };
 
+  const doDelete = async (sessionId: number) => {
+    if (!adminToken) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API}/api/slops/${sessionId}/delete/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok) {
+        if (selectedId === sessionId) {
+          setSelectedId(null);
+          setTrace(null);
+        }
+        await fetchSessions();
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setActionLoading(false);
+      setMenuOpen(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!prompt.trim() || submitting) return;
     setSubmitting(true);
@@ -295,9 +318,35 @@ export default function SlopsPage() {
           </div>
         ) : (
           <>
+            <a
+              href="https://github.com/nam685/klaude-playground"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                display: "block",
+                padding: "12px 12px 10px",
+                fontSize: 12,
+                color: ACCENT,
+                textDecoration: "none",
+                borderBottom: `1px solid ${ACCENT}20`,
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = `${ACCENT}08`)
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              <span style={{ fontSize: 10, color: "#666", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 2 }}>
+                Workspace
+              </span>
+              nam685/klaude-playground
+            </a>
+
             <div
               style={{
-                padding: "16px 12px 8px",
+                padding: "12px 12px 8px",
                 fontSize: 11,
                 color: "#666",
                 textTransform: "uppercase",
@@ -461,7 +510,7 @@ export default function SlopsPage() {
                           </span>
                         )}
 
-                        {!!adminToken && pendingTurn && (
+                        {!!adminToken && selected && (
                           <div style={{ position: "relative" }}>
                             <button
                               onClick={() => setMenuOpen(!menuOpen)}
@@ -499,36 +548,65 @@ export default function SlopsPage() {
                               >
                                 <button
                                   onClick={() => {
+                                    if (!pendingTurn) return;
                                     setMenuOpen(false);
                                     doAction(pendingTurn.id, "approve");
                                   }}
-                                  disabled={actionLoading}
+                                  disabled={actionLoading || !pendingTurn}
                                   style={{
                                     display: "block",
                                     width: "100%",
                                     padding: "8px 12px",
                                     border: "none",
                                     background: "transparent",
-                                    color: ACCENT,
+                                    color: pendingTurn ? ACCENT : "#444",
                                     fontSize: 12,
                                     fontFamily: "monospace",
-                                    cursor: actionLoading ? "not-allowed" : "pointer",
+                                    cursor: !pendingTurn || actionLoading ? "not-allowed" : "pointer",
                                     textAlign: "left",
+                                    opacity: pendingTurn ? 1 : 0.5,
                                   }}
-                                  onMouseEnter={(e) =>
-                                    (e.currentTarget.style.background = `${ACCENT}15`)
-                                  }
+                                  onMouseEnter={(e) => {
+                                    if (pendingTurn) e.currentTarget.style.background = `${ACCENT}15`;
+                                  }}
                                   onMouseLeave={(e) =>
                                     (e.currentTarget.style.background = "transparent")
                                   }
                                 >
-                                  {actionLoading ? "\u2026" : "Approve"}
+                                  {actionLoading && pendingTurn ? "\u2026" : "Approve"}
                                 </button>
                                 <button
                                   onClick={() => {
+                                    if (!pendingTurn) return;
                                     setMenuOpen(false);
                                     doAction(pendingTurn.id, "reject");
                                   }}
+                                  disabled={actionLoading || !pendingTurn}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    borderTop: "1px solid #222",
+                                    background: "transparent",
+                                    color: pendingTurn ? "#ef4444" : "#444",
+                                    fontSize: 12,
+                                    fontFamily: "monospace",
+                                    cursor: !pendingTurn || actionLoading ? "not-allowed" : "pointer",
+                                    textAlign: "left",
+                                    opacity: pendingTurn ? 1 : 0.5,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (pendingTurn) e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                                  }}
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = "transparent")
+                                  }
+                                >
+                                  {actionLoading && pendingTurn ? "\u2026" : "Reject"}
+                                </button>
+                                <button
+                                  onClick={() => doDelete(selected.id)}
                                   disabled={actionLoading}
                                   style={{
                                     display: "block",
@@ -551,7 +629,7 @@ export default function SlopsPage() {
                                     (e.currentTarget.style.background = "transparent")
                                   }
                                 >
-                                  {actionLoading ? "\u2026" : "Reject"}
+                                  {actionLoading ? "\u2026" : "Delete session"}
                                 </button>
                               </div>
                             )}

@@ -181,7 +181,7 @@ class TestSlopsApprove:
         assert t.status == "approved"
         assert t.approved_at is not None
         assert s.status == "approved"
-        assert s.workspace == f"session-{s.id}"
+        assert s.workspace == "klaude-playground"
 
     def test_approve_with_custom_workspace(self, client, auth_headers):
         s = Session.objects.create()
@@ -243,6 +243,26 @@ class TestSlopsReject:
         s = Session.objects.create()
         t = Turn.objects.create(session=s, prompt="Do it", submitter_ip="127.0.0.1")
         resp = client.post(f"/api/slops/turns/{t.id}/reject/")
+        assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+class TestSlopsDelete:
+    def test_delete_session(self, client, auth_headers):
+        s = Session.objects.create(status="done")
+        Turn.objects.create(session=s, prompt="Do it", submitter_ip="127.0.0.1", status="done")
+        resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        assert Session.objects.count() == 0
+        assert Turn.objects.count() == 0
+
+    def test_delete_not_found(self, client, auth_headers):
+        resp = client.post("/api/slops/999/delete/", **auth_headers)
+        assert resp.status_code == 404
+
+    def test_delete_requires_auth(self, client):
+        s = Session.objects.create()
+        resp = client.post(f"/api/slops/{s.id}/delete/")
         assert resp.status_code == 401
 
 
