@@ -87,11 +87,15 @@ def _execute_klaude(turn, is_continuation):
             summary = step["message"][:500]
             break
 
+    error = result.stderr if result.returncode != 0 else ""
+    if not error and not atif:
+        error = "klaude produced no trace output"
+
     return {
         "summary": summary,
         "token_count": token_count,
         "tool_calls": tool_calls_count,
-        "error": result.stderr if result.returncode != 0 else "",
+        "error": error,
     }
 
 

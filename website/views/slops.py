@@ -6,9 +6,15 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from ..auth import require_admin
+from ..auth import require_admin, verify_token
 from ..models import Session, Turn
 from ..utils import get_client_ip, parse_json_body
+
+
+def _is_admin(request):
+    auth = request.headers.get("Authorization", "")
+    return auth.startswith("Bearer ") and verify_token(auth[7:])
+
 
 SUBMIT_COOLDOWN = timedelta(hours=1)
 GLOBAL_SUBMIT_LIMIT = 10
@@ -92,15 +98,14 @@ def slops_submit(request):
         return JsonResponse({"error": "POST required"}, status=405)
 
     ip = get_client_ip(request)
-    cutoff = timezone.now() - SUBMIT_COOLDOWN
 
-    # Per-IP rate limit
-    if Turn.objects.filter(submitter_ip=ip, created_at__gte=cutoff).exists():
-        return JsonResponse({"error": "You've already submitted recently. Try again later."}, status=429)
-
-    # Global rate limit
-    if Turn.objects.filter(created_at__gte=cutoff).count() >= GLOBAL_SUBMIT_LIMIT:
-        return JsonResponse({"error": "Too many submissions globally. Try again later."}, status=429)
+    # Rate limiting (skip for admin)
+    if not _is_admin(request):
+        cutoff = timezone.now() - SUBMIT_COOLDOWN
+        if Turn.objects.filter(submitter_ip=ip, created_at__gte=cutoff).exists():
+            return JsonResponse({"error": "You've already submitted recently. Try again later."}, status=429)
+        if Turn.objects.filter(created_at__gte=cutoff).count() >= GLOBAL_SUBMIT_LIMIT:
+            return JsonResponse({"error": "Too many submissions globally. Try again later."}, status=429)
 
     body, err = parse_json_body(request)
     if err:
