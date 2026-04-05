@@ -669,7 +669,7 @@ export default function SlopsPage() {
                   handleSubmit();
                 }
               }}
-              placeholder="Describe a mission for klaude..."
+              placeholder="will code for money"
               style={{
                 flex: 1,
                 padding: "10px 14px",
