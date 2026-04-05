@@ -10,7 +10,7 @@ app.autodiscover_tasks()
 
 
 @worker_ready.connect
-def recover_stale_turns(**kwargs):
+def recover_stale_turns(**_kwargs):
     """Re-queue any turns stuck in 'running' on worker startup.
 
     When a deploy restarts the Celery worker mid-execution, the turn
@@ -18,6 +18,7 @@ def recover_stale_turns(**kwargs):
     already-approved work gets retried automatically.
     """
     from website.models import Turn
+    from website.tasks import run_turn
 
     stale = list(Turn.objects.filter(status="running").values_list("id", flat=True))
     if not stale:
