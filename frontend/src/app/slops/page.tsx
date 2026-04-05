@@ -546,66 +546,65 @@ export default function SlopsPage() {
                                   overflow: "hidden",
                                 }}
                               >
-                                {pendingTurn && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        setMenuOpen(false);
-                                        doAction(pendingTurn.id, "approve");
-                                      }}
-                                      disabled={actionLoading}
-                                      style={{
-                                        display: "block",
-                                        width: "100%",
-                                        padding: "8px 12px",
-                                        border: "none",
-                                        background: "transparent",
-                                        color: ACCENT,
-                                        fontSize: 12,
-                                        fontFamily: "monospace",
-                                        cursor: actionLoading ? "not-allowed" : "pointer",
-                                        textAlign: "left",
-                                      }}
-                                      onMouseEnter={(e) =>
-                                        (e.currentTarget.style.background = `${ACCENT}15`)
-                                      }
-                                      onMouseLeave={(e) =>
-                                        (e.currentTarget.style.background = "transparent")
-                                      }
-                                    >
-                                      {actionLoading ? "\u2026" : "Approve"}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setMenuOpen(false);
-                                        doAction(pendingTurn.id, "reject");
-                                      }}
-                                      disabled={actionLoading}
-                                      style={{
-                                        display: "block",
-                                        width: "100%",
-                                        padding: "8px 12px",
-                                        border: "none",
-                                        borderTop: "1px solid #222",
-                                        background: "transparent",
-                                        color: "#ef4444",
-                                        fontSize: 12,
-                                        fontFamily: "monospace",
-                                        cursor: actionLoading ? "not-allowed" : "pointer",
-                                        textAlign: "left",
-                                      }}
-                                      onMouseEnter={(e) =>
-                                        (e.currentTarget.style.background =
-                                          "rgba(239,68,68,0.1)")
-                                      }
-                                      onMouseLeave={(e) =>
-                                        (e.currentTarget.style.background = "transparent")
-                                      }
-                                    >
-                                      {actionLoading ? "\u2026" : "Reject"}
-                                    </button>
-                                  </>
-                                )}
+                                <button
+                                  onClick={() => {
+                                    if (!pendingTurn) return;
+                                    setMenuOpen(false);
+                                    doAction(pendingTurn.id, "approve");
+                                  }}
+                                  disabled={actionLoading || !pendingTurn}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    background: "transparent",
+                                    color: pendingTurn ? ACCENT : "#444",
+                                    fontSize: 12,
+                                    fontFamily: "monospace",
+                                    cursor: !pendingTurn || actionLoading ? "not-allowed" : "pointer",
+                                    textAlign: "left",
+                                    opacity: pendingTurn ? 1 : 0.5,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (pendingTurn) e.currentTarget.style.background = `${ACCENT}15`;
+                                  }}
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = "transparent")
+                                  }
+                                >
+                                  {actionLoading && pendingTurn ? "\u2026" : "Approve"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (!pendingTurn) return;
+                                    setMenuOpen(false);
+                                    doAction(pendingTurn.id, "reject");
+                                  }}
+                                  disabled={actionLoading || !pendingTurn}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    borderTop: "1px solid #222",
+                                    background: "transparent",
+                                    color: pendingTurn ? "#ef4444" : "#444",
+                                    fontSize: 12,
+                                    fontFamily: "monospace",
+                                    cursor: !pendingTurn || actionLoading ? "not-allowed" : "pointer",
+                                    textAlign: "left",
+                                    opacity: pendingTurn ? 1 : 0.5,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (pendingTurn) e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                                  }}
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = "transparent")
+                                  }
+                                >
+                                  {actionLoading && pendingTurn ? "\u2026" : "Reject"}
+                                </button>
                                 <button
                                   onClick={() => doDelete(selected.id)}
                                   disabled={actionLoading}
