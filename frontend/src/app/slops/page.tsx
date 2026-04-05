@@ -66,6 +66,7 @@ function timeAgo(dateStr: string): string {
 export default function SlopsPage() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [showPlayground, setShowPlayground] = useState(false);
   const [trace, setTrace] = useState<MissionTrace | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
   const [adminToken, setAdminToken] = useState<string | null>(null);
@@ -161,7 +162,14 @@ export default function SlopsPage() {
   /* ── Select mission ─────────────────────────────────── */
 
   const selectMission = (id: number) => {
+    setShowPlayground(false);
     setSelectedId(id === selectedId ? null : id);
+    setSidebarOpen(false);
+  };
+
+  const selectPlayground = () => {
+    setSelectedId(null);
+    setShowPlayground(!showPlayground);
     setSidebarOpen(false);
   };
 
@@ -300,6 +308,7 @@ export default function SlopsPage() {
           </div>
         ) : (
           <>
+            {/* ── Workspace section ─────────────────────── */}
             <div
               style={{
                 padding: "16px 12px 8px",
@@ -307,6 +316,65 @@ export default function SlopsPage() {
                 color: "#666",
                 textTransform: "uppercase",
                 letterSpacing: 1,
+              }}
+            >
+              Workspace
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                selectPlayground();
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "10px 12px",
+                background: showPlayground ? `${ACCENT}10` : "transparent",
+                border: "none",
+                borderLeft: showPlayground
+                  ? `2px solid ${ACCENT}`
+                  : "2px solid transparent",
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                if (!showPlayground)
+                  e.currentTarget.style.background = `${ACCENT}08`;
+              }}
+              onMouseLeave={(e) => {
+                if (!showPlayground)
+                  e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 2,
+                }}
+              >
+                <span style={{ color: ACCENT, fontSize: 12, fontWeight: 600 }}>
+                  klaude-playground
+                </span>
+              </div>
+              <div style={{ color: "#555", fontSize: 10 }}>
+                default target for all missions
+              </div>
+            </button>
+
+            {/* ── Missions section ────────────────────────── */}
+            <div
+              style={{
+                padding: "16px 12px 8px",
+                fontSize: 11,
+                color: "#666",
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                borderTop: `1px solid ${ACCENT}15`,
+                marginTop: 4,
               }}
             >
               Missions
@@ -409,7 +477,7 @@ export default function SlopsPage() {
         className="max-lg:!ml-0"
       >
         {/* Hero */}
-        <HeroSection compact={selectedId !== null} />
+        <HeroSection compact={selectedId !== null || showPlayground} />
 
         {/* Trace area */}
         <div
@@ -420,7 +488,90 @@ export default function SlopsPage() {
             padding: "0 20px",
           }}
         >
-          {selectedId ===
+          {showPlayground ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 20,
+                padding: "60px 24px",
+                flex: 1,
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: ACCENT,
+                  textTransform: "uppercase",
+                  letterSpacing: 2,
+                  fontWeight: 600,
+                }}
+              >
+                Featured Workspace
+              </div>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 700,
+                  color: "#ddd",
+                }}
+              >
+                klaude-playground
+              </div>
+              <p
+                style={{
+                  color: "#777",
+                  fontSize: 13,
+                  maxWidth: 420,
+                  lineHeight: 1.7,
+                }}
+              >
+                A living repo where klaude lands its work. Every approved
+                mission gets committed here — browse the history to see what
+                the agent has built.
+              </p>
+              <a
+                href="https://github.com/nam685/klaude-playground"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 8,
+                  padding: "10px 20px",
+                  border: `1px solid ${ACCENT}44`,
+                  borderRadius: 4,
+                  background: "transparent",
+                  color: ACCENT,
+                  fontSize: 13,
+                  textDecoration: "none",
+                  transition: "box-shadow 0.2s, border-color 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = `${ACCENT}aa`;
+                  e.currentTarget.style.boxShadow = `0 0 12px ${ACCENT}30`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = `${ACCENT}44`;
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+                </svg>
+                See klaude&apos;s work
+              </a>
+            </div>
+          ) : selectedId ===
           null ? /* No selection — hero takes space, nothing here */
           null : traceLoading ? (
             <div
