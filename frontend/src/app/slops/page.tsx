@@ -6,7 +6,6 @@ import {
   type SessionListResponse,
   type SessionTrace,
   type TurnStatus,
-  type Turn,
   API,
 } from "@/lib/api";
 import HeroSection from "./components/HeroSection";
@@ -79,6 +78,9 @@ export default function SlopsPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tracePollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const prevStepCountRef = useRef(0);
 
   useEffect(() => {
     setAdminToken(localStorage.getItem("adminToken"));
@@ -99,20 +101,20 @@ export default function SlopsPage() {
     fetchSessions();
   }, [fetchSessions]);
 
-  const fetchTrace = useCallback(async (id: number) => {
-    setTraceLoading(true);
+  const fetchTrace = useCallback(async (id: number, silent = false) => {
+    if (!silent) setTraceLoading(true);
     try {
       const res = await fetch(`${API}/api/slops/${id}/trace/`);
       if (!res.ok) {
-        setTrace(null);
+        if (!silent) setTrace(null);
         return;
       }
       const data: SessionTrace = await res.json();
       setTrace(data);
     } catch {
-      setTrace(null);
+      if (!silent) setTrace(null);
     } finally {
-      setTraceLoading(false);
+      if (!silent) setTraceLoading(false);
     }
   }, []);
 
@@ -143,18 +145,73 @@ export default function SlopsPage() {
     };
   }, [sessions, fetchSessions]);
 
-  /* ── Fetch trace when selected session completes ────── */
+  /* ── Stream trace while running, final fetch on complete ── */
 
   const selectedStatus = sessions.find((s) => s.id === selectedId)?.status;
 
   useEffect(() => {
-    if (
-      selectedId !== null &&
-      (selectedStatus === "done" || selectedStatus === "failed")
-    ) {
-      fetchTrace(selectedId);
+    if (tracePollRef.current) {
+      clearTimeout(tracePollRef.current);
+      tracePollRef.current = null;
     }
+
+    if (selectedId === null) return;
+
+    // Final fetch when session completes
+    if (selectedStatus === "done" || selectedStatus === "failed") {
+      fetchTrace(selectedId);
+      return;
+    }
+
+    // Adaptive polling while running/approved
+    if (selectedStatus !== "running" && selectedStatus !== "approved") return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API}/api/slops/${selectedId}/trace/`);
+        if (cancelled || !res.ok) return;
+        const data: SessionTrace = await res.json();
+        if (cancelled) return;
+        setTrace(data);
+        // Adaptive interval: back off as trace grows
+        const stepCount =
+          (data.trace as { step_count?: number })?.step_count ?? 0;
+        const interval =
+          stepCount < 20 ? 3000 : stepCount < 50 ? 6000 : 10000;
+        tracePollRef.current = setTimeout(poll, interval);
+      } catch {
+        // Retry after base interval on error
+        if (!cancelled) tracePollRef.current = setTimeout(poll, 5000);
+      }
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (tracePollRef.current) {
+        clearTimeout(tracePollRef.current);
+        tracePollRef.current = null;
+      }
+    };
   }, [selectedId, selectedStatus, fetchTrace]);
+
+  /* ── Auto-scroll when new trace steps arrive during running ── */
+
+  useEffect(() => {
+    const stepCount =
+      (trace?.trace as { step_count?: number })?.step_count ?? 0;
+    if (
+      stepCount > prevStepCountRef.current &&
+      (selectedStatus === "running" || selectedStatus === "approved")
+    ) {
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+    prevStepCountRef.current = stepCount;
+  }, [trace, selectedStatus]);
 
   const selectSession = (id: number) => {
     setSelectedId(id === selectedId ? null : id);
@@ -471,6 +528,7 @@ export default function SlopsPage() {
         <HeroSection compact={selectedId !== null} />
 
         <div
+          ref={scrollRef}
           style={{
             flex: 1,
             overflowY: "auto",

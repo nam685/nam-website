@@ -270,6 +270,32 @@ export default function TraceViewer({ trace, status }: { trace: SessionTrace; st
 
         return null;
       })}
+      {(status === "running" || status === "approved") && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "12px 0",
+            color: "#666",
+            fontSize: 11,
+            fontFamily: "monospace",
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: ACCENT,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }}
+          />
+          <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }`}</style>
+          working{messages.length > 0 ? ` \u2014 ${messages.length} messages` : "\u2026"}
+        </div>
+      )}
     </div>
   );
 }
