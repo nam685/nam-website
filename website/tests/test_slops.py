@@ -14,7 +14,7 @@ class TestSessionModel:
 
     def test_str_representation(self):
         s = Session.objects.create()
-        t = Turn.objects.create(session=s, prompt="Fix the bug in main.py", submitter_ip="127.0.0.1")
+        Turn.objects.create(session=s, prompt="Fix the bug in main.py", submitter_ip="127.0.0.1")
         assert "Fix the bug" in str(s)
 
     def test_str_no_turns(self):
@@ -280,9 +280,13 @@ class TestSlopsStats:
 
     def test_stats_counts_from_turns(self, client):
         s1 = Session.objects.create(status="done")
-        Turn.objects.create(session=s1, prompt="a", submitter_ip="1.2.3.4", status="done", token_count=100, tool_calls=5)
+        Turn.objects.create(
+            session=s1, prompt="a", submitter_ip="1.2.3.4", status="done", token_count=100, tool_calls=5
+        )
         s2 = Session.objects.create(status="failed")
-        Turn.objects.create(session=s2, prompt="b", submitter_ip="1.2.3.4", status="failed", token_count=50, tool_calls=2)
+        Turn.objects.create(
+            session=s2, prompt="b", submitter_ip="1.2.3.4", status="failed", token_count=50, tool_calls=2
+        )
         s3 = Session.objects.create()
         Turn.objects.create(session=s3, prompt="c", submitter_ip="1.2.3.4", status="pending")
         resp = client.get("/api/slops/stats/")

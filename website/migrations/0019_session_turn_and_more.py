@@ -5,71 +5,86 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0018_mission'),
+        ("website", "0018_mission"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Session',
+            name="Session",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('workspace', models.CharField(blank=True, default='', max_length=255)),
-                ('trace_path', models.CharField(blank=True, default='', max_length=255)),
-                ('status', models.CharField(default='pending', max_length=20)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("workspace", models.CharField(blank=True, default="", max_length=255)),
+                ("trace_path", models.CharField(blank=True, default="", max_length=255)),
+                ("status", models.CharField(default="pending", max_length=20)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='Turn',
+            name="Turn",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('prompt', models.TextField()),
-                ('status', models.CharField(choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('running', 'Running'), ('done', 'Done'), ('failed', 'Failed')], default='pending', max_length=20)),
-                ('submitter_ip', models.GenericIPAddressField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('approved_at', models.DateTimeField(blank=True, null=True)),
-                ('started_at', models.DateTimeField(blank=True, null=True)),
-                ('completed_at', models.DateTimeField(blank=True, null=True)),
-                ('token_count', models.IntegerField(default=0)),
-                ('tool_calls', models.IntegerField(default=0)),
-                ('summary', models.TextField(blank=True, default='')),
-                ('error', models.TextField(blank=True, default='')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("prompt", models.TextField()),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("approved", "Approved"),
+                            ("rejected", "Rejected"),
+                            ("running", "Running"),
+                            ("done", "Done"),
+                            ("failed", "Failed"),
+                        ],
+                        default="pending",
+                        max_length=20,
+                    ),
+                ),
+                ("submitter_ip", models.GenericIPAddressField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("approved_at", models.DateTimeField(blank=True, null=True)),
+                ("started_at", models.DateTimeField(blank=True, null=True)),
+                ("completed_at", models.DateTimeField(blank=True, null=True)),
+                ("token_count", models.IntegerField(default=0)),
+                ("tool_calls", models.IntegerField(default=0)),
+                ("summary", models.TextField(blank=True, default="")),
+                ("error", models.TextField(blank=True, default="")),
             ],
             options={
-                'ordering': ['created_at'],
+                "ordering": ["created_at"],
             },
         ),
         migrations.RemoveIndex(
-            model_name='mission',
-            name='mission_status_created_idx',
+            model_name="mission",
+            name="mission_status_created_idx",
         ),
         migrations.RemoveIndex(
-            model_name='mission',
-            name='mission_ip_created_idx',
+            model_name="mission",
+            name="mission_ip_created_idx",
         ),
         migrations.DeleteModel(
-            name='Mission',
+            name="Mission",
         ),
         migrations.AddIndex(
-            model_name='session',
-            index=models.Index(fields=['status', '-created_at'], name='session_status_created_idx'),
+            model_name="session",
+            index=models.Index(fields=["status", "-created_at"], name="session_status_created_idx"),
         ),
         migrations.AddField(
-            model_name='turn',
-            name='session',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='turns', to='website.session'),
+            model_name="turn",
+            name="session",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE, related_name="turns", to="website.session"
+            ),
         ),
         migrations.AddIndex(
-            model_name='turn',
-            index=models.Index(fields=['session', 'status'], name='turn_session_status_idx'),
+            model_name="turn",
+            index=models.Index(fields=["session", "status"], name="turn_session_status_idx"),
         ),
         migrations.AddIndex(
-            model_name='turn',
-            index=models.Index(fields=['submitter_ip', '-created_at'], name='turn_ip_created_idx'),
+            model_name="turn",
+            index=models.Index(fields=["submitter_ip", "-created_at"], name="turn_ip_created_idx"),
         ),
     ]
