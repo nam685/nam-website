@@ -5,20 +5,32 @@ from decimal import Decimal
 
 from django.core.cache import cache
 from django.core.management.base import BaseCommand
+from django.db.models import F, Max
 
 from website.models import PriceSnapshot, Ticker
 from website.services import PROVIDER_ADAPTERS
+from website.services.alpha_vantage import AlphaVantageQuotaError
 
 
 class Command(BaseCommand):
     help = "Fetch latest prices for all tracked tickers"
 
     def handle(self, *_args, **_options):
-        tickers = Ticker.objects.all()
+        # Prioritise least up-to-date tickers: no data first, then oldest
+        tickers = list(
+            Ticker.objects.annotate(latest_date=Max("snapshots__date")).order_by(F("latest_date").asc(nulls_first=True))
+        )
         errors = []
         last_av_time: float | None = None
+        av_quota_hit = False
 
         for ticker in tickers:
+            # Skip remaining Alpha Vantage tickers once quota is exhausted
+            if ticker.provider == "alpha_vantage" and av_quota_hit:
+                errors.append({"symbol": ticker.symbol, "message": "Skipped — Alpha Vantage quota exhausted"})
+                self.stderr.write(f"  {ticker.symbol}: SKIPPED (AV quota)")
+                continue
+
             # Rate-limit: 1.5s between Alpha Vantage requests (free key: ~1 req/sec)
             if ticker.provider == "alpha_vantage" and last_av_time is not None:
                 elapsed = time.monotonic() - last_av_time
@@ -34,6 +46,10 @@ class Command(BaseCommand):
                 history = adapter(ticker.provider_id, days=365)
                 self._upsert_snapshots(ticker, history)
                 self.stdout.write(f"  {ticker.symbol}: {len(history)} data points")
+            except AlphaVantageQuotaError as e:
+                av_quota_hit = True
+                errors.append({"symbol": ticker.symbol, "message": str(e)})
+                self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
             except Exception as e:
                 errors.append({"symbol": ticker.symbol, "message": str(e)})
                 self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
@@ -50,7 +66,7 @@ class Command(BaseCommand):
         if errors:
             self.stdout.write(f"Sync complete with {len(errors)} error(s)")
         else:
-            self.stdout.write(f"Sync complete: {tickers.count()} tickers updated")
+            self.stdout.write(f"Sync complete: {len(tickers)} tickers updated")
 
     def _upsert_snapshots(self, ticker: Ticker, history: list[tuple]) -> None:
         existing_dates = set(PriceSnapshot.objects.filter(ticker=ticker).values_list("date", flat=True))

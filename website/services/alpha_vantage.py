@@ -24,6 +24,9 @@ def fetch_alpha_vantage(provider_id: str, days: int = 365) -> list[tuple[date, D
     resp.raise_for_status()
     data = resp.json()
 
+    if "Information" in data:
+        raise AlphaVantageQuotaError("Alpha Vantage API quota exceeded — try again tomorrow")
+
     series = data.get(series_key, {})
     results = []
     for date_str, values in series.items():

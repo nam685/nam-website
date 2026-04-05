@@ -129,6 +129,19 @@ class TestAlphaVantageAdapter:
         assert len(result) == 2
         assert result[0] == (date(2026, 4, 2), Decimal("229.8200"))
 
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_fetch_raises_on_quota(self, mock_get):
+        from website.services.alpha_vantage import AlphaVantageQuotaError
+
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {
+                "Information": "Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day."
+            },
+        )
+        with pytest.raises(AlphaVantageQuotaError, match="quota exceeded"):
+            fetch_alpha_vantage("VWCE.DE", days=30)
+
 
 class TestAlphaVantageSearch:
     @patch("website.services.alpha_vantage.httpx.get")
@@ -400,6 +413,77 @@ class TestSyncPricesCommand:
         snaps = list(PriceSnapshot.objects.filter(ticker=t).order_by("date"))
         assert snaps[0].change_pct is None  # first day, no previous
         assert snaps[1].change_pct == Decimal("10.0000")
+
+    @patch("website.services.coingecko.httpx.get")
+    def test_sync_prioritises_stale_tickers(self, mock_get):
+        """Tickers with no data should be synced before tickers with recent data."""
+        fresh = Ticker.objects.create(
+            symbol="BTC", name="Bitcoin", asset_type="crypto", provider="coingecko", provider_id="bitcoin"
+        )
+        stale = Ticker.objects.create(
+            symbol="ETH", name="Ethereum", asset_type="crypto", provider="coingecko", provider_id="ethereum"
+        )
+        # Give BTC a recent snapshot so ETH (no data) should sync first
+        PriceSnapshot.objects.create(ticker=fresh, date=date.today(), price=Decimal("80000"))
+
+        call_order = []
+        original_get = mock_get
+
+        def track_calls(*args, **kwargs):
+            url = args[0] if args else kwargs.get("url", "")
+            if "ethereum" in str(url):
+                call_order.append("ETH")
+            elif "bitcoin" in str(url):
+                call_order.append("BTC")
+            return MagicMock(status_code=200, json=lambda: {"prices": [[1743465600000, 100.00]]})
+
+        mock_get.side_effect = track_calls
+        call_command("sync_prices")
+        assert call_order == ["ETH", "BTC"]
+
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_sync_skips_remaining_av_on_quota(self, mock_av_get):
+        """Once AV quota is hit, remaining AV tickers should be skipped."""
+        Ticker.objects.create(
+            symbol="AAA", name="First", asset_type="stock", provider="alpha_vantage", provider_id="AAA"
+        )
+        Ticker.objects.create(
+            symbol="BBB", name="Second", asset_type="stock", provider="alpha_vantage", provider_id="BBB"
+        )
+
+        # First call hits quota, second should never happen
+        mock_av_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"Information": "API rate limit exceeded"},
+        )
+        call_command("sync_prices")
+        status = json.loads(cache.get("bets:sync_status") or "{}")
+        assert len(status["errors"]) == 2
+        assert "quota" in status["errors"][0]["message"].lower()
+        assert "skipped" in status["errors"][1]["message"].lower()
+
+    @patch("website.services.coingecko.httpx.get")
+    @patch("website.services.alpha_vantage.httpx.get")
+    def test_sync_continues_non_av_after_quota(self, mock_av_get, mock_cg_get):
+        """Non-AV tickers should still sync even after AV quota is hit."""
+        Ticker.objects.create(
+            symbol="AAA", name="Stock", asset_type="stock", provider="alpha_vantage", provider_id="AAA"
+        )
+        Ticker.objects.create(
+            symbol="BTC", name="Bitcoin", asset_type="crypto", provider="coingecko", provider_id="bitcoin"
+        )
+
+        mock_av_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"Information": "API rate limit exceeded"},
+        )
+        mock_cg_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"prices": [[1743465600000, 84000.50]]},
+        )
+        call_command("sync_prices")
+        # BTC should still have been synced despite AV quota
+        assert PriceSnapshot.objects.filter(ticker__symbol="BTC").count() == 1
 
 
 # --- API endpoint tests ---
