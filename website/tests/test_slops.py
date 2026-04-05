@@ -285,12 +285,21 @@ class TestSlopsTrace:
 
     def test_trace_file_exists(self, client):
         s = Session.objects.create(trace_path="/home/klaude/traces/session-1")
-        mock_trace = {"schema_version": "ATIF-v1.4", "steps": []}
+        mock_trace = {
+            "schema_version": "ATIF-v1.4",
+            "steps": [
+                {"source": "user", "message": "hello"},
+                {"source": "agent", "message": "hi there", "tool_calls": []},
+            ],
+        }
         with patch("website.tasks._read_atif_trace", return_value=mock_trace):
             resp = client.get(f"/api/slops/{s.id}/trace/")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["trace"]["schema_version"] == "ATIF-v1.4"
+        assert data["trace"]["step_count"] == 2
+        assert len(data["trace"]["messages"]) == 2
+        assert data["trace"]["messages"][0]["role"] == "user"
+        assert data["trace"]["messages"][1]["role"] == "assistant"
 
 
 @pytest.mark.django_db
