@@ -214,7 +214,9 @@ export default function SlopsPage() {
   }, [trace, selectedStatus]);
 
   const selectSession = (id: number) => {
-    setSelectedId(id === selectedId ? null : id);
+    const next = id === selectedId ? null : id;
+    setSelectedId(next);
+    if (next === null) setTrace(null);
     setSidebarOpen(false);
     setMenuOpen(false);
   };
@@ -558,10 +560,16 @@ export default function SlopsPage() {
                           display: "flex",
                           alignItems: "center",
                           gap: 12,
-                          padding: "12px 0",
+                          padding: "12px 20px",
+                          marginLeft: -20,
+                          marginRight: -20,
                           borderBottom: "1px solid #222",
                           marginBottom: 8,
                           flexWrap: "wrap",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 10,
+                          background: "#0a0a0a",
                         }}
                       >
                         <StatusBadge status={selected.status} />
