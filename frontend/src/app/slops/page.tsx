@@ -505,81 +505,46 @@ export default function SlopsPage() {
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 20,
-                padding: "60px 24px",
+                gap: 16,
+                padding: "80px 24px 40px",
                 flex: 1,
                 textAlign: "center",
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  color: ACCENT,
-                  textTransform: "uppercase",
-                  letterSpacing: 2,
-                  fontWeight: 600,
-                }}
-              >
-                Featured Workspace
-              </div>
-              <div
-                style={{
-                  fontSize: 24,
-                  fontWeight: 700,
-                  color: "#ddd",
-                }}
-              >
-                klaude-playground
-              </div>
-              <p
-                style={{
-                  color: "#777",
-                  fontSize: 13,
-                  maxWidth: 420,
-                  lineHeight: 1.7,
-                }}
-              >
-                A living repo where klaude lands its work. Every approved
-                mission gets committed here — browse the history to see what
-                the agent has built.
-              </p>
               <a
                 href="https://github.com/nam685/klaude-playground"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  marginTop: 8,
-                  padding: "10px 20px",
-                  border: `1px solid ${ACCENT}44`,
-                  borderRadius: 4,
-                  background: "transparent",
+                  fontFamily: "monospace",
+                  fontSize: 48,
+                  fontWeight: 700,
                   color: ACCENT,
-                  fontSize: 13,
+                  letterSpacing: 4,
+                  textShadow: `0 0 30px ${ACCENT}40`,
                   textDecoration: "none",
-                  transition: "box-shadow 0.2s, border-color 0.2s",
+                  transition: "text-shadow 0.2s",
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = `${ACCENT}aa`;
-                  e.currentTarget.style.boxShadow = `0 0 12px ${ACCENT}30`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = `${ACCENT}44`;
-                  e.currentTarget.style.boxShadow = "none";
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.textShadow = `0 0 40px ${ACCENT}, 0 0 80px ${ACCENT}60`)
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.textShadow = `0 0 30px ${ACCENT}40`)
+                }
+              >
+                klaude-playground
+              </a>
+              <p
+                style={{
+                  color: "#999",
+                  fontSize: 14,
+                  fontFamily: "monospace",
+                  maxWidth: 440,
+                  lineHeight: 1.6,
                 }}
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                >
-                  <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-                </svg>
-                See klaude&apos;s work
-              </a>
+                check out what klaude can do
+              </p>
             </div>
           ) : selectedId ===
           null ? /* No selection — hero takes space, nothing here */
