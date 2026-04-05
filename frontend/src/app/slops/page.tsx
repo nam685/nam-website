@@ -157,9 +157,9 @@ export default function SlopsPage() {
 
     if (selectedId === null) return;
 
-    // Final fetch when session completes
+    // Final fetch when session completes (silent to avoid loading flash / scroll reset)
     if (selectedStatus === "done" || selectedStatus === "failed") {
-      fetchTrace(selectedId);
+      fetchTrace(selectedId, true);
       return;
     }
 
@@ -712,55 +712,12 @@ export default function SlopsPage() {
                       </div>
                     )}
 
-                    {latestTurn?.error && (
-                      <div
-                        style={{
-                          padding: "10px 14px",
-                          marginBottom: 12,
-                          background: "rgba(239,68,68,0.1)",
-                          border: "1px solid rgba(239,68,68,0.3)",
-                          borderRadius: 6,
-                          color: "#f87171",
-                          fontSize: 12,
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        {latestTurn.error}
-                      </div>
-                    )}
-
-                    {latestTurn?.summary && (
-                      <div
-                        style={{
-                          padding: "10px 14px",
-                          marginBottom: 12,
-                          background: `${ACCENT}08`,
-                          border: `1px solid ${ACCENT}20`,
-                          borderRadius: 6,
-                          color: "#aaa",
-                          fontSize: 12,
-                          whiteSpace: "pre-wrap",
-                        }}
-                      >
-                        <span
-                          style={{
-                            color: ACCENT,
-                            fontWeight: 600,
-                            fontSize: 10,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.5,
-                            display: "block",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Summary
-                        </span>
-                        {latestTurn.summary}
-                      </div>
-                    )}
-
                     {trace && (
-                      <TraceViewer trace={trace} status={selected?.status ?? "pending"} />
+                      <TraceViewer
+                        trace={trace}
+                        status={selected?.status ?? "pending"}
+                        error={latestTurn?.error || ""}
+                      />
                     )}
                   </>
                 )}

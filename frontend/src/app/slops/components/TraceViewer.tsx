@@ -162,7 +162,7 @@ function ToolResult({ content }: { content: string }) {
 
 /* ── TraceViewer ──────────────────────────────────────── */
 
-export default function TraceViewer({ trace, status }: { trace: SessionTrace; status: string }) {
+export default function TraceViewer({ trace, status, error }: { trace: SessionTrace; status: string; error?: string }) {
   const messages: TraceMessage[] =
     (trace.trace as { messages?: TraceMessage[] })?.messages ?? [];
 
@@ -185,6 +185,11 @@ export default function TraceViewer({ trace, status }: { trace: SessionTrace; st
       </div>
     );
   }
+
+  const isDone = status === "done" || status === "failed";
+  const lastAssistantIdx = isDone
+    ? messages.reduce((acc, m, i) => (m.role === "assistant" && m.content ? i : acc), -1)
+    : -1;
 
   return (
     <div
@@ -240,6 +245,7 @@ export default function TraceViewer({ trace, status }: { trace: SessionTrace; st
 
         /* Assistant messages — left-aligned with tool calls */
         if (msg.role === "assistant") {
+          const isFinal = i === lastAssistantIdx;
           return (
             <div key={i} style={{ maxWidth: "90%" }}>
               {msg.content && (
@@ -247,8 +253,9 @@ export default function TraceViewer({ trace, status }: { trace: SessionTrace; st
                   style={{
                     padding: "10px 14px",
                     borderRadius: "12px 12px 12px 2px",
-                    background: "#1a1a1a",
-                    border: "1px solid #333",
+                    background: isFinal ? `${ACCENT}08` : "#1a1a1a",
+                    border: isFinal ? `1px solid ${ACCENT}30` : "1px solid #333",
+                    boxShadow: isFinal ? `0 0 12px ${ACCENT}15` : "none",
                     color: "#ccc",
                     fontSize: 13,
                     fontFamily: "monospace",
@@ -294,6 +301,23 @@ export default function TraceViewer({ trace, status }: { trace: SessionTrace; st
           />
           <style>{`@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }`}</style>
           working{messages.length > 0 ? ` \u2014 ${messages.length} messages` : "\u2026"}
+        </div>
+      )}
+      {error && (
+        <div
+          style={{
+            padding: "10px 14px",
+            marginTop: 12,
+            background: "rgba(239,68,68,0.06)",
+            border: "1px solid rgba(239,68,68,0.3)",
+            borderRadius: 6,
+            color: "#f87171",
+            fontSize: 12,
+            fontFamily: "monospace",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {error}
         </div>
       )}
     </div>
