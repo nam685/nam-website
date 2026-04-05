@@ -5,35 +5,7 @@ const ACCENT = "#39ff14";
 /* ── HeroSection ──────────────────────────────────────── */
 
 export default function HeroSection({ compact }: { compact?: boolean }) {
-  if (compact) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "10px 16px",
-          borderBottom: `1px solid ${ACCENT}20`,
-          background: `${ACCENT}05`,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "monospace",
-            fontSize: 16,
-            fontWeight: 700,
-            color: ACCENT,
-            letterSpacing: 2,
-          }}
-        >
-          klaude
-        </span>
-        <span style={{ color: "#666", fontSize: 12, fontFamily: "monospace" }}>
-          handmade slop machine
-        </span>
-      </div>
-    );
-  }
+  if (compact) return null;
 
   return (
     <div
