@@ -1,46 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { type MissionTrace } from "@/lib/api";
+import { type ATIFStep, type MissionTrace } from "@/lib/api";
 
 const ACCENT = "#39ff14";
 
-/* ── Types for trace messages ─────────────────────────── */
-
-interface ToolCallFunction {
-  name: string;
-  arguments: string;
-}
-
-interface ToolCall {
-  id: string;
-  function: ToolCallFunction;
-}
-
-interface TraceMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content?: string;
-  tool_calls?: ToolCall[];
-  tool_call_id?: string;
-}
-
 /* ── ToolCallBlock ────────────────────────────────────── */
 
-function ToolCallBlock({ call }: { call: ToolCall }) {
+function ToolCallBlock({
+  call,
+}: {
+  call: NonNullable<ATIFStep["tool_calls"]>[number];
+}) {
   const [expanded, setExpanded] = useState(false);
 
-  let parsedArgs: Record<string, unknown> = {};
-  try {
-    parsedArgs = JSON.parse(call.function.arguments);
-  } catch {
-    /* keep empty */
-  }
-
+  const args = call.arguments;
   const keyArg =
-    (parsedArgs.path as string) ||
-    (parsedArgs.command as string) ||
-    (parsedArgs.file_path as string) ||
-    (parsedArgs.pattern as string) ||
+    (args.path as string) ||
+    (args.command as string) ||
+    (args.file_path as string) ||
+    (args.pattern as string) ||
     null;
 
   return (
@@ -73,7 +52,7 @@ function ToolCallBlock({ call }: { call: ToolCall }) {
           {expanded ? "\u25BC" : "\u25B6"}
         </span>
         <span style={{ color: ACCENT, fontWeight: 600 }}>
-          {call.function.name}
+          {call.function_name}
         </span>
         {keyArg && (
           <span
@@ -104,7 +83,7 @@ function ToolCallBlock({ call }: { call: ToolCall }) {
             wordBreak: "break-all",
           }}
         >
-          {JSON.stringify(parsedArgs, null, 2)}
+          {JSON.stringify(args, null, 2)}
         </pre>
       )}
     </div>
@@ -163,10 +142,9 @@ function ToolResult({ content }: { content: string }) {
 /* ── TraceViewer ──────────────────────────────────────── */
 
 export default function TraceViewer({ trace }: { trace: MissionTrace }) {
-  const messages: TraceMessage[] =
-    (trace.trace as { messages?: TraceMessage[] })?.messages ?? [];
+  const steps: ATIFStep[] = trace.trace?.steps ?? [];
 
-  if (messages.length === 0) {
+  if (steps.length === 0) {
     return (
       <div
         style={{
@@ -195,22 +173,12 @@ export default function TraceViewer({ trace }: { trace: MissionTrace }) {
         padding: "16px 0",
       }}
     >
-      {messages.map((msg, i) => {
-        /* Skip system messages */
-        if (msg.role === "system") return null;
-
-        /* Tool result messages */
-        if (msg.role === "tool") {
-          return (
-            <ToolResult key={i} content={msg.content ?? "(empty result)"} />
-          );
-        }
-
+      {steps.map((step) => {
         /* User messages — right-aligned bubble */
-        if (msg.role === "user") {
+        if (step.source === "user") {
           return (
             <div
-              key={i}
+              key={step.step_id}
               style={{
                 display: "flex",
                 justifyContent: "flex-end",
@@ -230,19 +198,38 @@ export default function TraceViewer({ trace }: { trace: MissionTrace }) {
                   wordBreak: "break-word",
                 }}
               >
-                {typeof msg.content === "string"
-                  ? msg.content
-                  : JSON.stringify(msg.content)}
+                {step.message ?? ""}
               </div>
             </div>
           );
         }
 
-        /* Assistant messages — left-aligned with tool calls */
-        if (msg.role === "assistant") {
+        /* System steps (tool results / observations) */
+        if (step.source === "system") {
+          const results = step.observation?.results ?? [];
+          if (results.length > 0) {
+            return (
+              <div key={step.step_id}>
+                {results.map((r) => (
+                  <ToolResult
+                    key={r.tool_call_id}
+                    content={r.content || "(empty result)"}
+                  />
+                ))}
+              </div>
+            );
+          }
+          if (step.message) {
+            return <ToolResult key={step.step_id} content={step.message} />;
+          }
+          return null;
+        }
+
+        /* Agent steps — left-aligned with tool calls */
+        if (step.source === "agent") {
           return (
-            <div key={i} style={{ maxWidth: "90%" }}>
-              {msg.content && (
+            <div key={step.step_id} style={{ maxWidth: "90%" }}>
+              {step.message && (
                 <div
                   style={{
                     padding: "10px 14px",
@@ -255,14 +242,14 @@ export default function TraceViewer({ trace }: { trace: MissionTrace }) {
                     whiteSpace: "pre-wrap",
                     wordBreak: "break-word",
                     marginBottom:
-                      msg.tool_calls && msg.tool_calls.length > 0 ? 8 : 0,
+                      step.tool_calls && step.tool_calls.length > 0 ? 8 : 0,
                   }}
                 >
-                  {msg.content}
+                  {step.message}
                 </div>
               )}
-              {msg.tool_calls?.map((tc) => (
-                <ToolCallBlock key={tc.id} call={tc} />
+              {step.tool_calls?.map((tc) => (
+                <ToolCallBlock key={tc.tool_call_id} call={tc} />
               ))}
             </div>
           );
