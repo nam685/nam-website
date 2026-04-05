@@ -304,7 +304,7 @@ function PinVideoPopup({
           background: "#111",
           border: `1px solid ${ACCENT}30`,
           borderRadius: 8,
-          maxWidth: 600,
+          maxWidth: 900,
           width: "100%",
           maxHeight: "80vh",
           overflow: "hidden",
@@ -357,7 +357,7 @@ function PinVideoPopup({
                 fontFamily: "monospace",
               }}
             >
-              loading uploads...
+              loading popular uploads...
             </p>
           ) : uploads.length === 0 ? (
             <p
@@ -374,7 +374,7 @@ function PinVideoPopup({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
+                gridTemplateColumns: "repeat(3, 1fr)",
                 gap: "0.75rem",
               }}
             >
@@ -436,6 +436,18 @@ function PinVideoPopup({
                     >
                       {video.title}
                     </p>
+                    {video.view_count != null && (
+                      <p
+                        style={{
+                          fontSize: "0.6rem",
+                          color: "#555",
+                          marginTop: "0.15rem",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {video.view_count.toLocaleString()} views
+                      </p>
+                    )}
                   </div>
                 );
               })}

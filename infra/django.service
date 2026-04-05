@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-ExecStart=/home/nam/nam-website-deploy/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 2
+ExecStart=/home/nam/nam-website-deploy/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 120
 EnvironmentFile=/home/nam/nam-website-deploy/.env
 Restart=always
 RestartSec=3
