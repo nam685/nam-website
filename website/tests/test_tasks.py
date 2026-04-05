@@ -2,45 +2,88 @@ from unittest.mock import patch
 
 import pytest
 
-from website.models import Mission
-from website.tasks import run_mission
+from website.models import Session, Turn
+from website.tasks import run_turn
 
 
 @pytest.mark.django_db
-class TestRunMission:
-    def test_sets_status_to_running_then_done(self):
-        m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1", status="approved", workspace="task-1")
+class TestRunTurn:
+    def _make_approved_turn(self, **session_kwargs):
+        s = Session.objects.create(
+            workspace=session_kwargs.get("workspace", "session-1"),
+            trace_path=session_kwargs.get("trace_path", "/home/klaude/traces/session-1"),
+            status="approved",
+        )
+        t = Turn.objects.create(session=s, prompt="test", submitter_ip="127.0.0.1", status="approved")
+        return s, t
+
+    def test_first_turn_runs_without_continue_flag(self):
+        s, t = self._make_approved_turn()
         with patch("website.tasks._execute_klaude") as mock_exec:
             mock_exec.return_value = {
                 "summary": "Did stuff",
                 "token_count": 100,
                 "tool_calls": 5,
                 "error": "",
-                "trace_dir": "/home/klaude/traces/task-1",
             }
-            run_mission(m.id)
-        m.refresh_from_db()
-        assert m.status == "done"
-        assert m.summary == "Did stuff"
-        assert m.token_count == 100
-        assert m.trace_path == "/home/klaude/traces/task-1"
-        assert m.started_at is not None
-        assert m.completed_at is not None
+            run_turn(t.id)
+        t.refresh_from_db()
+        s.refresh_from_db()
+        assert t.status == "done"
+        assert t.summary == "Did stuff"
+        assert t.token_count == 100
+        assert t.started_at is not None
+        assert t.completed_at is not None
+        assert s.status == "done"
+        # Check that _execute_klaude was called without is_continuation
+        call_args = mock_exec.call_args
+        assert call_args[0][0] == t  # turn
+        assert call_args[0][1] is False  # is_continuation
 
-    def test_sets_status_to_failed_on_error(self):
-        m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1", status="approved", workspace="task-1")
+    def test_followup_turn_uses_continue_flag(self):
+        s = Session.objects.create(workspace="session-1", trace_path="/home/klaude/traces/session-1", status="done")
+        Turn.objects.create(session=s, prompt="first", submitter_ip="127.0.0.1", status="done")
+        t2 = Turn.objects.create(session=s, prompt="second", submitter_ip="127.0.0.1", status="approved")
+        with patch("website.tasks._execute_klaude") as mock_exec:
+            mock_exec.return_value = {"summary": "More stuff", "token_count": 50, "tool_calls": 3, "error": ""}
+            run_turn(t2.id)
+        call_args = mock_exec.call_args
+        assert call_args[0][1] is True  # is_continuation
+
+    def test_failed_turn(self):
+        s, t = self._make_approved_turn()
         with patch("website.tasks._execute_klaude") as mock_exec:
             mock_exec.side_effect = Exception("klaude crashed")
-            run_mission(m.id)
-        m.refresh_from_db()
-        assert m.status == "failed"
-        assert "klaude crashed" in m.error
-        assert m.completed_at is not None
+            run_turn(t.id)
+        t.refresh_from_db()
+        s.refresh_from_db()
+        assert t.status == "failed"
+        assert "klaude crashed" in t.error
+        assert t.completed_at is not None
+        assert s.status == "failed"
 
-    def test_skips_non_approved_mission(self):
-        m = Mission.objects.create(prompt="test", submitter_ip="127.0.0.1", status="pending", workspace="task-1")
+    def test_skips_non_approved_turn(self):
+        s, t = self._make_approved_turn()
+        t.status = "pending"
+        t.save()
         with patch("website.tasks._execute_klaude") as mock_exec:
-            run_mission(m.id)
+            run_turn(t.id)
         mock_exec.assert_not_called()
-        m.refresh_from_db()
-        assert m.status == "pending"
+        t.refresh_from_db()
+        assert t.status == "pending"
+
+    def test_error_in_klaude_output(self):
+        s, t = self._make_approved_turn()
+        with patch("website.tasks._execute_klaude") as mock_exec:
+            mock_exec.return_value = {
+                "summary": "",
+                "token_count": 10,
+                "tool_calls": 1,
+                "error": "something went wrong",
+            }
+            run_turn(t.id)
+        t.refresh_from_db()
+        s.refresh_from_db()
+        assert t.status == "failed"
+        assert t.error == "something went wrong"
+        assert s.status == "failed"

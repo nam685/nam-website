@@ -3,7 +3,10 @@ import os
 import subprocess
 from pathlib import Path
 
+from django.utils import timezone
+
 from config.celery import app
+from website.models import Turn
 
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
@@ -60,11 +63,7 @@ def _execute_klaude(turn, is_continuation):
 
 @app.task(max_retries=0)
 def run_turn(turn_id):
-    """Execute a single klaude turn."""
-    from django.utils import timezone
-
-    from website.models import Turn
-
+    """Execute a klaude turn."""
     try:
         turn = Turn.objects.select_related("session").get(id=turn_id)
     except Turn.DoesNotExist:
