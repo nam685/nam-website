@@ -188,6 +188,25 @@ class TestSlopsApprove:
         assert s.status == "approved"
         assert s.workspace == "klaude-playground"
 
+    def test_approve_sets_per_session_trace_path(self, client, auth_headers):
+        """Each session must get its own trace directory to prevent cross-contamination."""
+        s1 = Session.objects.create()
+        t1 = Turn.objects.create(session=s1, prompt="First", submitter_ip="127.0.0.1")
+        s2 = Session.objects.create()
+        t2 = Turn.objects.create(session=s2, prompt="Second", submitter_ip="127.0.0.1")
+
+        client.post(f"/api/slops/turns/{t1.id}/approve/", **auth_headers)
+        client.post(f"/api/slops/turns/{t2.id}/approve/", **auth_headers)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+
+        # Both use same workspace but different trace paths
+        assert s1.workspace == s2.workspace == "klaude-playground"
+        assert s1.trace_path != s2.trace_path
+        assert str(s1.id) in s1.trace_path
+        assert str(s2.id) in s2.trace_path
+
     def test_approve_with_custom_workspace(self, client, auth_headers):
         s = Session.objects.create()
         t = Turn.objects.create(session=s, prompt="Do it", submitter_ip="127.0.0.1")
@@ -300,6 +319,24 @@ class TestSlopsTrace:
         assert len(data["trace"]["messages"]) == 2
         assert data["trace"]["messages"][0]["role"] == "user"
         assert data["trace"]["messages"][1]["role"] == "assistant"
+
+    def test_trace_isolation_between_sessions(self, client):
+        """Each session's trace endpoint must read from its own trace_path, not a shared one."""
+        s1 = Session.objects.create(trace_path="/home/klaude/traces/ws/1")
+        s2 = Session.objects.create(trace_path="/home/klaude/traces/ws/2")
+
+        trace_a = {"schema_version": "ATIF-v1.4", "steps": [{"source": "user", "message": "session A"}]}
+        trace_b = {"schema_version": "ATIF-v1.4", "steps": [{"source": "user", "message": "session B"}]}
+
+        with patch("website.tasks._read_atif_trace", return_value=trace_a) as mock_read:
+            resp = client.get(f"/api/slops/{s1.id}/trace/")
+            mock_read.assert_called_once_with("/home/klaude/traces/ws/1")
+        assert resp.json()["trace"]["messages"][0]["content"] == "session A"
+
+        with patch("website.tasks._read_atif_trace", return_value=trace_b) as mock_read:
+            resp = client.get(f"/api/slops/{s2.id}/trace/")
+            mock_read.assert_called_once_with("/home/klaude/traces/ws/2")
+        assert resp.json()["trace"]["messages"][0]["content"] == "session B"
 
 
 @pytest.mark.django_db

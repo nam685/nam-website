@@ -171,7 +171,7 @@ def slops_approve(request, turn_id):
             workspace = "klaude-playground"
 
         session.workspace = workspace
-        session.trace_path = os.path.join("/home/klaude/traces", workspace)
+        session.trace_path = os.path.join("/home/klaude/traces", workspace, str(session.id))
         session.save(update_fields=["workspace", "trace_path"])
 
     turn.status = "approved"
