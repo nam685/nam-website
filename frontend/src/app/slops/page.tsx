@@ -308,6 +308,7 @@ export default function SlopsPage() {
           </div>
         ) : (
           <>
+            {/* ── Workspace section ─────────────────────── */}
             <div
               style={{
                 padding: "16px 12px 8px",
@@ -317,10 +318,9 @@ export default function SlopsPage() {
                 letterSpacing: 1,
               }}
             >
-              Missions
+              Workspace
             </div>
 
-            {/* Featured: klaude-playground */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -338,7 +338,6 @@ export default function SlopsPage() {
                 cursor: "pointer",
                 textAlign: "left",
                 transition: "background 0.15s",
-                borderBottom: `1px solid ${ACCENT}15`,
               }}
               onMouseEnter={(e) => {
                 if (!showPlayground)
@@ -353,42 +352,33 @@ export default function SlopsPage() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "space-between",
                   gap: 8,
-                  marginBottom: 4,
+                  marginBottom: 2,
                 }}
               >
-                <span
-                  style={{
-                    color: ACCENT,
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                >
+                <span style={{ color: ACCENT, fontSize: 12, fontWeight: 600 }}>
                   klaude-playground
-                </span>
-                <span
-                  style={{
-                    display: "inline-block",
-                    padding: "2px 8px",
-                    borderRadius: 4,
-                    background: `${ACCENT}18`,
-                    border: `1px solid ${ACCENT}40`,
-                    color: ACCENT,
-                    fontSize: 10,
-                    fontFamily: "monospace",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  ongoing
                 </span>
               </div>
               <div style={{ color: "#555", fontSize: 10 }}>
-                featured workspace
+                default target for all missions
               </div>
             </button>
+
+            {/* ── Missions section ────────────────────────── */}
+            <div
+              style={{
+                padding: "16px 12px 8px",
+                fontSize: 11,
+                color: "#666",
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                borderTop: `1px solid ${ACCENT}15`,
+                marginTop: 4,
+              }}
+            >
+              Missions
+            </div>
 
             {missions.length === 0 && (
               <div
