@@ -1,7 +1,6 @@
 import json
 import os
 import subprocess
-from pathlib import Path
 
 from django.utils import timezone
 
@@ -14,12 +13,52 @@ WORKSPACE_BASE = "/home/klaude/workspace"
 TRACES_BASE = "/home/klaude/traces"
 
 
+def _sudo_read(path):
+    """Read a file as the klaude user. Returns content string or None."""
+    result = subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "cat", path],
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+def _sudo_ls_json(trace_dir):
+    """List .json files in trace_dir as klaude user, sorted by mtime (newest last)."""
+    result = subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "find", trace_dir, "-maxdepth", "1", "-name", "*.json", "-printf", "%T@ %p\n"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    lines = sorted(result.stdout.strip().split("\n"))
+    return [line.split(" ", 1)[1] for line in lines]
+
+
+def _read_atif_trace(trace_dir):
+    """Read newest ATIF JSON from trace_dir as klaude user."""
+    files = _sudo_ls_json(trace_dir)
+    if not files:
+        return {}
+    content = _sudo_read(files[-1])
+    if not content:
+        return {}
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {}
+
+
 def _execute_klaude(turn, is_continuation):
     """Run klaude CLI as the klaude user. Returns result dict."""
     session = turn.session
     workspace_dir = os.path.join(WORKSPACE_BASE, session.workspace)
     trace_dir = session.trace_path
-    os.makedirs(trace_dir, exist_ok=True)
+
+    # Create dirs as klaude user (Django runs as nam, can't write to /home/klaude/)
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "mkdir", "-p", trace_dir], check=True)
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "mkdir", "-p", workspace_dir], check=True)
 
     cmd = ["sudo", "-u", KLAUDE_USER, KLAUDE_BIN]
     if is_continuation:
@@ -34,12 +73,7 @@ def _execute_klaude(turn, is_continuation):
         cwd=workspace_dir,
     )
 
-    # Read ATIF trace (newest .json file in trace_dir)
-    atif = {}
-    trace_files = sorted(Path(trace_dir).glob("*.json"), key=lambda f: f.stat().st_mtime)
-    if trace_files:
-        with open(trace_files[-1]) as f:
-            atif = json.load(f)
+    atif = _read_atif_trace(trace_dir)
 
     # Metrics from ATIF final_metrics
     fm = atif.get("final_metrics", {})
