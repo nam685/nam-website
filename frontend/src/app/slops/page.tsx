@@ -9,6 +9,7 @@ import {
   API,
 } from "@/lib/api";
 import HeroSection from "./components/HeroSection";
+import MatrixBg from "./components/MatrixBg";
 import TraceViewer from "./components/TraceViewer";
 
 const ACCENT = "#39ff14";
@@ -236,6 +237,8 @@ export default function SlopsPage() {
         overflow: "hidden",
       }}
     >
+      <MatrixBg />
+
       {/* ── Mobile sidebar toggle ───────────────────────── */}
       <button
         className="lg:hidden"
