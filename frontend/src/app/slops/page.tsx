@@ -558,10 +558,16 @@ export default function SlopsPage() {
                           display: "flex",
                           alignItems: "center",
                           gap: 12,
-                          padding: "12px 0",
+                          padding: "12px 20px",
+                          marginLeft: -20,
+                          marginRight: -20,
                           borderBottom: "1px solid #222",
                           marginBottom: 8,
                           flexWrap: "wrap",
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 10,
+                          background: "#0a0a0a",
                         }}
                       >
                         <StatusBadge status={selected.status} />
@@ -812,6 +818,28 @@ export default function SlopsPage() {
             </div>
           )}
           <div style={{ display: "flex", gap: 8 }}>
+            {selectedId !== null && (
+              <button
+                onClick={() => {
+                  setSelectedId(null);
+                  setTrace(null);
+                }}
+                title="New session"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${ACCENT}25`,
+                  background: "#111",
+                  color: ACCENT,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  flexShrink: 0,
+                }}
+              >
+                +
+              </button>
+            )}
             <input
               type="text"
               value={prompt}
