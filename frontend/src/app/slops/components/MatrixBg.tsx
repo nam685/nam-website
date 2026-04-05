@@ -3,9 +3,10 @@
 import { useEffect, useRef } from "react";
 
 const ACCENT = "#39ff14";
-const CHARS = "01{}[]()<>=/+*&|!?;:._-~#@$%^";
+const CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789{}[]()<>=/+*&|!?;:._-~#@$%^";
 const FONT_SIZE = 14;
-const FADE = "rgba(0,0,0,0.06)";
+const FADE = "rgba(0,0,0,0.05)";
 
 export default function MatrixBg() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -13,61 +14,69 @@ export default function MatrixBg() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    let w = (canvas.width = window.innerWidth);
-    let h = (canvas.height = window.innerHeight);
-    let cols = Math.floor(w / FONT_SIZE);
-    let drops = Array.from({ length: cols }, () =>
-      Math.random() * -cols,
-    );
+    const dpr = window.devicePixelRatio || 1;
 
-    function resize() {
-      w = canvas!.width = window.innerWidth;
-      h = canvas!.height = window.innerHeight;
-      const newCols = Math.floor(w / FONT_SIZE);
-      if (newCols > drops.length) {
-        drops = drops.concat(
-          Array.from({ length: newCols - drops.length }, () =>
-            Math.random() * -newCols,
-          ),
-        );
-      } else {
-        drops.length = newCols;
-      }
-      cols = newCols;
+    let w: number, h: number, cols: number;
+    let drops: number[];
+    let speeds: number[];
+
+    function init() {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas!.width = w * dpr;
+      canvas!.height = h * dpr;
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cols = Math.floor(w / FONT_SIZE);
+      drops = Array.from({ length: cols }, () => Math.random() * -(h / FONT_SIZE));
+      speeds = Array.from({ length: cols }, () => 0.2 + Math.random() * 0.4);
     }
 
-    function draw() {
+    init();
+
+    let last = 0;
+    let raf: number;
+
+    function draw(now: number) {
+      raf = requestAnimationFrame(draw);
+      if (now - last < 45) return; // ~22 fps — intentionally choppy
+      last = now;
+
       ctx!.fillStyle = FADE;
       ctx!.fillRect(0, 0, w, h);
       ctx!.font = `${FONT_SIZE}px monospace`;
 
       for (let i = 0; i < cols; i++) {
         if (drops[i] < 0) {
-          drops[i] += 0.2;
+          drops[i] += speeds[i];
           continue;
         }
         const char = CHARS[Math.floor(Math.random() * CHARS.length)];
         const x = i * FONT_SIZE;
         const y = drops[i] * FONT_SIZE;
 
-        ctx!.fillStyle = `${ACCENT}18`;
+        // Head character — brighter with subtle glow
+        ctx!.shadowBlur = 6;
+        ctx!.shadowColor = ACCENT;
+        ctx!.fillStyle = `${ACCENT}30`;
         ctx!.fillText(char, x, y);
+        ctx!.shadowBlur = 0;
 
-        if (y > h && Math.random() > 0.98) {
+        if (y > h && Math.random() > 0.975) {
           drops[i] = Math.random() * -20;
+          speeds[i] = 0.2 + Math.random() * 0.4;
         }
-        drops[i] += 0.4;
+        drops[i] += speeds[i];
       }
     }
 
-    window.addEventListener("resize", resize);
-    const id = setInterval(draw, 60);
+    raf = requestAnimationFrame(draw);
+    window.addEventListener("resize", init);
     return () => {
-      clearInterval(id);
-      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", init);
     };
   }, []);
 
