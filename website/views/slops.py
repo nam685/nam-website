@@ -227,6 +227,40 @@ def slops_delete(request, session_id):
     return JsonResponse({"ok": True})
 
 
+@csrf_exempt
+@require_admin
+def slops_cancel(request, turn_id):
+    """POST /api/slops/turns/<turn_id>/cancel/ — admin, cancel a running turn."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    try:
+        turn = Turn.objects.select_related("session").get(id=turn_id)
+    except Turn.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if turn.status not in ("running", "approved"):
+        return JsonResponse({"error": f"Cannot cancel turn with status '{turn.status}'"}, status=409)
+
+    # Kill any running klaude process for this session's trace dir
+    if turn.session.trace_path:
+        import subprocess
+
+        subprocess.run(
+            ["sudo", "-u", "klaude", "pkill", "-f", f"--session-dir {turn.session.trace_path}"],
+            capture_output=True,
+        )
+
+    turn.status = "failed"
+    turn.error = "Cancelled by admin"
+    turn.completed_at = timezone.now()
+    turn.save()
+
+    _update_session_status(turn.session)
+
+    return JsonResponse(_serialize_session(turn.session))
+
+
 def _atif_to_messages(atif):
     """Convert ATIF steps to OpenAI chat message format for TraceViewer."""
     messages = []

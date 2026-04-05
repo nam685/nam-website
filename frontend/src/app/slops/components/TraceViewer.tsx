@@ -253,8 +253,8 @@ export default function TraceViewer({ trace, status, error }: { trace: SessionTr
                   style={{
                     padding: "10px 14px",
                     borderRadius: "12px 12px 12px 2px",
-                    background: isFinal ? `${ACCENT}08` : "#1a1a1a",
-                    border: isFinal ? `1px solid ${ACCENT}30` : "1px solid #333",
+                    background: `${ACCENT}08`,
+                    border: `1px solid ${ACCENT}20`,
                     boxShadow: isFinal ? `0 0 12px ${ACCENT}15` : "none",
                     color: "#ccc",
                     fontSize: 13,
