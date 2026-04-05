@@ -19,9 +19,9 @@ Two new models replace Mission:
 
 klaude invocation changes:
 - **First turn:** `klaude "{prompt}" --auto-approve --session-dir {trace_dir}` (same as today)
-- **Follow-up turns:** `klaude -c "{prompt}" --auto-approve --session-dir {trace_dir}` (adds `-c` flag to continue from existing trace)
+- **Follow-up turns:** `klaude -c "{prompt}" --auto-approve --session-dir {trace_dir}` (adds `-c` to resume from existing trace)
 
-The trace directory accumulates ATIF files across turns. The trace endpoint reads all files in chronological order to return the full conversation.
+klaude overwrites the same `{session_id}.json` trace file on each run — `TraceWriter.from_existing()` loads the file, appends new steps, and `save_session()` writes the complete history back. So the trace directory always has one file with the full conversation.
 
 ## Models
 
@@ -98,7 +98,7 @@ All endpoints stay under `/api/slops/`. The resource hierarchy changes from flat
 |----------|--------|------|-------------|
 | `GET /api/slops/` | GET | — | List sessions (paginated). Each session includes its turns array. Excludes sessions where all turns are rejected. |
 | `GET /api/slops/<id>/` | GET | — | Session detail with all turns. |
-| `GET /api/slops/<id>/trace/` | GET | — | Full ATIF trace. Reads all `.json` files in session's trace_path, sorted chronologically, returns as array. |
+| `GET /api/slops/<id>/trace/` | GET | — | Full ATIF trace. Reads the single `.json` file from session's trace_path. Same shape as ATIF PR: `{trace: ATIFDocument}`. |
 | `GET /api/slops/stats/` | GET | — | Aggregate stats (computed from turns). |
 
 ### Turn endpoints
@@ -174,18 +174,13 @@ Note: `total_missions` in the stats response becomes `total_sessions` + `total_t
 
 ### Trace response
 
-The trace endpoint changes to support multi-turn. Each klaude invocation produces a separate ATIF file in the trace directory. The endpoint returns all of them:
+Unchanged from ATIF PR. klaude overwrites the same trace file on each turn, so there's always one file with the full conversation:
 
 ```json
 {
-  "traces": [
-    { "schema_version": "1.4", "session_id": "...", "steps": [...], ... },
-    { "schema_version": "1.4", "session_id": "...", "steps": [...], ... }
-  ]
+  "trace": { "schema_version": "ATIF-v1.4", "session_id": "...", "steps": [...], "final_metrics": {...} }
 }
 ```
-
-If only one file exists (single-turn session), `traces` is still an array with one element.
 
 ## Celery Task Changes
 
@@ -196,12 +191,16 @@ Rename `run_mission` → `run_turn`. The task receives a `turn_id`.
 def run_turn(turn_id):
     turn = Turn.objects.select_related("session").get(id=turn_id)
     session = turn.session
-    # ...
+
     is_continuation = Turn.objects.filter(session=session, status="done").exclude(id=turn.id).exists()
-    # Build command: add -c flag if is_continuation
+
+    cmd = ["sudo", "-u", KLAUDE_USER, KLAUDE_BIN]
+    if is_continuation:
+        cmd.append("-c")  # resume from existing trace
+    cmd += [turn.prompt, "--auto-approve", "--session-dir", session.trace_path]
 ```
 
-Key change: add `-c` flag to the klaude command when the session has prior completed turns. Everything else (workspace dir, trace dir, ATIF parsing) stays the same. After execution, update both `turn` fields and `session.status`.
+Key change: add `-c` flag when the session has prior completed turns. klaude loads the existing ATIF file via `TraceWriter.from_existing()`, appends new steps, and overwrites. After execution, update `turn` fields and `session.status`.
 
 ## Frontend Changes
 
@@ -241,7 +240,7 @@ export interface SessionListResponse {
 }
 
 export interface SessionTrace {
-  traces: ATIFDocument[];
+  trace: ATIFDocument | null;
 }
 
 export interface SlopsStats {
@@ -277,20 +276,19 @@ export interface SlopsStats {
 
 ### TraceViewer
 
-- Receives `traces: ATIFDocument[]` instead of single trace.
-- Renders steps from all documents in sequence, with a visual separator between turns (e.g. a divider line with "Turn 2" label).
-- Each turn's user message shows the prompt that started it.
+- No structural change — still receives a single `ATIFDocument` since klaude overwrites the trace file with the full conversation on each turn.
+- Turn boundaries are visible from the user steps in the ATIF data (each user step = start of a turn).
+- No code changes needed beyond the ATIF PR's TraceViewer.
 
 ## Migration Strategy
 
-1. Create Session and Turn models.
-2. Write a data migration that converts each existing Mission into a Session + Turn:
-   - `Session(workspace=m.workspace, trace_path=m.trace_path, status=m.status, created_at=m.created_at)`
-   - `Turn(session=session, prompt=m.prompt, status=m.status, submitter_ip=m.submitter_ip, ...)` — copy all fields.
-3. Remove the Mission model in a separate migration.
-4. Update `models/__init__.py`: remove Mission, add Session + Turn.
-5. Update `views/__init__.py`: update exports.
-6. Update `urls.py`: new URL patterns.
+Existing Mission data is a single "hello" test — not worth preserving. Clean break:
+
+1. Create Session and Turn models (new migration).
+2. Remove the Mission model (separate migration).
+3. Update `models/__init__.py`: remove Mission, add Session + Turn.
+4. Update `views/__init__.py`: update exports.
+5. Update `urls.py`: new URL patterns.
 
 ## Scope Exclusions
 
