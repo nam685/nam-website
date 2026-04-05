@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from website.models import Session, Turn
@@ -256,13 +258,11 @@ class TestSlopsTrace:
         resp = client.get("/api/slops/999/trace/")
         assert resp.status_code == 404
 
-    def test_trace_file_exists(self, client, tmp_path):
-        trace_dir = tmp_path / "session-1"
-        trace_dir.mkdir()
-        trace_file = trace_dir / "20260405-120000.json"
-        trace_file.write_text('{"schema_version": "ATIF-v1.4", "steps": []}')
-        s = Session.objects.create(trace_path=str(trace_dir))
-        resp = client.get(f"/api/slops/{s.id}/trace/")
+    def test_trace_file_exists(self, client):
+        s = Session.objects.create(trace_path="/home/klaude/traces/session-1")
+        mock_trace = {"schema_version": "ATIF-v1.4", "steps": []}
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/")
         assert resp.status_code == 200
         data = resp.json()
         assert data["trace"]["schema_version"] == "ATIF-v1.4"

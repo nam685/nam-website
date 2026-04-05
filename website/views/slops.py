@@ -1,7 +1,5 @@
-import json
 import os
 from datetime import timedelta
-from pathlib import Path
 
 from django.db.models import Sum
 from django.http import JsonResponse
@@ -220,16 +218,11 @@ def slops_trace(request, session_id):
     if not s.trace_path:
         return JsonResponse({"trace": None})
 
-    # Find newest .json file in trace directory
-    trace_files = sorted(Path(s.trace_path).glob("*.json"), key=lambda f: f.stat().st_mtime)
-    if not trace_files:
-        return JsonResponse({"trace": None})
+    from website.tasks import _read_atif_trace
 
-    try:
-        with open(trace_files[-1]) as f:
-            content = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return JsonResponse({"error": "Failed to read trace file"}, status=500)
+    content = _read_atif_trace(s.trace_path)
+    if not content:
+        return JsonResponse({"trace": None})
 
     return JsonResponse({"trace": content})
 
