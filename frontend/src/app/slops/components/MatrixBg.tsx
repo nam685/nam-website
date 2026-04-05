@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 const ACCENT = "#39ff14";
-const CHARS = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789";
+const CHARS = "01{}[]()<>=/+*&|!?;:._-~#@$%^";
 const FONT_SIZE = 14;
 const FADE = "rgba(0,0,0,0.06)";
 
