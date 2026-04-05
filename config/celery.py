@@ -11,19 +11,19 @@ app.autodiscover_tasks()
 
 @worker_ready.connect
 def recover_stale_turns(**kwargs):
-    """Mark any turns stuck in 'running' as failed on worker startup.
+    """Re-queue any turns stuck in 'running' on worker startup.
 
-    This handles the case where a deploy restarts the Celery worker while
-    a klaude subprocess is mid-execution — the turn would be stuck in
-    'running' forever otherwise.
+    When a deploy restarts the Celery worker mid-execution, the turn
+    stays 'running' forever. Reset to 'approved' and re-queue so the
+    already-approved work gets retried automatically.
     """
-    from django.utils import timezone
+    from website.models import Turn
 
-    from website.models import Session, Turn
+    stale = list(Turn.objects.filter(status="running").values_list("id", flat=True))
+    if not stale:
+        return
 
-    stale = Turn.objects.filter(status="running")
-    count = stale.count()
-    if count:
-        stale.update(status="failed", error="Worker restarted during execution", completed_at=timezone.now())
-        Session.objects.filter(status="running").exclude(turns__status="running").update(status="failed")
-        print(f"[celery] recovered {count} stale running turn(s)")
+    Turn.objects.filter(id__in=stale).update(status="approved", started_at=None)
+    for turn_id in stale:
+        run_turn.delay(turn_id)
+    print(f"[celery] re-queued {len(stale)} stale running turn(s)")
