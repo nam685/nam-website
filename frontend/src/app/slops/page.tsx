@@ -295,9 +295,11 @@ export default function SlopsPage() {
         );
         return;
       }
+      const created: Session = await res.json();
       setPrompt("");
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
+      setSelectedId(created.id);
       await fetchSessions();
     } catch {
       setSubmitError("Network error");
