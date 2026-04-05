@@ -221,7 +221,7 @@ export default function SlopsPage() {
     setMenuOpen(false);
   };
 
-  const doAction = async (turnId: number, action: "approve" | "reject") => {
+  const doAction = async (turnId: number, action: "approve" | "reject" | "cancel") => {
     if (!adminToken) return;
     setActionLoading(true);
     try {
@@ -311,9 +311,10 @@ export default function SlopsPage() {
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const latestTurn = selected?.turns[selected.turns.length - 1] ?? null;
   const pendingTurn = selected?.turns.find((t) => t.status === "pending") ?? null;
-  const hasActiveTurn = selected?.turns.some(
-    (t) => t.status === "pending" || t.status === "approved" || t.status === "running",
-  );
+  const activeTurn = selected?.turns.find(
+    (t) => t.status === "running" || t.status === "approved",
+  ) ?? null;
+  const hasActiveTurn = !!pendingTurn || !!activeTurn;
 
   return (
     <div
@@ -678,6 +679,36 @@ export default function SlopsPage() {
                                   }
                                 >
                                   {actionLoading && pendingTurn ? "\u2026" : "Reject"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (!activeTurn) return;
+                                    setMenuOpen(false);
+                                    doAction(activeTurn.id, "cancel");
+                                  }}
+                                  disabled={actionLoading || !activeTurn}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    borderTop: "1px solid #222",
+                                    background: "transparent",
+                                    color: activeTurn ? "#f59e0b" : "#444",
+                                    fontSize: 12,
+                                    fontFamily: "monospace",
+                                    cursor: !activeTurn || actionLoading ? "not-allowed" : "pointer",
+                                    textAlign: "left",
+                                    opacity: activeTurn ? 1 : 0.5,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (activeTurn) e.currentTarget.style.background = "rgba(245,158,11,0.1)";
+                                  }}
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = "transparent")
+                                  }
+                                >
+                                  {actionLoading && activeTurn ? "\u2026" : "Cancel"}
                                 </button>
                                 <button
                                   onClick={() => doDelete(selected.id)}
