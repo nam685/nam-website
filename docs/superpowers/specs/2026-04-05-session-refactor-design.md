@@ -1,18 +1,18 @@
-# Session Refactor — Replace Mission with Session + Turn
+# Session Refactor — Session + Turn Models for /slops
 
 ## Goal
 
-Replace the single-shot Mission model with a Session + Turn model to support klaude's `-c` (continue) feature. Users can submit follow-up prompts to existing sessions, creating a multi-turn conversation experience similar to Claude web. Each turn goes through independent admin approval.
+Introduce Session + Turn models for /slops to support klaude's `-c` (continue) feature. Users can submit follow-up prompts to existing sessions, creating a multi-turn conversation experience similar to Claude web. Each turn goes through independent admin approval.
 
 **Depends on:** PR #171 (ATIF trace format) must land first. This spec assumes ATIF v1.4 is already in place.
 
 ## Motivation
 
-The current Mission model is one prompt → one execution. klaude now supports `-c` to continue from an existing ATIF trace, enabling multi-turn sessions. Without this refactor, every follow-up requires a brand new mission with a fresh workspace, losing all context from previous work.
+The current /slops page is one prompt → one execution. klaude now supports `-c` to continue from an existing ATIF trace, enabling multi-turn sessions. Without this refactor, every follow-up requires a fresh workspace, losing all context from previous work.
 
 ## Architecture
 
-Two new models replace Mission:
+Two models:
 
 - **Session** — persistent workspace + trace directory. The container for a multi-turn conversation with klaude. Has denormalized status from its latest turn for efficient listing.
 - **Turn** — a single prompt submission within a session. Each turn has its own approval lifecycle (pending → approved → running → done/failed, or rejected). Carries all the per-execution metadata (tokens, tool_calls, summary, error).
@@ -90,7 +90,7 @@ class Turn(models.Model):
 
 ## API Changes
 
-All endpoints stay under `/api/slops/`. The resource hierarchy changes from flat missions to sessions with nested turns.
+All endpoints stay under `/api/slops/`. Sessions with nested turns.
 
 ### Session endpoints
 
@@ -170,7 +170,6 @@ When approving a turn:
 }
 ```
 
-Note: `total_missions` in the stats response becomes `total_sessions` + `total_turns`.
 
 ### Trace response
 
@@ -184,7 +183,7 @@ Unchanged from ATIF PR. klaude overwrites the same trace file on each turn, so t
 
 ## Celery Task Changes
 
-Rename `run_mission` → `run_turn`. The task receives a `turn_id`.
+Celery task `run_turn` receives a `turn_id`.
 
 ```python
 @app.task(max_retries=0)
@@ -206,7 +205,7 @@ Key change: add `-c` flag when the session has prior completed turns. klaude loa
 
 ### TypeScript types (api.ts)
 
-Replace Mission types with Session/Turn types:
+Session/Turn types:
 
 ```typescript
 export type TurnStatus = "pending" | "approved" | "running" | "done" | "failed" | "rejected";
@@ -255,7 +254,7 @@ export interface SlopsStats {
 ### Page component (slops/page.tsx)
 
 **Sidebar:**
-- Lists sessions instead of missions.
+- Lists sessions.
 - Each entry shows: first turn's prompt (truncated), session status badge, aggregate token count (sum of turns), timestamp.
 - Badge color derived from `session.status`.
 
@@ -282,13 +281,11 @@ export interface SlopsStats {
 
 ## Migration Strategy
 
-Existing Mission data is a single "hello" test — not worth preserving. Clean break:
+Clean break — no data migration needed (existing data is throwaway):
 
-1. Create Session and Turn models (new migration).
-2. Remove the Mission model (separate migration).
-3. Update `models/__init__.py`: remove Mission, add Session + Turn.
-4. Update `views/__init__.py`: update exports.
-5. Update `urls.py`: new URL patterns.
+1. Remove old model + migration.
+2. Create Session and Turn models (new migration).
+3. Update `models/__init__.py`, `views/__init__.py`, `urls.py`.
 
 ## Scope Exclusions
 
