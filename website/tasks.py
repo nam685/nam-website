@@ -90,6 +90,8 @@ def _execute_klaude(turn, is_continuation):
     error = result.stderr if result.returncode != 0 else ""
     if not error and not atif:
         error = "klaude produced no trace output"
+    elif not error and not any(s.get("source") == "agent" for s in atif.get("steps", [])):
+        error = "klaude produced no agent response"
 
     return {
         "summary": summary,
