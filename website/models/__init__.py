@@ -3,9 +3,9 @@ from .feedback import Feedback
 from .github import GitHubContributions
 from .lichess import LichessToken
 from .listen import ListenTrack
-from .mission import Mission
 from .price_snapshot import PriceSnapshot
 from .project import Project
+from .session import Session, Turn
 from .thought import Thought
 from .ticker import Ticker
 from .todo import TodoItem, TodoSection
@@ -17,13 +17,14 @@ __all__ = [
     "GitHubContributions",
     "LichessToken",
     "ListenTrack",
-    "Mission",
     "PriceSnapshot",
     "Project",
+    "Session",
     "Thought",
     "Ticker",
     "TodoSection",
     "TodoItem",
+    "Turn",
     "WatchChannel",
     "WatchVideo",
 ]
