@@ -62,6 +62,7 @@ urlpatterns = [
     path("slops/<int:session_id>/", views.slops_detail),
     path("slops/<int:session_id>/delete/", views.slops_delete),
     path("slops/<int:session_id>/trace/", views.slops_trace),
+    path("slops/<int:session_id>/trace/download/", views.slops_trace_download),
     path("slops/turns/<int:turn_id>/approve/", views.slops_approve),
     path("slops/turns/<int:turn_id>/reject/", views.slops_reject),
     path("slops/turns/<int:turn_id>/cancel/", views.slops_cancel),
