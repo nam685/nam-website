@@ -700,6 +700,38 @@ export default function SlopsPage() {
                                   {actionLoading && activeTurn ? "\u2026" : "Cancel"}
                                 </button>
                                 <button
+                                  onClick={() => {
+                                    setMenuOpen(false);
+                                    const a = document.createElement("a");
+                                    a.href = `${API}/api/slops/${selected.id}/trace/download/?token=${adminToken}`;
+                                    a.download = `atif-session-${selected.id}.json`;
+                                    a.click();
+                                  }}
+                                  disabled={!trace?.trace}
+                                  style={{
+                                    display: "block",
+                                    width: "100%",
+                                    padding: "8px 12px",
+                                    border: "none",
+                                    borderTop: "1px solid #222",
+                                    background: "transparent",
+                                    color: trace?.trace ? "#60a5fa" : "#444",
+                                    fontSize: 12,
+                                    fontFamily: "monospace",
+                                    cursor: !trace?.trace ? "not-allowed" : "pointer",
+                                    textAlign: "left",
+                                    opacity: trace?.trace ? 1 : 0.5,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (trace?.trace) e.currentTarget.style.background = "rgba(96,165,250,0.1)";
+                                  }}
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.background = "transparent")
+                                  }
+                                >
+                                  Download trace
+                                </button>
+                                <button
                                   onClick={() => doDelete(selected.id)}
                                   disabled={actionLoading}
                                   style={{

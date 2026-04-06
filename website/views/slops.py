@@ -4,7 +4,7 @@ import re
 from datetime import timedelta
 
 from django.db.models import Sum
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -329,6 +329,45 @@ def slops_trace(request, session_id):
         return JsonResponse({"trace": None})
 
     return JsonResponse({"trace": {"messages": _atif_to_messages(atif), "step_count": len(atif.get("steps", []))}})
+
+
+@csrf_exempt
+def slops_trace_download(request, session_id):
+    """GET /api/slops/<id>/trace/download/ — download raw ATIF JSON file (admin only).
+
+    Accepts auth via Authorization header OR ?token= query param (for direct download links).
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=405)
+
+    # Accept token from header or query param (browser downloads can't set headers)
+    token = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+    else:
+        token = request.GET.get("token")
+    if not token or not verify_token(token):
+        return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    try:
+        s = Session.objects.get(id=session_id)
+    except Session.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if not s.trace_path:
+        return JsonResponse({"error": "No trace available"}, status=404)
+
+    from website.tasks import _read_atif_trace
+
+    atif = _read_atif_trace(s.trace_path)
+    if not atif:
+        return JsonResponse({"error": "No trace available"}, status=404)
+
+    content = json.dumps(atif, indent=2)
+    response = HttpResponse(content, content_type="application/json")
+    response["Content-Disposition"] = f'attachment; filename="atif-session-{session_id}.json"'
+    return response
 
 
 def slops_stats(request):

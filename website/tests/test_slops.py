@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 import pytest
@@ -405,6 +406,49 @@ class TestSlopsTrace:
             resp = client.get(f"/api/slops/{s2.id}/trace/")
             mock_read.assert_called_once_with("/home/klaude/traces/ws/2")
         assert resp.json()["trace"]["messages"][0]["content"] == "session B"
+
+
+@pytest.mark.django_db
+class TestSlopsTraceDownload:
+    def test_download_requires_auth(self, client):
+        s = Session.objects.create(trace_path="/home/klaude/traces/ws/1")
+        resp = client.get(f"/api/slops/{s.id}/trace/download/")
+        assert resp.status_code == 401
+
+    def test_download_via_header(self, client, auth_headers):
+        s = Session.objects.create(trace_path="/home/klaude/traces/ws/1")
+        mock_trace = {"schema_version": "ATIF-v1.4", "steps": [{"source": "user", "message": "hello"}]}
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/download/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp["Content-Disposition"] == f'attachment; filename="atif-session-{s.id}.json"'
+        assert resp["Content-Type"] == "application/json"
+        data = json.loads(resp.content)
+        assert data["schema_version"] == "ATIF-v1.4"
+        assert len(data["steps"]) == 1
+
+    def test_download_via_query_token(self, client, admin_token):
+        s = Session.objects.create(trace_path="/home/klaude/traces/ws/1")
+        mock_trace = {"schema_version": "ATIF-v1.4", "steps": []}
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/download/?token={admin_token}")
+        assert resp.status_code == 200
+        assert resp["Content-Disposition"] == f'attachment; filename="atif-session-{s.id}.json"'
+
+    def test_download_not_found(self, client, auth_headers):
+        resp = client.get("/api/slops/999/trace/download/", **auth_headers)
+        assert resp.status_code == 404
+
+    def test_download_no_trace_path(self, client, auth_headers):
+        s = Session.objects.create()
+        resp = client.get(f"/api/slops/{s.id}/trace/download/", **auth_headers)
+        assert resp.status_code == 404
+
+    def test_download_empty_trace(self, client, auth_headers):
+        s = Session.objects.create(trace_path="/home/klaude/traces/ws/1")
+        with patch("website.tasks._read_atif_trace", return_value={}):
+            resp = client.get(f"/api/slops/{s.id}/trace/download/", **auth_headers)
+        assert resp.status_code == 404
 
 
 @pytest.mark.django_db

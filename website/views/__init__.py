@@ -38,6 +38,7 @@ from .slops import (
     slops_stats,
     slops_submit,
     slops_trace,
+    slops_trace_download,
 )
 from .thought import thought_create, thought_list
 from .todo import todo_list
@@ -104,6 +105,7 @@ __all__ = [
     "slops_stats",
     "slops_submit",
     "slops_trace",
+    "slops_trace_download",
     "thought_create",
     "thought_list",
     "todo_list",
