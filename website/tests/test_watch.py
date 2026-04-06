@@ -409,20 +409,26 @@ def _reset_watch_rate_limit():
 
 @pytest.mark.django_db
 class TestWatchAuth:
-    def test_no_google_client_id(self, client, admin_token):
+    def test_no_google_client_id(self, client):
+        from website.utils import create_admin_nonce
+
+        nonce = create_admin_nonce()
         with patch.dict("os.environ", {"GOOGLE_CLIENT_ID": ""}, clear=False):
-            resp = client.get(f"/api/watches/auth/?token={admin_token}")
+            resp = client.get(f"/api/watches/auth/?nonce={nonce}")
             assert resp.status_code == 500
 
     @patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-client-id"})
-    def test_redirects_to_google(self, client, admin_token):
-        resp = client.get(f"/api/watches/auth/?token={admin_token}")
+    def test_redirects_to_google(self, client):
+        from website.utils import create_admin_nonce
+
+        nonce = create_admin_nonce()
+        resp = client.get(f"/api/watches/auth/?nonce={nonce}")
         assert resp.status_code == 302
         assert "accounts.google.com" in resp["Location"]
         assert "test-client-id" in resp["Location"]
         assert "youtube.readonly" in resp["Location"]
 
-    def test_requires_token(self, client):
+    def test_requires_nonce(self, client):
         with patch.dict("os.environ", {"GOOGLE_CLIENT_ID": "test-id"}):
             assert client.get("/api/watches/auth/").status_code == 401
 

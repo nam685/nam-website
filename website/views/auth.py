@@ -5,8 +5,8 @@ from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-from ..auth import create_token, verify_token
-from ..utils import get_client_ip, parse_json_body
+from ..auth import create_token, require_admin, verify_token
+from ..utils import create_admin_nonce, get_client_ip, parse_json_body
 
 _RATE_LIMIT_MAX = 15
 _RATE_LIMIT_WINDOW = 900  # 15 minutes
@@ -23,8 +23,8 @@ def _is_rate_limited(ip: str) -> bool:
         cache.set(key, count, _RATE_LIMIT_WINDOW)
         return count > _RATE_LIMIT_MAX
     except Exception:
-        # If cache is unavailable, fail open to avoid locking out the admin
-        return False
+        # If cache is unavailable, fail closed to prevent brute-force
+        return True
 
 
 @csrf_exempt
@@ -56,3 +56,12 @@ def check(request):
     if auth.startswith("Bearer ") and verify_token(auth[7:]):
         return JsonResponse({"authenticated": True})
     return JsonResponse({"authenticated": False})
+
+
+@csrf_exempt
+@require_admin
+def nonce(request):
+    """POST /api/auth/nonce/ — create a short-lived nonce for OAuth redirects."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    return JsonResponse({"nonce": create_admin_nonce()})
