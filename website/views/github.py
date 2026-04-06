@@ -7,9 +7,9 @@ import urllib.request
 from django.core.cache import cache as redis_cache
 from django.http import HttpResponseRedirect, JsonResponse
 
-from ..auth import require_admin, verify_token
+from ..auth import require_admin
 from ..models import GitHubContributions
-from ..utils import create_oauth_nonce, verify_oauth_nonce
+from ..utils import create_oauth_nonce, verify_admin_nonce, verify_oauth_nonce
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
@@ -30,9 +30,9 @@ def contributions(_request):
 
 
 def github_auth(request):
-    """Redirect to GitHub OAuth. Requires admin token as ?token= param."""
-    admin_token = request.GET.get("token", "")
-    if not admin_token or not verify_token(admin_token):
+    """Redirect to GitHub OAuth. Requires short-lived admin nonce as ?nonce= param."""
+    nonce = request.GET.get("nonce", "")
+    if not verify_admin_nonce(nonce):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     client_id = os.environ.get("GITHUB_CLIENT_ID", "")

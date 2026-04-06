@@ -13,9 +13,9 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from ..auth import require_admin, verify_token
+from ..auth import require_admin
 from ..models import WatchChannel, WatchVideo
-from ..utils import create_oauth_nonce, parse_json_body, parse_pagination, verify_oauth_nonce
+from ..utils import create_oauth_nonce, parse_json_body, parse_pagination, verify_admin_nonce, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -511,13 +511,13 @@ def _sync_liked_videos(access_token, max_pages=4):
 
 
 def watch_auth(request):
-    """Redirect to Google OAuth. Requires admin token as ?token= param."""
+    """Redirect to Google OAuth. Requires short-lived admin nonce as ?nonce= param."""
     client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
     if not client_id:
         return JsonResponse({"error": "Google OAuth not configured"}, status=500)
 
-    admin_token = request.GET.get("token", "")
-    if not admin_token or not verify_token(admin_token):
+    nonce = request.GET.get("nonce", "")
+    if not verify_admin_nonce(nonce):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     scheme = "https" if request.is_secure() else "http"

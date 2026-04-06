@@ -1,5 +1,6 @@
 from .auth import check as auth_check
 from .auth import login as auth_login
+from .auth import nonce as auth_nonce
 from .bets import (
     bets_create,
     bets_delete,
@@ -64,6 +65,7 @@ from .watch import (
 __all__ = [
     "auth_check",
     "auth_login",
+    "auth_nonce",
     "bets_create",
     "bets_delete",
     "bets_history",
