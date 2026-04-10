@@ -1,15 +1,16 @@
 [Unit]
-Description=Django (gunicorn)
+Description=Celery Worker for nam-website
 After=network.target docker.service
 Requires=docker.service
 
 [Service]
+Type=simple
 User=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-ExecStart=/home/nam/nam-website-deploy/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 120
+ExecStart=/home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1
 EnvironmentFile=/home/nam/nam-website-deploy/.env
 Restart=always
-RestartSec=3
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
