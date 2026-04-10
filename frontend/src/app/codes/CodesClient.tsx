@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API } from "@/lib/api";
-import { store } from "@/lib/auth";
+import { fetchAdminNonce, store } from "@/lib/auth";
 import { getContribColor } from "@/lib/contributions";
 import { formatRelativeDate } from "@/lib/date";
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
@@ -391,9 +391,11 @@ function RefreshButton() {
 
   if (!isAdmin) return null;
 
-  function handleRefresh() {
-    const token = store("adminToken") ?? "";
-    window.location.href = `${API}/api/github/auth/?token=${encodeURIComponent(token)}`;
+  async function handleRefresh() {
+    const nonce = await fetchAdminNonce();
+    if (nonce) {
+      window.location.href = `${API}/api/github/auth/?nonce=${encodeURIComponent(nonce)}`;
+    }
   }
 
   return (

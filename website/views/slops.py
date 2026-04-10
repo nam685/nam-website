@@ -257,10 +257,13 @@ def slops_cancel(request, turn_id):
     if turn.session.trace_path:
         import subprocess
 
-        subprocess.run(
-            ["sudo", "-u", "klaude", "pkill", "-f", f"--session-dir {turn.session.trace_path}"],
-            capture_output=True,
-        )
+        trace = turn.session.trace_path
+        # Validate trace_path matches expected format before passing to pkill
+        if re.fullmatch(r"/home/klaude/traces/[a-zA-Z0-9._-]+/\d+", trace):
+            subprocess.run(
+                ["sudo", "-u", "klaude", "pkill", "-f", f"--session-dir {trace}"],
+                capture_output=True,
+            )
 
     turn.status = "failed"
     turn.error = "Cancelled by admin"

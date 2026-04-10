@@ -5,6 +5,7 @@ from django.core.cache import cache as redis_cache
 from django.http import JsonResponse
 
 OAUTH_NONCE_TTL = 300  # 5 minutes
+ADMIN_NONCE_TTL = 60  # 1 minute — short-lived, used to replace token-in-URL for OAuth redirects
 
 
 def create_oauth_nonce():
@@ -19,6 +20,24 @@ def verify_oauth_nonce(nonce):
     if not nonce:
         return False
     key = f"oauth_nonce:{nonce}"
+    if redis_cache.get(key):
+        redis_cache.delete(key)
+        return True
+    return False
+
+
+def create_admin_nonce():
+    """Generate a short-lived nonce for admin OAuth redirects (replaces token-in-URL)."""
+    nonce = secrets.token_urlsafe(32)
+    redis_cache.set(f"admin_nonce:{nonce}", "1", ADMIN_NONCE_TTL)
+    return nonce
+
+
+def verify_admin_nonce(nonce):
+    """Verify and consume a one-time admin nonce. Returns True if valid."""
+    if not nonce:
+        return False
+    key = f"admin_nonce:{nonce}"
     if redis_cache.get(key):
         redis_cache.delete(key)
         return True
