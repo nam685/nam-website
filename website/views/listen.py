@@ -419,6 +419,9 @@ def listen_import(request):
     if not uploaded:
         return JsonResponse({"error": "No file uploaded. Send as multipart with field name 'file'."}, status=400)
 
+    if uploaded.size and uploaded.size > 50 * 1024 * 1024:
+        return JsonResponse({"error": "File too large (max 50 MB)"}, status=400)
+
     try:
         raw = json.loads(uploaded.read().decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):

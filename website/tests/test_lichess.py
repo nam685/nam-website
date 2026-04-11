@@ -50,12 +50,12 @@ def _reset_rate_limit():
 
 @pytest.mark.django_db
 class TestLichessAuthGuard:
-    def test_auth_requires_admin_token(self, client):
+    def test_auth_requires_nonce(self, client):
         resp = client.get("/api/lichess/auth/")
         assert resp.status_code == 401
 
-    def test_auth_rejects_bad_token(self, client):
-        resp = client.get("/api/lichess/auth/?token=bad")
+    def test_auth_rejects_bad_nonce(self, client):
+        resp = client.get("/api/lichess/auth/?nonce=bad")
         assert resp.status_code == 401
 
     def test_token_requires_auth(self, client):
@@ -68,8 +68,11 @@ class TestLichessAuthGuard:
 
 @pytest.mark.django_db
 class TestLichessAuth:
-    def test_redirects_to_lichess(self, client, admin_token):
-        resp = client.get(f"/api/lichess/auth/?token={admin_token}")
+    def test_redirects_to_lichess(self, client):
+        from website.utils import create_admin_nonce
+
+        nonce = create_admin_nonce()
+        resp = client.get(f"/api/lichess/auth/?nonce={nonce}")
         assert resp.status_code == 302
         location = resp["Location"]
         assert "lichess.org/oauth" in location
