@@ -34,7 +34,7 @@ import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
 interface ReadItem {
   title: string;
   author: string;
-  type: "book" | "paper" | "essay";
+  type: "book" | "paper" | "essay" | "audio book";
   description: string;
   tags: string[];
   url: string;
@@ -88,6 +88,18 @@ const READS: ReadItem[] = [
   },
 ];
 
+const ONGOING_READS: ReadItem[] = [
+  {
+    title: "The History of China",
+    author: "Chris Stewart",
+    type: "audio book",
+    description:
+      "A sweeping podcast journey through Chinese history from ancient dynasties to the modern era.",
+    tags: ["history", "china", "podcast"],
+    url: "https://www.airwavemedia.com/our-shows/the-history-of-china",
+  },
+];
+
 const FUTURE_READS: ReadItem[] = [
   {
     title: "AI Engineering",
@@ -106,12 +118,18 @@ const TYPE_LABEL: Record<string, string> = {
   book: "BOOK",
   paper: "PAPER",
   essay: "ESSAY",
+  "audio book": "AUDIO BOOK",
 };
 
 /* ── Read card ──────────────────────────────────── */
 
 function ReadCard({ item, dimmed }: { item: ReadItem; dimmed?: boolean }) {
-  const linkLabel = item.type === "essay" ? "READ ESSAY" : "READ PDF";
+  const linkLabel =
+    item.type === "essay"
+      ? "READ ESSAY"
+      : item.type === "audio book"
+        ? "LISTEN"
+        : "READ PDF";
   return (
     <div
       className="read-card"
@@ -347,6 +365,7 @@ export default function ReadsClient() {
         .read-card:nth-child(3) { animation-delay: 0.2s; }
         .read-card:nth-child(4) { animation-delay: 0.3s; }
         .read-card:nth-child(5) { animation-delay: 0.4s; }
+        .read-card:nth-child(6) { animation-delay: 0.5s; }
         .read-card:hover {
           border-color: color-mix(in srgb, ${ACCENT} 50%, #1a1a1a) !important;
           box-shadow: 0 0 24px color-mix(in srgb, ${ACCENT} 15%, transparent);
@@ -399,7 +418,8 @@ export default function ReadsClient() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
             gap: "1.5rem",
             position: "relative",
             zIndex: 2,
@@ -411,12 +431,31 @@ export default function ReadsClient() {
           ))}
         </div>
 
+        {/* ── Ongoing section ────────────────────────── */}
+        <SectionHeader label="// Ongoing" />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gap: "1.5rem",
+            position: "relative",
+            zIndex: 2,
+            marginBottom: "4rem",
+          }}
+        >
+          {ONGOING_READS.map((item) => (
+            <ReadCard key={item.title} item={item} />
+          ))}
+        </div>
+
         {/* ── Future Reads section ──────────────────── */}
         <SectionHeader label="// Queue" />
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
             gap: "1.5rem",
             position: "relative",
             zIndex: 2,
@@ -427,7 +466,6 @@ export default function ReadsClient() {
             <ReadCard key={item.title} item={item} dimmed />
           ))}
         </div>
-
       </div>
     </>
   );
