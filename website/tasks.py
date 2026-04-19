@@ -147,6 +147,12 @@ def run_turn(turn_id):
         turn.token_count = result["token_count"]
         turn.tool_calls = result["tool_calls"]
         turn.error = result["error"]
+        if turn.status == "done":
+            try:
+                _register_downloads(turn)
+            except Exception:
+                # Registration failures must never surface as turn failure
+                pass
     except Exception as e:
         turn.status = "failed"
         turn.error = str(e)

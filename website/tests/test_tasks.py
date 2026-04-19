@@ -246,3 +246,39 @@ class TestRegisterDownloads:
         assert cmd[2] == "klaude"
         assert cmd[3] == "find"
         assert f"downloads/{s.id}/{t.id}" in cmd[4]
+
+
+@pytest.mark.django_db
+class TestRunTurnRegistersDownloads:
+    def test_done_turn_calls_register_downloads(self):
+        s = Session.objects.create(workspace="ws", trace_path="/home/klaude/traces/ws/1", status="approved")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks._execute_klaude") as mock_exec,
+            patch("website.tasks._register_downloads") as mock_reg,
+        ):
+            mock_exec.return_value = {"summary": "ok", "token_count": 0, "tool_calls": 0, "error": ""}
+            run_turn(t.id)
+        mock_reg.assert_called_once()
+        assert mock_reg.call_args.args[0].id == t.id
+
+    def test_failed_turn_does_not_register_downloads(self):
+        s = Session.objects.create(workspace="ws", trace_path="/t", status="approved")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks._execute_klaude") as mock_exec,
+            patch("website.tasks._register_downloads") as mock_reg,
+        ):
+            mock_exec.return_value = {"summary": "", "token_count": 0, "tool_calls": 0, "error": "boom"}
+            run_turn(t.id)
+        mock_reg.assert_not_called()
+
+    def test_exception_does_not_register_downloads(self):
+        s = Session.objects.create(workspace="ws", trace_path="/t", status="approved")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks._execute_klaude", side_effect=Exception("x")),
+            patch("website.tasks._register_downloads") as mock_reg,
+        ):
+            run_turn(t.id)
+        mock_reg.assert_not_called()
