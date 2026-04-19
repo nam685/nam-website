@@ -1,10 +1,12 @@
 import json
 import os
 import re
+import subprocess
 from datetime import timedelta
+from urllib.parse import quote
 
 from django.db.models import Sum
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -272,8 +274,6 @@ def slops_cancel(request, turn_id):
 
     # Kill any running klaude process for this session's trace dir
     if turn.session.trace_path:
-        import subprocess
-
         trace = turn.session.trace_path
         # Validate trace_path matches expected format before passing to pkill
         if re.fullmatch(r"/home/klaude/traces/[a-zA-Z0-9._-]+/\d+", trace):
@@ -416,3 +416,47 @@ def slops_stats(request):
             "success_rate": success_rate,
         }
     )
+
+
+WORKSPACE_BASE = "/home/klaude/workspace"
+_DOWNLOAD_REL_RE_FULL = re.compile(r"downloads/\d+/\d+/.+")
+
+
+def _ascii_fallback(name: str) -> str:
+    """ASCII-only fallback for Content-Disposition filename=, with quotes escaped."""
+    ascii_name = name.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    return ascii_name or "download"
+
+
+def slops_download(request, download_id):
+    """GET /api/slops/downloads/<id>/ — public, streams the file bytes."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=405)
+
+    from website.models import Download
+
+    try:
+        d = Download.objects.select_related("turn__session").get(id=download_id)
+    except Download.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if d.oversize:
+        return JsonResponse({"error": "File too large to download"}, status=403)
+
+    session = d.turn.session
+    rel = f"downloads/{session.id}/{d.turn.id}/{d.filename}"
+    if not _DOWNLOAD_REL_RE_FULL.fullmatch(rel):
+        return JsonResponse({"error": "Invalid download"}, status=400)
+
+    abs_path = os.path.join(WORKSPACE_BASE, session.workspace, rel)
+
+    proc = subprocess.Popen(
+        ["sudo", "-u", "klaude", "cat", abs_path],
+        stdout=subprocess.PIPE,
+    )
+    response = StreamingHttpResponse(proc.stdout, content_type="application/octet-stream")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{_ascii_fallback(d.filename)}\"; filename*=UTF-8''{quote(d.filename)}"
+    )
+    response["Content-Length"] = str(d.size)
+    return response

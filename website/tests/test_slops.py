@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -556,3 +556,55 @@ class TestDownloadsInSerialization:
         Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
         resp = client.get(f"/api/slops/{s.id}/")
         assert resp.json()["turns"][0]["downloads"] == []
+
+
+@pytest.mark.django_db
+class TestSlopsDownload:
+    def _make_download(self, **kwargs):
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        return Download.objects.create(
+            turn=t,
+            filename=kwargs.get("filename", "a.md"),
+            size=kwargs.get("size", 10),
+            oversize=kwargs.get("oversize", False),
+        )
+
+    def test_404_on_missing(self, client):
+        resp = client.get("/api/slops/downloads/99999/")
+        assert resp.status_code == 404
+
+    def test_403_on_oversize(self, client):
+        d = self._make_download(size=10_000_000, oversize=True)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 403
+
+    def test_streams_bytes(self, client):
+        d = self._make_download(filename="hello.txt", size=12)
+        fake_proc = MagicMock()
+        fake_proc.stdout = iter([b"hello, world"])
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/octet-stream"
+        assert "attachment" in resp["Content-Disposition"]
+        assert "hello.txt" in resp["Content-Disposition"]
+        assert b"".join(resp.streaming_content) == b"hello, world"
+
+    def test_post_rejected(self, client):
+        d = self._make_download()
+        resp = client.post(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 405
+
+    def test_popen_called_with_sudo_klaude(self, client):
+        d = self._make_download(filename="x.bin", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout = iter([b"abc"])
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc) as mock_popen:
+            client.get(f"/api/slops/downloads/{d.id}/")
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[0] == "sudo"
+        assert cmd[1] == "-u"
+        assert cmd[2] == "klaude"
+        assert cmd[3] == "cat"
+        assert f"downloads/{d.turn.session.id}/{d.turn.id}/x.bin" in cmd[4]
