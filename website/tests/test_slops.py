@@ -1,9 +1,12 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 
-from website.models import Session, Turn
+from website.models import Attachment, Download, Session, Turn
+from website.slops_limits import MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
+from website.views.slops import _fmt_size
 
 
 @pytest.mark.django_db
@@ -479,3 +482,328 @@ class TestSlopsStats:
         assert data["total_tokens"] == 150
         assert data["total_tool_calls"] == 7
         assert data["success_rate"] == 50.0
+
+
+class TestFmtSize:
+    def test_zero_bytes(self):
+        assert _fmt_size(0) == "0 B"
+
+    def test_bytes(self):
+        assert _fmt_size(512) == "512 B"
+
+    def test_kilobytes(self):
+        assert _fmt_size(1024) == "1.0 KB"
+
+    def test_kilobytes_fraction(self):
+        assert _fmt_size(1536) == "1.5 KB"
+
+    def test_megabytes(self):
+        assert _fmt_size(5 * 1024 * 1024) == "5.0 MB"
+
+
+@pytest.mark.django_db
+class TestDownloadModel:
+    def test_create_download(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="out.md", size=123)
+        assert d.filename == "out.md"
+        assert d.size == 123
+        assert d.oversize is False
+        assert d.created_at is not None
+
+    def test_download_cascade_on_turn_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        t.delete()
+        assert Download.objects.count() == 0
+
+    def test_download_cascade_on_session_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        s.delete()
+        assert Download.objects.count() == 0
+
+    def test_oversize_flag(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="big.bin", size=10 * 1024 * 1024, oversize=True)
+        assert d.oversize is True
+
+
+@pytest.mark.django_db
+class TestDownloadsInSerialization:
+    def test_turn_includes_downloads_field(self, client):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        Download.objects.create(turn=t, filename="out.md", size=100)
+        Download.objects.create(turn=t, filename="big.bin", size=10_000_000, oversize=True)
+
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["turns"]) == 1
+        downloads = data["turns"][0]["downloads"]
+        assert len(downloads) == 2
+        assert downloads[0]["filename"] == "out.md"
+        assert downloads[0]["size"] == 100
+        assert downloads[0]["oversize"] is False
+        assert downloads[1]["oversize"] is True
+        assert "id" in downloads[0]
+
+    def test_turn_without_downloads_has_empty_list(self, client):
+        s = Session.objects.create()
+        Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.json()["turns"][0]["downloads"] == []
+
+
+@pytest.mark.django_db
+class TestSlopsDownload:
+    def _make_download(self, **kwargs):
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        return Download.objects.create(
+            turn=t,
+            filename=kwargs.get("filename", "a.md"),
+            size=kwargs.get("size", 10),
+            oversize=kwargs.get("oversize", False),
+        )
+
+    def test_404_on_missing(self, client):
+        resp = client.get("/api/slops/downloads/99999/")
+        assert resp.status_code == 404
+
+    def test_403_on_oversize(self, client):
+        d = self._make_download(size=10_000_000, oversize=True)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 403
+
+    def test_streams_bytes(self, client):
+        d = self._make_download(filename="hello.txt", size=12)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"hello, world", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/octet-stream"
+        assert "attachment" in resp["Content-Disposition"]
+        assert "hello.txt" in resp["Content-Disposition"]
+        assert b"".join(resp.streaming_content) == b"hello, world"
+
+    def test_post_rejected(self, client):
+        d = self._make_download()
+        resp = client.post(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 405
+
+    def test_popen_called_with_sudo_klaude(self, client):
+        d = self._make_download(filename="x.bin", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc) as mock_popen:
+            client.get(f"/api/slops/downloads/{d.id}/")
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[0] == "sudo"
+        assert cmd[1] == "-u"
+        assert cmd[2] == "klaude"
+        assert cmd[3] == "cat"
+        assert f"downloads/{d.turn.session.id}/{d.turn.id}/x.bin" in cmd[4]
+
+    def test_rejects_path_traversal_filename(self, client):
+        # Direct Download row whose filename would traverse out of the sandbox.
+        # Normally _register_downloads basename-strips via find -printf %f, but a
+        # malicious/future write path must still be rejected by the view.
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        d = Download.objects.create(turn=t, filename="../../etc/passwd", size=10, oversize=False)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        # Regex now rejects "/" in the filename segment → 400
+        assert resp.status_code == 400
+
+    def test_crlf_in_filename_does_not_500(self, client):
+        d = self._make_download(filename="line1\nline2.txt", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        # No raw CR/LF should have leaked into header values
+        assert "\n" not in resp["Content-Disposition"]
+        assert "\r" not in resp["Content-Disposition"]
+
+
+@pytest.mark.django_db
+class TestSlopsDeleteCleansDownloads:
+    @patch("website.views.slops.sudo_rm_rf")
+    def test_delete_shells_rm_rf_for_session_downloads(self, mock_rm, client, auth_headers):
+        s = Session.objects.create(workspace="ws")
+        resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        rm_args = [c.args[0] for c in mock_rm.call_args_list]
+        assert any(f"downloads/{s.id}" in a for a in rm_args), f"no downloads rm: {rm_args}"
+
+    @patch("website.views.slops.sudo_rm_rf")
+    def test_delete_skips_rm_when_no_workspace(self, mock_rm, client, auth_headers):
+        s = Session.objects.create()  # workspace=""
+        resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        mock_rm.assert_not_called()
+
+
+@pytest.mark.django_db
+class TestSlopsSubmitWithFiles:
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_submit_with_single_file(self, mock_mkdir, mock_write, client):
+        f = SimpleUploadedFile("data.csv", b"a,b\n1,2\n", content_type="text/csv")
+        resp = client.post(
+            "/api/slops/submit/",
+            {"prompt": "summarize this", "files": [f]},
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()
+        assert len(data["turns"]) == 1
+        turn = data["turns"][0]
+        assert len(turn["attachments"]) == 1
+        a = turn["attachments"][0]
+        assert a["filename"] == "data.csv"
+        assert a["size"] == 8
+        assert a["previewable"] is True
+        assert Attachment.objects.count() == 1
+        mock_mkdir.assert_called_once()
+        mock_write.assert_called_once()
+
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_submit_multiple_files(self, _mock_mkdir, _mock_write, client):
+        f1 = SimpleUploadedFile("a.txt", b"hello", content_type="text/plain")
+        f2 = SimpleUploadedFile("b.pdf", b"%PDF-1.4...", content_type="application/pdf")
+        resp = client.post(
+            "/api/slops/submit/",
+            {"prompt": "look at these", "files": [f1, f2]},
+        )
+        assert resp.status_code == 201
+        turn = resp.json()["turns"][0]
+        assert len(turn["attachments"]) == 2
+        names = [a["filename"] for a in turn["attachments"]]
+        assert names == ["a.txt", "b.pdf"]
+        assert [a["previewable"] for a in turn["attachments"]] == [True, False]
+
+    def test_reject_oversize_single(self, client):
+        big = SimpleUploadedFile("big.txt", b"x" * (MAX_SINGLE_FILE + 1))
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [big]})
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["error"].lower()
+        assert Attachment.objects.count() == 0
+
+    def test_reject_oversize_total(self, client):
+        half = b"x" * ((MAX_TOTAL_UPLOAD // 2) + 1)
+        f1 = SimpleUploadedFile("a.txt", half)
+        f2 = SimpleUploadedFile("b.txt", half)
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f1, f2]})
+        assert resp.status_code == 413
+        assert Attachment.objects.count() == 0
+
+    def test_reject_too_many_files(self, client):
+        files = [SimpleUploadedFile(f"f{i}.txt", b"x") for i in range(6)]
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": files})
+        assert resp.status_code == 400
+        assert "too many" in resp.json()["error"].lower()
+
+    def test_reject_disallowed_extension(self, client):
+        f = SimpleUploadedFile("evil.exe", b"MZ...")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 400
+        assert ".exe" in resp.json()["error"]
+
+    def test_reject_dotfile(self, client):
+        f = SimpleUploadedFile(".env", b"SECRET=1")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestSlopsCleanupOnReject:
+    @patch("website.views.slops.sudo_rm_rf")
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_reject_cleans_up_uploads(self, _mock_mkdir, _mock_write, mock_rm, client, auth_headers):
+        f = SimpleUploadedFile("a.txt", b"hi")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 201
+        turn_id = resp.json()["turns"][0]["id"]
+        session_id = resp.json()["id"]
+
+        resp = client.post(f"/api/slops/turns/{turn_id}/reject/", **auth_headers)
+        assert resp.status_code == 200
+        mock_rm.assert_called_once()
+        call_arg = mock_rm.call_args[0][0]
+        assert call_arg.endswith(f"uploads/{session_id}/{turn_id}")
+
+    @patch("website.views.slops.sudo_rm_rf")
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_delete_session_cleans_up_uploads(self, _mock_mkdir, _mock_write, mock_rm, client, auth_headers):
+        f = SimpleUploadedFile("a.txt", b"hi")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        session_id = resp.json()["id"]
+
+        resp = client.post(f"/api/slops/{session_id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        rm_args = [c.args[0] for c in mock_rm.call_args_list]
+        assert any(a.endswith(f"uploads/{session_id}") for a in rm_args), f"no uploads rm: {rm_args}"
+
+
+@pytest.mark.django_db
+class TestAttachmentPreview:
+    def _make_turn_with_attachment(self, client, filename, content):
+        with patch("website.views.slops.sudo_write_file"), patch("website.views.slops.sudo_mkdir_p"):
+            f = SimpleUploadedFile(filename, content)
+            resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+            assert resp.status_code == 201
+            return resp.json()["turns"][0]["attachments"][0]["id"]
+
+    def test_requires_admin(self, client):
+        a_id = self._make_turn_with_attachment(client, "a.txt", b"hello")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/")
+        assert resp.status_code == 401
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_returns_content_for_text(self, mock_read, client, auth_headers):
+        mock_read.return_value = b"hello world"
+        a_id = self._make_turn_with_attachment(client, "a.txt", b"hello world")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["content"] == "hello world"
+        assert data["truncated"] is False
+        assert data["total_size"] == 11
+
+    def test_404_for_binary(self, client, auth_headers):
+        a_id = self._make_turn_with_attachment(client, "a.pdf", b"%PDF")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 404
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_truncates_large(self, mock_read, client, auth_headers):
+        big = b"x" * (64 * 1024 + 500)
+        mock_read.return_value = big
+        a_id = self._make_turn_with_attachment(client, "a.txt", big)
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        data = resp.json()
+        assert data["truncated"] is True
+        assert len(data["content"].encode()) <= 64 * 1024 + 200  # content + footer
+        assert data["total_size"] == len(big)
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_rejects_non_utf8(self, mock_read, client, auth_headers):
+        mock_read.return_value = b"\xff\xfe\x00\x00binary"
+        a_id = self._make_turn_with_attachment(client, "fake.txt", b"ignored")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 400
+        assert "utf-8" in resp.json()["error"].lower()
