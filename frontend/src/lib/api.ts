@@ -232,6 +232,13 @@ export type TurnStatus =
   | "failed"
   | "rejected";
 
+export interface Download {
+  id: number;
+  filename: string;
+  size: number;
+  oversize: boolean;
+}
+
 export interface Turn {
   id: number;
   prompt: string;
@@ -245,6 +252,7 @@ export interface Turn {
   approved_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  downloads?: Download[];
 }
 
 export interface Session {
