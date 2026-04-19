@@ -45,6 +45,7 @@ Agent showcase page for klaude, a DIY Claude Code harness powered by open-source
 - Multi-turn sessions: submit follow-up prompts to continue existing sessions
 - Admin: approve/reject pending turns, view live traces
 - Rate limiting: 1 submission/hr per IP + 10/hr global cap
+- File downloads: klaude can share files with the user by writing to a per-turn `downloads/` directory; files appear as clickable chips below its message (5 files max, 5 MB each, 10 MB total per turn)
 - Security: separate Linux user, scoped GitHub access, network restrictions
 
 ## Feedback
