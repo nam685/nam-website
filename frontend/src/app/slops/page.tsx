@@ -11,6 +11,7 @@ import {
 import { store } from "@/lib/auth";
 import { timeAgo } from "@/lib/date";
 import { validateFiles, formatSize, ALLOWED_EXTENSIONS } from "@/lib/slopsLimits";
+import AttachmentList from "./components/AttachmentList";
 import HeroSection from "./components/HeroSection";
 import MatrixBg from "./components/MatrixBg";
 import TraceViewer from "./components/TraceViewer";
@@ -805,6 +806,14 @@ export default function SlopsPage() {
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {selected && selected.turns.some((t) => (t.attachments ?? []).length > 0) && (
+                      <AttachmentList
+                        turns={selected.turns}
+                        isAdmin={!!adminToken}
+                        adminToken={adminToken}
+                      />
                     )}
 
                     {trace && (
