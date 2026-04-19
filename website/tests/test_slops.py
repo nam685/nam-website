@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from website.models import Session, Turn
+from website.models import Download, Session, Turn
 from website.views.slops import _fmt_size
 
 
@@ -497,3 +497,35 @@ class TestFmtSize:
 
     def test_megabytes(self):
         assert _fmt_size(5 * 1024 * 1024) == "5.0 MB"
+
+
+@pytest.mark.django_db
+class TestDownloadModel:
+    def test_create_download(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="out.md", size=123)
+        assert d.filename == "out.md"
+        assert d.size == 123
+        assert d.oversize is False
+        assert d.created_at is not None
+
+    def test_download_cascade_on_turn_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        t.delete()
+        assert Download.objects.count() == 0
+
+    def test_download_cascade_on_session_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        s.delete()
+        assert Download.objects.count() == 0
+
+    def test_oversize_flag(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="big.bin", size=10 * 1024 * 1024, oversize=True)
+        assert d.oversize is True
