@@ -5,11 +5,17 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from PIL import Image as PILImage  # noqa: I001
+from pillow_heif import register_heif_opener
 
 from ..auth import require_admin
 from ..models import Drawing
 
-ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
+register_heif_opener()
+
+ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP", "HEIF"}
+# Formats browsers can't render — re-encode on save.
+CONVERT_TO_JPEG = {"HEIF"}
+CONVERT_TO_PNG = {"BMP"}
 MIN_RATIO = 0.8
 MAX_RATIO = 1.2
 
@@ -88,7 +94,15 @@ def drawing_upload(request):
 
     img = _normalize_image(img)
     buf = io.BytesIO()
-    save_fmt = fmt if fmt != "BMP" else "PNG"
+    if fmt in CONVERT_TO_JPEG:
+        save_fmt = "JPEG"
+    elif fmt in CONVERT_TO_PNG:
+        save_fmt = "PNG"
+    else:
+        save_fmt = fmt
+    # JPEG can't encode alpha or palette modes.
+    if save_fmt == "JPEG" and img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
     img.save(buf, format=save_fmt)
     ext = save_fmt.lower()
     if ext == "jpeg":
