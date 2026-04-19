@@ -3,8 +3,11 @@ import io
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image as PILImage
+from pillow_heif import register_heif_opener
 
 from website.models import Drawing
+
+register_heif_opener()
 
 
 def _make_image(fmt="JPEG", size=(100, 100)):
@@ -13,8 +16,9 @@ def _make_image(fmt="JPEG", size=(100, 100)):
     img = PILImage.new("RGB", size, color="red")
     img.save(buf, format=fmt)
     buf.seek(0)
-    ext = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}.get(fmt, "bin")
-    return SimpleUploadedFile(f"test.{ext}", buf.read(), content_type=f"image/{ext}")
+    ext = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp", "HEIF": "heic"}.get(fmt, "bin")
+    content_type = "image/heic" if fmt == "HEIF" else f"image/{ext}"
+    return SimpleUploadedFile(f"test.{ext}", buf.read(), content_type=content_type)
 
 
 @pytest.mark.django_db
@@ -65,6 +69,27 @@ class TestDrawingUpload:
             **auth_headers,
         )
         assert resp.status_code == 400
+
+    def test_upload_heic_converted_to_jpeg(self, client, auth_headers):
+        image = _make_image("HEIF")
+        resp = client.post(
+            "/api/drawings/upload/",
+            {"image": image, "category": "camera"},
+            **auth_headers,
+        )
+        assert resp.status_code == 201, resp.content
+        drawing = Drawing.objects.get(id=resp.json()["id"])
+        assert drawing.image.name.endswith(".jpg")
+
+    def test_upload_corrupt_file_rejected(self, client, auth_headers):
+        bogus = SimpleUploadedFile("not-an-image.jpg", b"not an image at all", content_type="image/jpeg")
+        resp = client.post(
+            "/api/drawings/upload/",
+            {"image": bogus, "category": "pencil"},
+            **auth_headers,
+        )
+        assert resp.status_code == 400
+        assert "Invalid" in resp.json()["error"]
 
     def test_upload_too_large(self, client, auth_headers):
         # Create a file that claims to be >10MB
