@@ -110,3 +110,29 @@ class TestBuildDownloadsPrefix:
         t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1")
         prefix = _build_downloads_prefix(s, t)
         assert prefix.endswith("\n\n")
+
+
+@pytest.mark.django_db
+class TestExecuteKlaudeUsesPrefix:
+    def test_prompt_passed_to_klaude_includes_downloads_prefix(self):
+        s = Session.objects.create(workspace="ws", trace_path="/home/klaude/traces/ws/1")
+        t = Turn.objects.create(session=s, prompt="do the thing", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks.subprocess.run") as mock_run,
+            patch("website.tasks._read_atif_trace", return_value={}),
+        ):
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = ""
+            mock_run.return_value.stderr = ""
+            from website.tasks import _execute_klaude
+
+            _execute_klaude(t, is_continuation=False)
+
+        # Find the call that invoked the klaude CLI (last arg looks like the CLI path)
+        klaude_cmds = [c for c in mock_run.call_args_list if any("/klaude" in (a or "") for a in c.args[0])]
+        assert klaude_cmds, "klaude CLI was not invoked"
+        cmd = klaude_cmds[-1].args[0]
+        # Find the prompt argument (the one starting with '[downloads')
+        prompt_args = [a for a in cmd if a.startswith("[downloads")]
+        assert prompt_args, f"no downloads-prefixed prompt in {cmd!r}"
+        assert "do the thing" in prompt_args[0]

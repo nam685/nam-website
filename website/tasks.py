@@ -81,7 +81,8 @@ def _execute_klaude(turn, is_continuation):
     cmd = ["sudo", "-u", KLAUDE_USER, KLAUDE_BIN]
     if is_continuation:
         cmd.append("-c")
-    cmd += [turn.prompt, "--auto-approve", "--session-dir", trace_dir]
+    effective_prompt = _build_downloads_prefix(session, turn) + turn.prompt
+    cmd += [effective_prompt, "--auto-approve", "--session-dir", trace_dir]
 
     result = subprocess.run(
         cmd,
