@@ -100,7 +100,8 @@ GET  /api/lichess/status/       public, returns connection status
 GET  /api/slops/                    session list (paginated, with turns)
 GET  /api/slops/<id>/               single session detail with turns
 GET  /api/slops/<id>/trace/         ATIF trace file contents
-POST /api/slops/submit/             submit prompt (1/hr/IP + 10/hr global), optional session_id for follow-up
+POST /api/slops/submit/             submit prompt (1/hr/IP + 10/hr global), optional session_id, optional multipart `files[]`
+GET  /api/slops/attachments/<id>/preview/ auth required, UTF-8 text content (64 KB cap)
 POST /api/slops/turns/<id>/approve/ auth required, approve turn + queue
 POST /api/slops/turns/<id>/reject/  auth required, reject turn
 GET  /api/slops/stats/              aggregate stats (from turns)
