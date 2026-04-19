@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from website.models import Session, Turn
-from website.tasks import run_turn
+from website.tasks import _build_downloads_prefix, run_turn
 
 
 @pytest.mark.django_db
@@ -87,3 +87,26 @@ class TestRunTurn:
         assert t.status == "failed"
         assert t.error == "something went wrong"
         assert s.status == "failed"
+
+
+@pytest.mark.django_db
+class TestBuildDownloadsPrefix:
+    def test_includes_path_with_ids(self):
+        s = Session.objects.create(workspace="ws1", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1")
+        prefix = _build_downloads_prefix(s, t)
+        assert f"downloads/{s.id}/{t.id}/" in prefix
+
+    def test_mentions_caps(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1")
+        prefix = _build_downloads_prefix(s, t)
+        assert "5 files" in prefix
+        assert "5.0 MB" in prefix
+        assert "10.0 MB" in prefix
+
+    def test_ends_with_blank_line(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1")
+        prefix = _build_downloads_prefix(s, t)
+        assert prefix.endswith("\n\n")

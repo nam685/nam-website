@@ -6,6 +6,12 @@ from django.utils import timezone
 
 from config.celery import app
 from website.models import Turn
+from website.views.slops import (
+    MAX_FILES_PER_TURN,
+    MAX_SINGLE_FILE,
+    MAX_TOTAL_UPLOAD,
+    _fmt_size,
+)
 
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
@@ -48,6 +54,18 @@ def _read_atif_trace(trace_dir):
         return json.loads(content)
     except json.JSONDecodeError:
         return {}
+
+
+def _build_downloads_prefix(session, turn) -> str:
+    """Prefix klaude sees telling it where to drop files for the user."""
+    return (
+        f"[downloads — you can share files with the user by writing them to "
+        f"downloads/{session.id}/{turn.id}/. "
+        f"Max {MAX_FILES_PER_TURN} files, {_fmt_size(MAX_SINGLE_FILE)} each, "
+        f"{_fmt_size(MAX_TOTAL_UPLOAD)} total. "
+        f"Files exceeding the per-file size will be shown to the user but "
+        f"marked as too large to download.]\n\n"
+    )
 
 
 def _execute_klaude(turn, is_continuation):
