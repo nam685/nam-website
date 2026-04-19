@@ -54,8 +54,13 @@ describe("validateFiles", () => {
   });
 
   it("rejects oversize total", () => {
-    const half = Math.floor(MAX_TOTAL_UPLOAD / 2) + 1;
-    const res = validateFiles([mk("a.txt", half), mk("b.txt", half)]);
+    // Each file is under MAX_SINGLE_FILE, but three together exceed MAX_TOTAL_UPLOAD.
+    const each = Math.floor(MAX_TOTAL_UPLOAD / 3) + 1;
+    const res = validateFiles([
+      mk("a.txt", each),
+      mk("b.txt", each),
+      mk("c.txt", each),
+    ]);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/total/i);
   });
