@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from website.models import Session, Turn
+from website.views.slops import _fmt_size
 
 
 @pytest.mark.django_db
@@ -479,9 +480,6 @@ class TestSlopsStats:
         assert data["total_tokens"] == 150
         assert data["total_tool_calls"] == 7
         assert data["success_rate"] == 50.0
-
-
-from website.views.slops import _fmt_size
 
 
 class TestFmtSize:
