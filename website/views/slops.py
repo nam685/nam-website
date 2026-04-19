@@ -253,6 +253,15 @@ def slops_delete(request, session_id):
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
+    if session.workspace:
+        rel = f"downloads/{session.id}"
+        if re.fullmatch(r"downloads/\d+", rel):
+            abs_dir = os.path.join(WORKSPACE_BASE, session.workspace, rel)
+            subprocess.run(
+                ["sudo", "-u", "klaude", "rm", "-rf", "--", abs_dir],
+                capture_output=True,
+            )
+
     session.delete()
     return JsonResponse({"ok": True})
 

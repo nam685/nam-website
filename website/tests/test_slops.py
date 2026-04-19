@@ -633,3 +633,28 @@ class TestSlopsDownload:
         # No raw CR/LF should have leaked into header values
         assert "\n" not in resp["Content-Disposition"]
         assert "\r" not in resp["Content-Disposition"]
+
+
+@pytest.mark.django_db
+class TestSlopsDeleteCleansDownloads:
+    def test_delete_shells_rm_rf_for_session_downloads(self, client, auth_headers):
+        s = Session.objects.create(workspace="ws")
+        with patch("website.views.slops.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        # Find the rm -rf call
+        rm_calls = [c for c in mock_run.call_args_list if "rm" in c.args[0]]
+        assert rm_calls, f"no rm call found among {mock_run.call_args_list}"
+        cmd = rm_calls[0].args[0]
+        assert cmd[:4] == ["sudo", "-u", "klaude", "rm"]
+        assert "-rf" in cmd
+        assert any(f"downloads/{s.id}" in a for a in cmd)
+
+    def test_delete_skips_rm_when_no_workspace(self, client, auth_headers):
+        s = Session.objects.create()  # workspace=""
+        with patch("website.views.slops.subprocess.run") as mock_run:
+            resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        rm_calls = [c for c in mock_run.call_args_list if "rm" in c.args[0]]
+        assert not rm_calls
