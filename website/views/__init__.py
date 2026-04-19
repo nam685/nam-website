@@ -31,9 +31,11 @@ from .listen import (
 from .project import project_list
 from .slops import (
     slops_approve,
+    slops_attachment_preview,
     slops_cancel,
     slops_delete,
     slops_detail,
+    slops_download,
     slops_list,
     slops_reject,
     slops_stats,
@@ -99,9 +101,11 @@ __all__ = [
     "listen_top_tracks",
     "project_list",
     "slops_approve",
+    "slops_attachment_preview",
     "slops_cancel",
     "slops_delete",
     "slops_detail",
+    "slops_download",
     "slops_list",
     "slops_reject",
     "slops_stats",
