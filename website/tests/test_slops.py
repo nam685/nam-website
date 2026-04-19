@@ -593,3 +593,53 @@ class TestSlopsCleanupOnReject:
         mock_rm.assert_called_once()
         call_arg = mock_rm.call_args[0][0]
         assert call_arg.endswith(f"uploads/{session_id}")
+
+
+@pytest.mark.django_db
+class TestAttachmentPreview:
+    def _make_turn_with_attachment(self, client, filename, content):
+        with patch("website.views.slops.sudo_write_file"), patch("website.views.slops.sudo_mkdir_p"):
+            f = SimpleUploadedFile(filename, content)
+            resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+            assert resp.status_code == 201
+            return resp.json()["turns"][0]["attachments"][0]["id"]
+
+    def test_requires_admin(self, client):
+        a_id = self._make_turn_with_attachment(client, "a.txt", b"hello")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/")
+        assert resp.status_code == 401
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_returns_content_for_text(self, mock_read, client, auth_headers):
+        mock_read.return_value = b"hello world"
+        a_id = self._make_turn_with_attachment(client, "a.txt", b"hello world")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["content"] == "hello world"
+        assert data["truncated"] is False
+        assert data["total_size"] == 11
+
+    def test_404_for_binary(self, client, auth_headers):
+        a_id = self._make_turn_with_attachment(client, "a.pdf", b"%PDF")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 404
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_truncates_large(self, mock_read, client, auth_headers):
+        big = b"x" * (64 * 1024 + 500)
+        mock_read.return_value = big
+        a_id = self._make_turn_with_attachment(client, "a.txt", big)
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        data = resp.json()
+        assert data["truncated"] is True
+        assert len(data["content"].encode()) <= 64 * 1024 + 200  # content + footer
+        assert data["total_size"] == len(big)
+
+    @patch("website.views.slops.sudo_read_bytes")
+    def test_rejects_non_utf8(self, mock_read, client, auth_headers):
+        mock_read.return_value = b"\xff\xfe\x00\x00binary"
+        a_id = self._make_turn_with_attachment(client, "fake.txt", b"ignored")
+        resp = client.get(f"/api/slops/attachments/{a_id}/preview/", **auth_headers)
+        assert resp.status_code == 400
+        assert "utf-8" in resp.json()["error"].lower()

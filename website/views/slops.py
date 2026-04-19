@@ -13,9 +13,10 @@ from website.slops_limits import (
     MAX_FILES_PER_TURN,
     MAX_SINGLE_FILE,
     MAX_TOTAL_UPLOAD,
+    PREVIEW_MAX_BYTES,
     TEXT_EXTENSIONS,
 )
-from website.tasks import sudo_mkdir_p, sudo_rm_rf, sudo_write_file
+from website.tasks import sudo_mkdir_p, sudo_read_bytes, sudo_rm_rf, sudo_write_file
 
 from ..auth import require_admin, verify_token
 from ..models import Attachment, Session, Turn
@@ -547,3 +548,47 @@ def slops_stats(request):
             "success_rate": success_rate,
         }
     )
+
+
+@require_admin
+def slops_attachment_preview(request, attachment_id):
+    """GET /api/slops/attachments/<id>/preview/ — admin-only text preview."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=405)
+
+    try:
+        a = Attachment.objects.select_related("turn__session").get(id=attachment_id)
+    except Attachment.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    ext = os.path.splitext(a.filename)[1].lower()
+    if ext not in TEXT_EXTENSIONS:
+        return JsonResponse({"error": "Not previewable"}, status=404)
+
+    session = a.turn.session
+    if not session.workspace:
+        return JsonResponse({"error": "No workspace"}, status=404)
+
+    rel = _upload_dir_rel(session.id, a.turn_id)
+    if not _UPLOAD_PATH_RE.match(rel):
+        return JsonResponse({"error": "Invalid path"}, status=500)
+
+    from website.tasks import WORKSPACE_BASE
+
+    abs_path = os.path.join(WORKSPACE_BASE, session.workspace, rel, a.filename)
+    raw = sudo_read_bytes(abs_path)
+    if raw is None:
+        return JsonResponse({"error": "File not found"}, status=404)
+
+    total_size = len(raw)
+    truncated = total_size > PREVIEW_MAX_BYTES
+    chunk = raw[:PREVIEW_MAX_BYTES]
+    try:
+        text = chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        return JsonResponse({"error": "Not valid UTF-8 text"}, status=400)
+
+    if truncated:
+        text += f"\n[truncated — showing first {PREVIEW_MAX_BYTES // 1024} KB of {total_size // 1024} KB]"
+
+    return JsonResponse({"content": text, "truncated": truncated, "total_size": total_size})
