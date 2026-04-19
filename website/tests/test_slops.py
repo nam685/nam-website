@@ -2,8 +2,10 @@ import json
 from unittest.mock import patch
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 
-from website.models import Session, Turn
+from website.models import Attachment, Session, Turn
+from website.slops_limits import MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 
 @pytest.mark.django_db
@@ -481,13 +483,6 @@ class TestSlopsStats:
         assert data["success_rate"] == 50.0
 
 
-
-from django.core.files.uploadedfile import SimpleUploadedFile
-
-from website.models import Attachment
-from website.slops_limits import MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
-
-
 @pytest.mark.django_db
 class TestSlopsSubmitWithFiles:
     @patch("website.views.slops.sudo_write_file")
@@ -513,7 +508,7 @@ class TestSlopsSubmitWithFiles:
 
     @patch("website.views.slops.sudo_write_file")
     @patch("website.views.slops.sudo_mkdir_p")
-    def test_submit_multiple_files(self, mock_mkdir, mock_write, client):
+    def test_submit_multiple_files(self, _mock_mkdir, _mock_write, client):
         f1 = SimpleUploadedFile("a.txt", b"hello", content_type="text/plain")
         f2 = SimpleUploadedFile("b.pdf", b"%PDF-1.4...", content_type="application/pdf")
         resp = client.post(
@@ -565,7 +560,7 @@ class TestSlopsCleanupOnReject:
     @patch("website.views.slops.sudo_rm_rf")
     @patch("website.views.slops.sudo_write_file")
     @patch("website.views.slops.sudo_mkdir_p")
-    def test_reject_cleans_up_uploads(self, mock_mkdir, mock_write, mock_rm, client, auth_headers):
+    def test_reject_cleans_up_uploads(self, _mock_mkdir, _mock_write, mock_rm, client, auth_headers):
         f = SimpleUploadedFile("a.txt", b"hi")
         resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
         assert resp.status_code == 201
@@ -581,9 +576,7 @@ class TestSlopsCleanupOnReject:
     @patch("website.views.slops.sudo_rm_rf")
     @patch("website.views.slops.sudo_write_file")
     @patch("website.views.slops.sudo_mkdir_p")
-    def test_delete_session_cleans_up_uploads(
-        self, mock_mkdir, mock_write, mock_rm, client, auth_headers
-    ):
+    def test_delete_session_cleans_up_uploads(self, _mock_mkdir, _mock_write, mock_rm, client, auth_headers):
         f = SimpleUploadedFile("a.txt", b"hi")
         resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
         session_id = resp.json()["id"]

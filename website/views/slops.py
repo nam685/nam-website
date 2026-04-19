@@ -2,6 +2,7 @@ import json
 import os
 import re
 from datetime import timedelta
+from pathlib import PurePosixPath, PureWindowsPath
 
 from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
@@ -23,9 +24,6 @@ from ..models import Attachment, Session, Turn
 from ..utils import get_client_ip, parse_json_body, parse_pagination
 
 _WORKSPACE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
-
-from pathlib import PurePosixPath, PureWindowsPath
-
 _UPLOAD_PATH_RE = re.compile(r"^uploads/\d+(/\d+)?$")
 
 
