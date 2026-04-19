@@ -1,11 +1,12 @@
 import json
 import os
+import re
 import subprocess
 
 from django.utils import timezone
 
 from config.celery import app
-from website.models import Turn
+from website.models import Download, Turn
 from website.views.slops import (
     MAX_FILES_PER_TURN,
     MAX_SINGLE_FILE,
@@ -155,3 +156,43 @@ def run_turn(turn_id):
 
     session.status = turn.status
     session.save(update_fields=["status"])
+
+
+_DOWNLOAD_REL_RE = re.compile(r"downloads/\d+/\d+")
+
+
+def _register_downloads(turn):
+    """After a turn completes, scan its downloads dir and create Download rows."""
+    session = turn.session
+    if not session.workspace:
+        return
+    rel_dir = f"downloads/{session.id}/{turn.id}"
+    if not _DOWNLOAD_REL_RE.fullmatch(rel_dir):
+        return  # defensive: should be unreachable
+    abs_dir = os.path.join(WORKSPACE_BASE, session.workspace, rel_dir)
+
+    result = subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "find", abs_dir, "-maxdepth", "1", "-type", "f", "-printf", "%f|%s\n"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return
+
+    servable_total = 0
+    created = 0
+    for line in result.stdout.strip().split("\n"):
+        try:
+            name, size_str = line.rsplit("|", 1)
+            size = int(size_str)
+        except (ValueError, IndexError):
+            continue
+        if created >= MAX_FILES_PER_TURN:
+            break
+        oversize = size > MAX_SINGLE_FILE
+        if not oversize and servable_total + size > MAX_TOTAL_UPLOAD:
+            break
+        Download.objects.create(turn=turn, filename=name, size=size, oversize=oversize)
+        if not oversize:
+            servable_total += size
+        created += 1
