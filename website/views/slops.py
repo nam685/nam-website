@@ -25,6 +25,20 @@ GLOBAL_SUBMIT_LIMIT = 10
 MAX_PROMPT_LENGTH = 5000
 DEFAULT_LIMIT = 20
 
+# Shared upload/download limits — mirrored in frontend/src/lib/slopsLimits.ts
+MAX_FILES_PER_TURN = 5
+MAX_SINGLE_FILE = 5 * 1024 * 1024  # 5 MB
+MAX_TOTAL_UPLOAD = 10 * 1024 * 1024  # 10 MB
+
+
+def _fmt_size(n: int) -> str:
+    """Format a byte count as '512 B', '1.5 KB', or '5.0 MB'."""
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
+
 
 def _serialize_turn(t, include_ip=False):
     data = {

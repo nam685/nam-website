@@ -479,3 +479,23 @@ class TestSlopsStats:
         assert data["total_tokens"] == 150
         assert data["total_tool_calls"] == 7
         assert data["success_rate"] == 50.0
+
+
+from website.views.slops import _fmt_size
+
+
+class TestFmtSize:
+    def test_zero_bytes(self):
+        assert _fmt_size(0) == "0 B"
+
+    def test_bytes(self):
+        assert _fmt_size(512) == "512 B"
+
+    def test_kilobytes(self):
+        assert _fmt_size(1024) == "1.0 KB"
+
+    def test_kilobytes_fraction(self):
+        assert _fmt_size(1536) == "1.5 KB"
+
+    def test_megabytes(self):
+        assert _fmt_size(5 * 1024 * 1024) == "5.0 MB"
