@@ -55,12 +55,9 @@ Introduce the shared size constants and a `_fmt_size` helper in `website/views/s
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `website/tests/test_slops.py`:
+Add `from website.views.slops import _fmt_size` to the imports block at the top of `website/tests/test_slops.py` (alongside `from website.models import Session, Turn`), then append to the end of the file:
 
 ```python
-from website.views.slops import _fmt_size
-
-
 class TestFmtSize:
     def test_zero_bytes(self):
         assert _fmt_size(0) == "0 B"
@@ -127,12 +124,9 @@ git commit -m "feat(slops): add shared file-size constants + _fmt_size helper"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `website/tests/test_slops.py`:
+Add `from website.models import Download` to the imports block at the top of `website/tests/test_slops.py` (alongside `from website.models import Session, Turn` — either merge into that line or add a second line). Then append to the end of the file:
 
 ```python
-from website.models import Download
-
-
 @pytest.mark.django_db
 class TestDownloadModel:
     def test_create_download(self):
@@ -236,12 +230,9 @@ A pure function in `tasks.py` that builds the prefix string klaude sees. Wired i
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `website/tests/test_tasks.py`:
+Add `from website.tasks import _build_downloads_prefix` to the imports block at the top of `website/tests/test_tasks.py` (alongside `from website.tasks import run_turn`). Then append to the end of the file:
 
 ```python
-from website.tasks import _build_downloads_prefix
-
-
 @pytest.mark.django_db
 class TestBuildDownloadsPrefix:
     def test_includes_path_with_ids(self):
@@ -405,14 +396,16 @@ Scans `downloads/<session_id>/<turn_id>/` after a turn completes. Enforces file-
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `website/tests/test_tasks.py`:
+Add these imports to the top of `website/tests/test_tasks.py` (alongside the existing `from unittest.mock import patch` and `from website.models import Session, Turn`):
 
 ```python
 from unittest.mock import MagicMock
-
 from website.models import Download
+```
 
+Then append to the end of the file:
 
+```python
 def _mock_find_result(pairs):
     """Return a MagicMock that mimics subprocess.run's CompletedProcess for find."""
     m = MagicMock()
@@ -763,12 +756,9 @@ Public endpoint that streams a registered download's bytes as an attachment.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `website/tests/test_slops.py`:
+Ensure `from unittest.mock import MagicMock, patch` exists at the top of `website/tests/test_slops.py` (if only `patch` is imported, extend it to `MagicMock, patch`). Then append to the end of the file:
 
 ```python
-from unittest.mock import MagicMock, patch
-
-
 @pytest.mark.django_db
 class TestSlopsDownload:
     def _make_download(self, **kwargs):
