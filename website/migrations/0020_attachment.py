@@ -5,24 +5,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0019_session_turn_and_more'),
+        ("website", "0019_session_turn_and_more"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Attachment',
+            name="Attachment",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('filename', models.CharField(max_length=255)),
-                ('size', models.PositiveIntegerField()),
-                ('content_type', models.CharField(blank=True, default='', max_length=100)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('turn', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='website.turn')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("filename", models.CharField(max_length=255)),
+                ("size", models.PositiveIntegerField()),
+                ("content_type", models.CharField(blank=True, default="", max_length=100)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "turn",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="attachments", to="website.turn"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['id'],
+                "ordering": ["id"],
             },
         ),
     ]
