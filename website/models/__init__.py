@@ -1,3 +1,4 @@
+from .attachment import Attachment
 from .drawing import Drawing
 from .feedback import Feedback
 from .github import GitHubContributions
@@ -12,6 +13,7 @@ from .todo import TodoItem, TodoSection
 from .watch import WatchChannel, WatchVideo
 
 __all__ = [
+    "Attachment",
     "Drawing",
     "Feedback",
     "GitHubContributions",

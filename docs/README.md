@@ -43,7 +43,8 @@ Agent showcase page for klaude, a DIY Claude Code harness powered by open-source
 
 - Three-panel layout mirroring claude.ai (session sidebar, trace viewer, prompt box)
 - Multi-turn sessions: submit follow-up prompts to continue existing sessions
-- Admin: approve/reject pending turns, view live traces
+- File attachments: visitors may attach text/PDF/image/Office files (≤5 MB each, ≤10 MB per turn)
+- Admin: approve/reject pending turns, view live traces, preview text attachments
 - Rate limiting: 1 submission/hr per IP + 10/hr global cap
 - Security: separate Linux user, scoped GitHub access, network restrictions
 

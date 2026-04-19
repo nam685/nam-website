@@ -2,17 +2,62 @@ import json
 import os
 import re
 from datetime import timedelta
+from pathlib import PurePosixPath, PureWindowsPath
 
 from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from website.slops_limits import (
+    ALLOWED_EXTENSIONS,
+    MAX_FILES_PER_TURN,
+    MAX_SINGLE_FILE,
+    MAX_TOTAL_UPLOAD,
+    PREVIEW_MAX_BYTES,
+    TEXT_EXTENSIONS,
+)
+from website.tasks import sudo_mkdir_p, sudo_read_bytes, sudo_rm_rf, sudo_write_file
+
 from ..auth import require_admin, verify_token
-from ..models import Session, Turn
+from ..models import Attachment, Session, Turn
 from ..utils import get_client_ip, parse_json_body, parse_pagination
 
 _WORKSPACE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+_UPLOAD_PATH_RE = re.compile(r"^uploads/\d+(/\d+)?$")
+
+
+def _safe_basename(filename):
+    """Strip any directory components; reject empty, dotfiles, or extensionless names."""
+    if not filename:
+        raise ValueError("Empty filename")
+    # Handle both posix and windows separators.
+    base = PurePosixPath(filename).name
+    base = PureWindowsPath(base).name
+    if not base or base.startswith("."):
+        raise ValueError("Invalid filename")
+    if "." not in base:
+        raise ValueError("Filename must have an extension")
+    return base
+
+
+def _validate_extension(filename):
+    """Raise ValueError if the extension is not in the allowlist."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"Extension {ext} not allowed")
+
+
+def _upload_dir_rel(session_id, turn_id):
+    """Relative upload dir inside the workspace."""
+    return f"uploads/{session_id}/{turn_id}"
+
+
+def _upload_dir_abs(workspace, session_id, turn_id):
+    """Absolute upload dir under /home/klaude/workspace/<workspace>/."""
+    from website.tasks import WORKSPACE_BASE
+
+    return os.path.join(WORKSPACE_BASE, workspace, _upload_dir_rel(session_id, turn_id))
 
 
 def _is_admin(request):
@@ -39,6 +84,15 @@ def _serialize_turn(t, include_ip=False):
         "approved_at": t.approved_at.isoformat() if t.approved_at else None,
         "started_at": t.started_at.isoformat() if t.started_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        "attachments": [
+            {
+                "id": a.id,
+                "filename": a.filename,
+                "size": a.size,
+                "previewable": os.path.splitext(a.filename)[1].lower() in TEXT_EXTENSIONS,
+            }
+            for a in t.attachments.all()
+        ],
     }
     if include_ip:
         data["submitter_ip"] = t.submitter_ip
@@ -74,7 +128,7 @@ def slops_list(request):
     except (ValueError, TypeError):
         return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
-    qs = Session.objects.exclude(status="rejected").prefetch_related("turns")
+    qs = Session.objects.exclude(status="rejected").prefetch_related("turns__attachments")
     total = qs.count()
     sessions = qs[offset : offset + limit]
 
@@ -92,7 +146,7 @@ def slops_detail(request, session_id):
         return JsonResponse({"error": "GET required"}, status=405)
 
     try:
-        s = Session.objects.prefetch_related("turns").get(id=session_id)
+        s = Session.objects.prefetch_related("turns__attachments").get(id=session_id)
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
@@ -101,7 +155,10 @@ def slops_detail(request, session_id):
 
 @csrf_exempt
 def slops_submit(request):
-    """POST /api/slops/submit/ — rate-limited 1/hr/IP + 10/hr global."""
+    """POST /api/slops/submit/ — rate-limited 1/hr/IP + 10/hr global.
+
+    Accepts JSON (text-only) or multipart/form-data (with files under key `files`).
+    """
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -115,35 +172,95 @@ def slops_submit(request):
         if Turn.objects.filter(created_at__gte=cutoff).count() >= GLOBAL_SUBMIT_LIMIT:
             return JsonResponse({"error": "Too many submissions globally. Try again later."}, status=429)
 
-    body, err = parse_json_body(request)
-    if err:
-        return err
+    # Parse prompt/session_id based on content-type.
+    is_multipart = (request.content_type or "").startswith("multipart/form-data")
+    if is_multipart:
+        prompt = (request.POST.get("prompt") or "").strip()
+        session_id_raw = request.POST.get("session_id")
+        session_id = int(session_id_raw) if session_id_raw else None
+        files = request.FILES.getlist("files")
+    else:
+        body, err = parse_json_body(request)
+        if err:
+            return err
+        prompt = body.get("prompt", "").strip()
+        session_id = body.get("session_id")
+        files = []
 
-    prompt = body.get("prompt", "").strip()
     if not prompt:
         return JsonResponse({"error": "Prompt required"}, status=400)
     if len(prompt) > MAX_PROMPT_LENGTH:
         return JsonResponse({"error": f"Too long (max {MAX_PROMPT_LENGTH} chars)"}, status=400)
 
-    session_id = body.get("session_id")
+    # Validate files before touching the DB.
+    if len(files) > MAX_FILES_PER_TURN:
+        return JsonResponse({"error": f"Too many files (max {MAX_FILES_PER_TURN})"}, status=400)
+    total = 0
+    validated = []  # list of (basename, UploadedFile)
+    for f in files:
+        if f.size > MAX_SINGLE_FILE:
+            return JsonResponse(
+                {"error": f"File '{f.name}' too large (max {MAX_SINGLE_FILE // (1024 * 1024)} MB)"},
+                status=413,
+            )
+        total += f.size
+        if total > MAX_TOTAL_UPLOAD:
+            return JsonResponse(
+                {"error": f"Total upload size too large (max {MAX_TOTAL_UPLOAD // (1024 * 1024)} MB)"},
+                status=413,
+            )
+        try:
+            base = _safe_basename(f.name)
+            _validate_extension(base)
+        except ValueError as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        validated.append((base, f))
 
+    # Session resolution (unchanged behaviour).
     if session_id is not None:
-        # Follow-up turn on existing session
         try:
             session = Session.objects.get(id=session_id)
         except Session.DoesNotExist:
             return JsonResponse({"error": "Session not found"}, status=404)
-
-        # One active turn at a time
         if session.turns.filter(status__in=["pending", "approved", "running"]).exists():
             return JsonResponse({"error": "Session already has an active turn"}, status=409)
     else:
-        # New session
         session = Session.objects.create()
 
-    Turn.objects.create(session=session, prompt=prompt, submitter_ip=ip)
-    _update_session_status(session)
+    turn = Turn.objects.create(session=session, prompt=prompt, submitter_ip=ip)
 
+    # Files need a workspace dir to live under. If session.workspace isn't set yet
+    # (approval normally assigns it), default to "klaude-playground" here so uploads
+    # have a stable home — approval won't override an already-set workspace.
+    if files:
+        if not session.workspace:
+            session.workspace = "klaude-playground"
+            session.trace_path = os.path.join("/home/klaude/traces", session.workspace, str(session.id))
+            session.save(update_fields=["workspace", "trace_path"])
+
+        dest_dir = _upload_dir_abs(session.workspace, session.id, turn.id)
+        try:
+            sudo_mkdir_p(dest_dir)
+            for base, f in validated:
+                sudo_write_file(os.path.join(dest_dir, base), f.read())
+                Attachment.objects.create(
+                    turn=turn,
+                    filename=base,
+                    size=f.size,
+                    content_type=(f.content_type or "")[:100],
+                )
+        except Exception as e:
+            # Best-effort cleanup: remove dir + turn row.
+            rel = _upload_dir_rel(session.id, turn.id)
+            if _UPLOAD_PATH_RE.match(rel):
+                try:
+                    sudo_rm_rf(dest_dir)
+                except Exception:
+                    pass
+            turn.delete()
+            return JsonResponse({"error": f"Failed to save uploads: {e}"}, status=500)
+
+    _update_session_status(session)
     return JsonResponse(_serialize_session(session), status=201)
 
 
@@ -199,6 +316,31 @@ def slops_approve(request, turn_id):
     return JsonResponse(_serialize_session(session, include_ip=True))
 
 
+def _cleanup_uploads(workspace, session_id, turn_id=None):
+    """rm -rf the per-turn or per-session upload dir. No-op if workspace unset.
+
+    Path is built from validated regex inputs; final path is verified to stay
+    within the workspace root before shelling out.
+    """
+    if not workspace:
+        return
+    rel = _upload_dir_rel(session_id, turn_id) if turn_id is not None else f"uploads/{session_id}"
+    if not _UPLOAD_PATH_RE.match(rel):
+        return
+
+    from website.tasks import WORKSPACE_BASE
+
+    abs_path = os.path.join(WORKSPACE_BASE, workspace, rel)
+    # Defensive: ensure resolved path stays under the workspace root.
+    workspace_root = os.path.realpath(os.path.join(WORKSPACE_BASE, workspace))
+    if not os.path.realpath(os.path.dirname(abs_path)).startswith(workspace_root):
+        return
+    try:
+        sudo_rm_rf(abs_path)
+    except Exception:
+        pass
+
+
 @csrf_exempt
 @require_admin
 def slops_reject(request, turn_id):
@@ -217,6 +359,8 @@ def slops_reject(request, turn_id):
     turn.status = "rejected"
     turn.save()
 
+    _cleanup_uploads(turn.session.workspace, turn.session.id, turn.id)
+
     _update_session_status(turn.session)
 
     return JsonResponse(_serialize_session(turn.session, include_ip=True))
@@ -234,7 +378,10 @@ def slops_delete(request, session_id):
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
+    workspace = session.workspace
+    session_id_copy = session.id
     session.delete()
+    _cleanup_uploads(workspace, session_id_copy, None)
     return JsonResponse({"ok": True})
 
 
@@ -399,3 +546,47 @@ def slops_stats(request):
             "success_rate": success_rate,
         }
     )
+
+
+@require_admin
+def slops_attachment_preview(request, attachment_id):
+    """GET /api/slops/attachments/<id>/preview/ — admin-only text preview."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=405)
+
+    try:
+        a = Attachment.objects.select_related("turn__session").get(id=attachment_id)
+    except Attachment.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    ext = os.path.splitext(a.filename)[1].lower()
+    if ext not in TEXT_EXTENSIONS:
+        return JsonResponse({"error": "Not previewable"}, status=404)
+
+    session = a.turn.session
+    if not session.workspace:
+        return JsonResponse({"error": "No workspace"}, status=404)
+
+    rel = _upload_dir_rel(session.id, a.turn_id)
+    if not _UPLOAD_PATH_RE.match(rel):
+        return JsonResponse({"error": "Invalid path"}, status=500)
+
+    from website.tasks import WORKSPACE_BASE
+
+    abs_path = os.path.join(WORKSPACE_BASE, session.workspace, rel, a.filename)
+    raw = sudo_read_bytes(abs_path)
+    if raw is None:
+        return JsonResponse({"error": "File not found"}, status=404)
+
+    total_size = len(raw)
+    truncated = total_size > PREVIEW_MAX_BYTES
+    chunk = raw[:PREVIEW_MAX_BYTES]
+    try:
+        text = chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        return JsonResponse({"error": "Not valid UTF-8 text"}, status=400)
+
+    if truncated:
+        text += f"\n[truncated — showing first {PREVIEW_MAX_BYTES // 1024} KB of {total_size // 1024} KB]"
+
+    return JsonResponse({"content": text, "truncated": truncated, "total_size": total_size})
