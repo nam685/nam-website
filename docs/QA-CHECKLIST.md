@@ -204,6 +204,15 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Nav wheel includes slops entry
 - [ ] Mobile layout works (sidebar collapses)
 - [ ] Stats endpoint returns total_sessions, total_turns, success_rate
+- [ ] Submit without files — session appears, turn pending.
+- [ ] Submit with one `.txt` attachment — chip visible before send, attachment listed on turn after send.
+- [ ] Submit with 5 files including a `.pdf` — all land, PDF shown as non-previewable.
+- [ ] Try to submit a 6 MB file — blocked client-side before network, error banner shows.
+- [ ] Try to attach `evil.exe` — blocked client-side.
+- [ ] Admin: expand a text attachment preview — content loads in-place.
+- [ ] Admin: expand a text attachment >64 KB — content truncated with footer.
+- [ ] Admin: reject a session with attachments — session updates; SSH to server and confirm `ls /home/klaude/workspace/klaude-playground/uploads/<id>/` is gone.
+- [ ] Admin: delete a session with attachments — session dir gone.
 
 ### Slops downloads
 - [ ] Submit a prompt instructing klaude to write a small markdown file to `downloads/<session>/<turn>/hello.md`. Approve. After the turn completes, a clickable chip appears below klaude's final message; clicking downloads the bytes.

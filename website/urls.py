@@ -68,4 +68,5 @@ urlpatterns = [
     path("slops/turns/<int:turn_id>/approve/", views.slops_approve),
     path("slops/turns/<int:turn_id>/reject/", views.slops_reject),
     path("slops/turns/<int:turn_id>/cancel/", views.slops_cancel),
+    path("slops/attachments/<int:attachment_id>/preview/", views.slops_attachment_preview),
 ]

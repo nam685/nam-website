@@ -8,12 +8,7 @@ from django.utils import timezone
 
 from config.celery import app
 from website.models import Download, Turn
-from website.views.slops import (
-    MAX_FILES_PER_TURN,
-    MAX_SINGLE_FILE,
-    MAX_TOTAL_UPLOAD,
-    _fmt_size,
-)
+from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
@@ -21,6 +16,23 @@ WORKSPACE_BASE = "/home/klaude/workspace"
 TRACES_BASE = "/home/klaude/traces"
 
 logger = logging.getLogger(__name__)
+
+
+def _fmt_size(n):
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
+def _build_prompt_with_attachments(turn):
+    attachments = list(turn.attachments.all())
+    if not attachments:
+        return turn.prompt
+    lines = [f"- uploads/{turn.session_id}/{turn.id}/{a.filename} ({_fmt_size(a.size)})" for a in attachments]
+    prefix = "[attachments — read these first]\n" + "\n".join(lines) + "\n\n"
+    return prefix + turn.prompt
 
 
 def _sudo_read(path):
@@ -72,6 +84,39 @@ def _build_downloads_prefix(session, turn) -> str:
     )
 
 
+def sudo_write_file(path, content_bytes):
+    """Write bytes to `path` as the klaude user. Raises CalledProcessError on failure.
+
+    `path` must be absolute. Uses `tee` via sudo with stdin — no shell, so
+    special characters in path are safe.
+    """
+    subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "tee", "--", path],
+        input=content_bytes,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+
+def sudo_mkdir_p(path):
+    """mkdir -p `path` as the klaude user."""
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "mkdir", "-p", path], check=True)
+
+
+def sudo_rm_rf(path):
+    """rm -rf `path` as the klaude user. Caller MUST validate `path` first."""
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "rm", "-rf", "--", path], check=True)
+
+
+def sudo_read_bytes(path):
+    """Read bytes from `path` as the klaude user. Returns bytes or None."""
+    result = subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "cat", "--", path],
+        capture_output=True,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
 def _execute_klaude(turn, is_continuation):
     """Run klaude CLI as the klaude user. Returns result dict."""
     session = turn.session
@@ -85,7 +130,7 @@ def _execute_klaude(turn, is_continuation):
     cmd = ["sudo", "-u", KLAUDE_USER, KLAUDE_BIN]
     if is_continuation:
         cmd.append("-c")
-    effective_prompt = _build_downloads_prefix(session, turn) + turn.prompt
+    effective_prompt = _build_downloads_prefix(session, turn) + _build_prompt_with_attachments(turn)
     cmd += [effective_prompt, "--auto-approve", "--session-dir", trace_dir]
 
     result = subprocess.run(

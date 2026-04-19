@@ -239,6 +239,13 @@ export interface Download {
   oversize: boolean;
 }
 
+export interface Attachment {
+  id: number;
+  filename: string;
+  size: number;
+  previewable: boolean;
+}
+
 export interface Turn {
   id: number;
   prompt: string;
@@ -253,6 +260,7 @@ export interface Turn {
   started_at: string | null;
   completed_at: string | null;
   downloads?: Download[];
+  attachments: Attachment[];
 }
 
 export interface Session {
