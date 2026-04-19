@@ -50,6 +50,39 @@ def _read_atif_trace(trace_dir):
         return {}
 
 
+def sudo_write_file(path, content_bytes):
+    """Write bytes to `path` as the klaude user. Raises CalledProcessError on failure.
+
+    `path` must be absolute. Uses `tee` via sudo with stdin — no shell, so
+    special characters in path are safe.
+    """
+    subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "tee", "--", path],
+        input=content_bytes,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+
+def sudo_mkdir_p(path):
+    """mkdir -p `path` as the klaude user."""
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "mkdir", "-p", path], check=True)
+
+
+def sudo_rm_rf(path):
+    """rm -rf `path` as the klaude user. Caller MUST validate `path` first."""
+    subprocess.run(["sudo", "-u", KLAUDE_USER, "rm", "-rf", "--", path], check=True)
+
+
+def sudo_read_bytes(path):
+    """Read bytes from `path` as the klaude user. Returns bytes or None."""
+    result = subprocess.run(
+        ["sudo", "-u", KLAUDE_USER, "cat", "--", path],
+        capture_output=True,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
 def _execute_klaude(turn, is_continuation):
     """Run klaude CLI as the klaude user. Returns result dict."""
     session = turn.session
