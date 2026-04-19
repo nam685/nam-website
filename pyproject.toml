@@ -10,6 +10,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "gunicorn>=23.0",
     "pillow>=12.1.1",
+    "pillow-heif>=1.1",
     "django-redis>=5.4.0",
     "redis>=5.0",
     "ytmusicapi>=1.9",
