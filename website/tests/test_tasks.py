@@ -282,3 +282,15 @@ class TestRunTurnRegistersDownloads:
         ):
             run_turn(t.id)
         mock_reg.assert_not_called()
+
+    def test_register_downloads_exception_does_not_fail_turn(self):
+        s = Session.objects.create(workspace="ws", trace_path="/t", status="approved")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks._execute_klaude") as mock_exec,
+            patch("website.tasks._register_downloads", side_effect=Exception("db error")),
+        ):
+            mock_exec.return_value = {"summary": "ok", "token_count": 0, "tool_calls": 0, "error": ""}
+            run_turn(t.id)
+        t.refresh_from_db()
+        assert t.status == "done"

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import subprocess
@@ -18,6 +19,8 @@ KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
 WORKSPACE_BASE = "/home/klaude/workspace"
 TRACES_BASE = "/home/klaude/traces"
+
+logger = logging.getLogger(__name__)
 
 
 def _sudo_read(path):
@@ -152,7 +155,7 @@ def run_turn(turn_id):
                 _register_downloads(turn)
             except Exception:
                 # Registration failures must never surface as turn failure
-                pass
+                logger.exception("_register_downloads failed for turn %s", turn.id)
     except Exception as e:
         turn.status = "failed"
         turn.error = str(e)
