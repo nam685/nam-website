@@ -317,6 +317,31 @@ def slops_approve(request, turn_id):
     return JsonResponse(_serialize_session(session, include_ip=True))
 
 
+def _cleanup_uploads(workspace, session_id, turn_id=None):
+    """rm -rf the per-turn or per-session upload dir. No-op if workspace unset.
+
+    Path is built from validated regex inputs; final path is verified to stay
+    within the workspace root before shelling out.
+    """
+    if not workspace:
+        return
+    rel = _upload_dir_rel(session_id, turn_id) if turn_id is not None else f"uploads/{session_id}"
+    if not _UPLOAD_PATH_RE.match(rel):
+        return
+
+    from website.tasks import WORKSPACE_BASE
+
+    abs_path = os.path.join(WORKSPACE_BASE, workspace, rel)
+    # Defensive: ensure resolved path stays under the workspace root.
+    workspace_root = os.path.realpath(os.path.join(WORKSPACE_BASE, workspace))
+    if not os.path.realpath(os.path.dirname(abs_path)).startswith(workspace_root):
+        return
+    try:
+        sudo_rm_rf(abs_path)
+    except Exception:
+        pass
+
+
 @csrf_exempt
 @require_admin
 def slops_reject(request, turn_id):
@@ -335,6 +360,8 @@ def slops_reject(request, turn_id):
     turn.status = "rejected"
     turn.save()
 
+    _cleanup_uploads(turn.session.workspace, turn.session.id, turn.id)
+
     _update_session_status(turn.session)
 
     return JsonResponse(_serialize_session(turn.session, include_ip=True))
@@ -352,7 +379,10 @@ def slops_delete(request, session_id):
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
+    workspace = session.workspace
+    session_id_copy = session.id
     session.delete()
+    _cleanup_uploads(workspace, session_id_copy, None)
     return JsonResponse({"ok": True})
 
 

@@ -558,3 +558,38 @@ class TestSlopsSubmitWithFiles:
         f = SimpleUploadedFile(".env", b"SECRET=1")
         resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestSlopsCleanupOnReject:
+    @patch("website.views.slops.sudo_rm_rf")
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_reject_cleans_up_uploads(self, mock_mkdir, mock_write, mock_rm, client, auth_headers):
+        f = SimpleUploadedFile("a.txt", b"hi")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 201
+        turn_id = resp.json()["turns"][0]["id"]
+        session_id = resp.json()["id"]
+
+        resp = client.post(f"/api/slops/turns/{turn_id}/reject/", **auth_headers)
+        assert resp.status_code == 200
+        mock_rm.assert_called_once()
+        call_arg = mock_rm.call_args[0][0]
+        assert call_arg.endswith(f"uploads/{session_id}/{turn_id}")
+
+    @patch("website.views.slops.sudo_rm_rf")
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_delete_session_cleans_up_uploads(
+        self, mock_mkdir, mock_write, mock_rm, client, auth_headers
+    ):
+        f = SimpleUploadedFile("a.txt", b"hi")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        session_id = resp.json()["id"]
+
+        resp = client.post(f"/api/slops/{session_id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        mock_rm.assert_called_once()
+        call_arg = mock_rm.call_args[0][0]
+        assert call_arg.endswith(f"uploads/{session_id}")
