@@ -582,7 +582,8 @@ class TestSlopsDownload:
     def test_streams_bytes(self, client):
         d = self._make_download(filename="hello.txt", size=12)
         fake_proc = MagicMock()
-        fake_proc.stdout = iter([b"hello, world"])
+        fake_proc.stdout.read.side_effect = [b"hello, world", b""]
+        fake_proc.wait.return_value = 0
         with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
             resp = client.get(f"/api/slops/downloads/{d.id}/")
         assert resp.status_code == 200
@@ -599,7 +600,8 @@ class TestSlopsDownload:
     def test_popen_called_with_sudo_klaude(self, client):
         d = self._make_download(filename="x.bin", size=3)
         fake_proc = MagicMock()
-        fake_proc.stdout = iter([b"abc"])
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
         with patch("website.views.slops.subprocess.Popen", return_value=fake_proc) as mock_popen:
             client.get(f"/api/slops/downloads/{d.id}/")
         cmd = mock_popen.call_args.args[0]
@@ -608,3 +610,26 @@ class TestSlopsDownload:
         assert cmd[2] == "klaude"
         assert cmd[3] == "cat"
         assert f"downloads/{d.turn.session.id}/{d.turn.id}/x.bin" in cmd[4]
+
+    def test_rejects_path_traversal_filename(self, client):
+        # Direct Download row whose filename would traverse out of the sandbox.
+        # Normally _register_downloads basename-strips via find -printf %f, but a
+        # malicious/future write path must still be rejected by the view.
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        d = Download.objects.create(turn=t, filename="../../etc/passwd", size=10, oversize=False)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        # Regex now rejects "/" in the filename segment → 400
+        assert resp.status_code == 400
+
+    def test_crlf_in_filename_does_not_500(self, client):
+        d = self._make_download(filename="line1\nline2.txt", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        # No raw CR/LF should have leaked into header values
+        assert "\n" not in resp["Content-Disposition"]
+        assert "\r" not in resp["Content-Disposition"]

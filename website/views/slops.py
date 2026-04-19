@@ -419,12 +419,13 @@ def slops_stats(request):
 
 
 WORKSPACE_BASE = "/home/klaude/workspace"
-_DOWNLOAD_REL_RE_FULL = re.compile(r"downloads/\d+/\d+/.+")
+_DOWNLOAD_REL_RE_FULL = re.compile(r"downloads/\d+/\d+/[^/\x00]+")
 
 
 def _ascii_fallback(name: str) -> str:
-    """ASCII-only fallback for Content-Disposition filename=, with quotes escaped."""
+    """ASCII-only fallback for Content-Disposition filename=, with quotes and CRLF escaped."""
     ascii_name = name.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    ascii_name = ascii_name.replace("\r", "_").replace("\n", "_")
     return ascii_name or "download"
 
 
@@ -449,12 +450,30 @@ def slops_download(request, download_id):
         return JsonResponse({"error": "Invalid download"}, status=400)
 
     abs_path = os.path.join(WORKSPACE_BASE, session.workspace, rel)
+    real_path = os.path.realpath(abs_path)
+    expected_prefix = os.path.realpath(os.path.join(WORKSPACE_BASE, session.workspace, "downloads")) + os.sep
+    if not real_path.startswith(expected_prefix):
+        return JsonResponse({"error": "Invalid download"}, status=400)
 
     proc = subprocess.Popen(
-        ["sudo", "-u", "klaude", "cat", abs_path],
+        ["sudo", "-u", "klaude", "cat", real_path],
         stdout=subprocess.PIPE,
     )
-    response = StreamingHttpResponse(proc.stdout, content_type="application/octet-stream")
+
+    def _stream():
+        try:
+            if proc.stdout is not None:
+                yield from iter(lambda: proc.stdout.read(65536), b"")
+        finally:
+            if proc.stdout is not None:
+                proc.stdout.close()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+    response = StreamingHttpResponse(_stream(), content_type="application/octet-stream")
     response["Content-Disposition"] = (
         f"attachment; filename=\"{_ascii_fallback(d.filename)}\"; filename*=UTF-8''{quote(d.filename)}"
     )
