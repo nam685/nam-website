@@ -529,3 +529,30 @@ class TestDownloadModel:
         t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
         d = Download.objects.create(turn=t, filename="big.bin", size=10 * 1024 * 1024, oversize=True)
         assert d.oversize is True
+
+
+@pytest.mark.django_db
+class TestDownloadsInSerialization:
+    def test_turn_includes_downloads_field(self, client):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        Download.objects.create(turn=t, filename="out.md", size=100)
+        Download.objects.create(turn=t, filename="big.bin", size=10_000_000, oversize=True)
+
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["turns"]) == 1
+        downloads = data["turns"][0]["downloads"]
+        assert len(downloads) == 2
+        assert downloads[0]["filename"] == "out.md"
+        assert downloads[0]["size"] == 100
+        assert downloads[0]["oversize"] is False
+        assert downloads[1]["oversize"] is True
+        assert "id" in downloads[0]
+
+    def test_turn_without_downloads_has_empty_list(self, client):
+        s = Session.objects.create()
+        Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.json()["turns"][0]["downloads"] == []

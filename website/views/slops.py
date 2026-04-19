@@ -54,6 +54,9 @@ def _serialize_turn(t, include_ip=False):
         "started_at": t.started_at.isoformat() if t.started_at else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
     }
+    data["downloads"] = [
+        {"id": d.id, "filename": d.filename, "size": d.size, "oversize": d.oversize} for d in t.downloads.all()
+    ]
     if include_ip:
         data["submitter_ip"] = t.submitter_ip
     return data
