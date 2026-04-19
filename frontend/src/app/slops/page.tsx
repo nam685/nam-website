@@ -284,39 +284,51 @@ export default function SlopsPage() {
   };
 
   const handleSubmit = async () => {
-    if (!prompt.trim() || submitting) return;
+    if ((!prompt.trim() && pendingFiles.length === 0) || submitting) return;
     setSubmitting(true);
     setSubmitError(null);
     setSubmitSuccess(false);
     try {
-      const body: { prompt: string; session_id?: number } = {
-        prompt: prompt.trim(),
-      };
-      if (selectedId !== null) {
-        body.session_id = selectedId;
-      }
-
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {};
       if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
 
-      const res = await fetch(`${API}/api/slops/submit/`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      if (pendingFiles.length > 0) {
+        const fd = new FormData();
+        fd.append("prompt", prompt.trim());
+        if (selectedId !== null) fd.append("session_id", String(selectedId));
+        for (const f of pendingFiles) fd.append("files", f);
+        // Do NOT set Content-Type — browser sets the multipart boundary.
+        res = await fetch(`${API}/api/slops/submit/`, {
+          method: "POST",
+          headers,
+          body: fd,
+        });
+      } else {
+        const body: { prompt: string; session_id?: number } = {
+          prompt: prompt.trim(),
+        };
+        if (selectedId !== null) body.session_id = selectedId;
+        res = await fetch(`${API}/api/slops/submit/`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
       if (res.status === 429) {
         setSubmitError("Rate limited. Try again later.");
         return;
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setSubmitError(
-          (data as { error?: string }).error || "Submission failed",
-        );
+        setSubmitError((data as { error?: string }).error || "Submission failed");
         return;
       }
       const created: Session = await res.json();
       setPrompt("");
+      setPendingFiles([]);
+      setFileError(null);
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
       setSelectedId(created.id);
