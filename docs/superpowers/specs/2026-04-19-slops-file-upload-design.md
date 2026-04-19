@@ -87,7 +87,14 @@ Note: `on_delete=CASCADE` removes rows when a session/turn is deleted. Filesyste
     - Create `Attachment` row.
   - If anything fails mid-loop, run `sudo -u klaude rm -rf <turn_dir>` and delete the `Turn` + `Attachment` rows, return `500`.
 
-`_serialize_turn` adds `attachments: [{filename, size}]`.
+`_serialize_turn` adds `attachments: [{id, filename, size, previewable}]`. `previewable` is `True` iff the extension is in the text/code subset of the allowlist.
+
+New endpoint `slops_attachment_preview` — `GET /api/slops/attachments/<attachment_id>/preview/`:
+- Admin-only (`require_admin`).
+- 404 if the attachment row is missing or the extension is not in the text/code allowlist.
+- Reads the file via `sudo -u klaude cat -- <path>` (path validated against `uploads/\d+/\d+/<basename>`).
+- Caps response at `PREVIEW_MAX_BYTES = 64 * 1024` (64 KB). If the file is larger, truncate and append a `\n[truncated — showing first 64 KB of NNN KB]` footer.
+- Returns `{"content": "...", "truncated": bool, "total_size": int}` with `Content-Type: application/json`. Never returns raw bytes — if decoding as UTF-8 fails, return `{"error": "Not valid UTF-8 text"}` with 400, so a file with a `.txt` rename-trick can't bypass the text-only guarantee.
 
 `slops_reject`: after marking turn rejected, call `_cleanup_turn_uploads(turn)` — validate the computed path against the `uploads/<digits>/<digits>` regex, then `sudo -u klaude rm -rf`.
 
@@ -133,6 +140,8 @@ Extend `Turn` type with optional `attachments: { filename: string; size: number 
 ### `frontend/src/app/slops/components/TraceViewer.tsx`
 When a turn has attachments, render a compact list under the user message (e.g. `attached: foo.csv (12.3 KB)`) so the context is visible in the trace UI.
 
+For admins only, text-file attachments are clickable — clicking expands an inline preview (monospace, max-height scrollable `<pre>`) fetched from `/api/slops/attachments/<id>/preview/`. Binary attachments (`.pdf`, `.png`, `.docx`, etc.) show name + size only, no preview affordance. Non-admin viewers see the attachment list without any preview links, regardless of type. The preview is purely an admin review tool to eyeball content for malicious scripts before approving the turn.
+
 ## Deletion / lifecycle
 
 | Event | DB | Filesystem |
@@ -160,6 +169,7 @@ Backend (`website/tests/test_slops.py`):
 - `test_reject_cleans_up_uploads` — uploaded files removed after reject.
 - `test_delete_session_cleans_up_uploads`.
 - `test_prompt_prefix_injected` — unit-test the prefix builder in `tasks.py`.
+- `test_attachment_preview_requires_admin`, `_returns_content_for_text`, `_404_for_binary`, `_truncates_large_files`, `_rejects_non_utf8`.
 
 Frontend (`frontend/src/lib/__tests__/slopsLimits.test.ts`):
 - Pure-function tests for the client-side validator (edge cases around the size limits).
@@ -174,6 +184,6 @@ Manual (add to `docs/QA-CHECKLIST.md`):
 
 - Per-IP upload quota separate from per-turn.
 - Antivirus scan.
-- Preview of attachments in the UI (image thumbnails, PDF first page).
+- Preview of binary attachments (image thumbnails, PDF first page). Text previews are in scope; binary previews are not.
 - Streamed uploads for files larger than the 10 MB cap.
 - Orphan-dir sweep cron.
