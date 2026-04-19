@@ -14,6 +14,45 @@ from ..utils import get_client_ip, parse_json_body, parse_pagination
 
 _WORKSPACE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 
+from pathlib import PurePosixPath, PureWindowsPath
+
+from website.slops_limits import ALLOWED_EXTENSIONS
+
+_UPLOAD_PATH_RE = re.compile(r"^uploads/\d+(/\d+)?$")
+
+
+def _safe_basename(filename):
+    """Strip any directory components; reject empty, dotfiles, or extensionless names."""
+    if not filename:
+        raise ValueError("Empty filename")
+    # Handle both posix and windows separators.
+    base = PurePosixPath(filename).name
+    base = PureWindowsPath(base).name
+    if not base or base.startswith("."):
+        raise ValueError("Invalid filename")
+    if "." not in base:
+        raise ValueError("Filename must have an extension")
+    return base
+
+
+def _validate_extension(filename):
+    """Raise ValueError if the extension is not in the allowlist."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"Extension {ext} not allowed")
+
+
+def _upload_dir_rel(session_id, turn_id):
+    """Relative upload dir inside the workspace."""
+    return f"uploads/{session_id}/{turn_id}"
+
+
+def _upload_dir_abs(workspace, session_id, turn_id):
+    """Absolute upload dir under /home/klaude/workspace/<workspace>/."""
+    from website.tasks import WORKSPACE_BASE
+
+    return os.path.join(WORKSPACE_BASE, workspace, _upload_dir_rel(session_id, turn_id))
+
 
 def _is_admin(request):
     auth = request.headers.get("Authorization", "")
