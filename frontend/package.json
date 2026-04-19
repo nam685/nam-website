@@ -14,7 +14,7 @@
     "chessground": "^9.2.1",
     "chessops": "^0.15.0",
     "next": "^16.2",
-    "react": "^19.0",
+    "react": "^19.2",
     "react-dom": "^19.0"
   },
   "devDependencies": {
