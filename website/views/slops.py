@@ -1,11 +1,13 @@
 import json
 import os
 import re
+import subprocess
 from datetime import timedelta
 from pathlib import PurePosixPath, PureWindowsPath
+from urllib.parse import quote
 
 from django.db.models import Sum
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
@@ -20,7 +22,7 @@ from website.slops_limits import (
 from website.tasks import sudo_mkdir_p, sudo_read_bytes, sudo_rm_rf, sudo_write_file
 
 from ..auth import require_admin, verify_token
-from ..models import Attachment, Session, Turn
+from ..models import Attachment, Download, Session, Turn
 from ..utils import get_client_ip, parse_json_body, parse_pagination
 
 _WORKSPACE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
@@ -71,6 +73,15 @@ MAX_PROMPT_LENGTH = 5000
 DEFAULT_LIMIT = 20
 
 
+def _fmt_size(n: int) -> str:
+    """Format a byte count as '512 B', '1.5 KB', or '5.0 MB'."""
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
+
+
 def _serialize_turn(t, include_ip=False):
     data = {
         "id": t.id,
@@ -94,6 +105,9 @@ def _serialize_turn(t, include_ip=False):
             for a in t.attachments.all()
         ],
     }
+    data["downloads"] = [
+        {"id": d.id, "filename": d.filename, "size": d.size, "oversize": d.oversize} for d in t.downloads.all()
+    ]
     if include_ip:
         data["submitter_ip"] = t.submitter_ip
     return data
@@ -382,6 +396,7 @@ def slops_delete(request, session_id):
     session_id_copy = session.id
     session.delete()
     _cleanup_uploads(workspace, session_id_copy, None)
+    _cleanup_downloads(workspace, session_id_copy)
     return JsonResponse({"ok": True})
 
 
@@ -402,8 +417,6 @@ def slops_cancel(request, turn_id):
 
     # Kill any running klaude process for this session's trace dir
     if turn.session.trace_path:
-        import subprocess
-
         trace = turn.session.trace_path
         # Validate trace_path matches expected format before passing to pkill
         if re.fullmatch(r"/home/klaude/traces/[a-zA-Z0-9._-]+/\d+", trace):
@@ -590,3 +603,84 @@ def slops_attachment_preview(request, attachment_id):
         text += f"\n[truncated — showing first {PREVIEW_MAX_BYTES // 1024} KB of {total_size // 1024} KB]"
 
     return JsonResponse({"content": text, "truncated": truncated, "total_size": total_size})
+
+
+_DOWNLOAD_REL_RE_FULL = re.compile(r"downloads/\d+/\d+/[^/\x00]+")
+
+
+def _ascii_fallback(name: str) -> str:
+    """ASCII-only fallback for Content-Disposition filename=, with quotes and CRLF escaped."""
+    ascii_name = name.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    ascii_name = ascii_name.replace("\r", "_").replace("\n", "_")
+    return ascii_name or "download"
+
+
+def _cleanup_downloads(workspace, session_id):
+    """rm -rf the per-session downloads dir. No-op if workspace unset."""
+    if not workspace:
+        return
+    rel = f"downloads/{session_id}"
+    if not re.fullmatch(r"downloads/\d+", rel):
+        return
+    from website.tasks import WORKSPACE_BASE
+
+    abs_dir = os.path.join(WORKSPACE_BASE, workspace, rel)
+    workspace_root = os.path.realpath(os.path.join(WORKSPACE_BASE, workspace))
+    if not os.path.realpath(os.path.dirname(abs_dir)).startswith(workspace_root):
+        return
+    try:
+        sudo_rm_rf(abs_dir)
+    except Exception:
+        pass
+
+
+def slops_download(request, download_id):
+    """GET /api/slops/downloads/<id>/ — public, streams the file bytes."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET required"}, status=405)
+
+    try:
+        d = Download.objects.select_related("turn__session").get(id=download_id)
+    except Download.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    if d.oversize:
+        return JsonResponse({"error": "File too large to download"}, status=403)
+
+    session = d.turn.session
+    rel = f"downloads/{session.id}/{d.turn.id}/{d.filename}"
+    if not _DOWNLOAD_REL_RE_FULL.fullmatch(rel):
+        return JsonResponse({"error": "Invalid download"}, status=400)
+
+    from website.tasks import WORKSPACE_BASE
+
+    abs_path = os.path.join(WORKSPACE_BASE, session.workspace, rel)
+    real_path = os.path.realpath(abs_path)
+    expected_prefix = os.path.realpath(os.path.join(WORKSPACE_BASE, session.workspace, "downloads")) + os.sep
+    if not real_path.startswith(expected_prefix):
+        return JsonResponse({"error": "Invalid download"}, status=400)
+
+    proc = subprocess.Popen(
+        ["sudo", "-u", "klaude", "cat", real_path],
+        stdout=subprocess.PIPE,
+    )
+
+    def _stream():
+        try:
+            if proc.stdout is not None:
+                yield from iter(lambda: proc.stdout.read(65536), b"")
+        finally:
+            if proc.stdout is not None:
+                proc.stdout.close()
+            try:
+                proc.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+    response = StreamingHttpResponse(_stream(), content_type="application/octet-stream")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{_ascii_fallback(d.filename)}\"; filename*=UTF-8''{quote(d.filename)}"
+    )
+    response["Content-Length"] = str(d.size)
+    return response

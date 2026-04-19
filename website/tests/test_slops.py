@@ -1,11 +1,12 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from website.models import Attachment, Session, Turn
+from website.models import Attachment, Download, Session, Turn
 from website.slops_limits import MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
+from website.views.slops import _fmt_size
 
 
 @pytest.mark.django_db
@@ -483,6 +484,177 @@ class TestSlopsStats:
         assert data["success_rate"] == 50.0
 
 
+class TestFmtSize:
+    def test_zero_bytes(self):
+        assert _fmt_size(0) == "0 B"
+
+    def test_bytes(self):
+        assert _fmt_size(512) == "512 B"
+
+    def test_kilobytes(self):
+        assert _fmt_size(1024) == "1.0 KB"
+
+    def test_kilobytes_fraction(self):
+        assert _fmt_size(1536) == "1.5 KB"
+
+    def test_megabytes(self):
+        assert _fmt_size(5 * 1024 * 1024) == "5.0 MB"
+
+
+@pytest.mark.django_db
+class TestDownloadModel:
+    def test_create_download(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="out.md", size=123)
+        assert d.filename == "out.md"
+        assert d.size == 123
+        assert d.oversize is False
+        assert d.created_at is not None
+
+    def test_download_cascade_on_turn_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        t.delete()
+        assert Download.objects.count() == 0
+
+    def test_download_cascade_on_session_delete(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        Download.objects.create(turn=t, filename="a.txt", size=1)
+        s.delete()
+        assert Download.objects.count() == 0
+
+    def test_oversize_flag(self):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1")
+        d = Download.objects.create(turn=t, filename="big.bin", size=10 * 1024 * 1024, oversize=True)
+        assert d.oversize is True
+
+
+@pytest.mark.django_db
+class TestDownloadsInSerialization:
+    def test_turn_includes_downloads_field(self, client):
+        s = Session.objects.create()
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        Download.objects.create(turn=t, filename="out.md", size=100)
+        Download.objects.create(turn=t, filename="big.bin", size=10_000_000, oversize=True)
+
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["turns"]) == 1
+        downloads = data["turns"][0]["downloads"]
+        assert len(downloads) == 2
+        assert downloads[0]["filename"] == "out.md"
+        assert downloads[0]["size"] == 100
+        assert downloads[0]["oversize"] is False
+        assert downloads[1]["oversize"] is True
+        assert "id" in downloads[0]
+
+    def test_turn_without_downloads_has_empty_list(self, client):
+        s = Session.objects.create()
+        Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        resp = client.get(f"/api/slops/{s.id}/")
+        assert resp.json()["turns"][0]["downloads"] == []
+
+
+@pytest.mark.django_db
+class TestSlopsDownload:
+    def _make_download(self, **kwargs):
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        return Download.objects.create(
+            turn=t,
+            filename=kwargs.get("filename", "a.md"),
+            size=kwargs.get("size", 10),
+            oversize=kwargs.get("oversize", False),
+        )
+
+    def test_404_on_missing(self, client):
+        resp = client.get("/api/slops/downloads/99999/")
+        assert resp.status_code == 404
+
+    def test_403_on_oversize(self, client):
+        d = self._make_download(size=10_000_000, oversize=True)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 403
+
+    def test_streams_bytes(self, client):
+        d = self._make_download(filename="hello.txt", size=12)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"hello, world", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/octet-stream"
+        assert "attachment" in resp["Content-Disposition"]
+        assert "hello.txt" in resp["Content-Disposition"]
+        assert b"".join(resp.streaming_content) == b"hello, world"
+
+    def test_post_rejected(self, client):
+        d = self._make_download()
+        resp = client.post(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 405
+
+    def test_popen_called_with_sudo_klaude(self, client):
+        d = self._make_download(filename="x.bin", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc) as mock_popen:
+            client.get(f"/api/slops/downloads/{d.id}/")
+        cmd = mock_popen.call_args.args[0]
+        assert cmd[0] == "sudo"
+        assert cmd[1] == "-u"
+        assert cmd[2] == "klaude"
+        assert cmd[3] == "cat"
+        assert f"downloads/{d.turn.session.id}/{d.turn.id}/x.bin" in cmd[4]
+
+    def test_rejects_path_traversal_filename(self, client):
+        # Direct Download row whose filename would traverse out of the sandbox.
+        # Normally _register_downloads basename-strips via find -printf %f, but a
+        # malicious/future write path must still be rejected by the view.
+        s = Session.objects.create(workspace="ws", trace_path="/t")
+        t = Turn.objects.create(session=s, prompt="p", submitter_ip="127.0.0.1", status="done")
+        d = Download.objects.create(turn=t, filename="../../etc/passwd", size=10, oversize=False)
+        resp = client.get(f"/api/slops/downloads/{d.id}/")
+        # Regex now rejects "/" in the filename segment → 400
+        assert resp.status_code == 400
+
+    def test_crlf_in_filename_does_not_500(self, client):
+        d = self._make_download(filename="line1\nline2.txt", size=3)
+        fake_proc = MagicMock()
+        fake_proc.stdout.read.side_effect = [b"abc", b""]
+        fake_proc.wait.return_value = 0
+        with patch("website.views.slops.subprocess.Popen", return_value=fake_proc):
+            resp = client.get(f"/api/slops/downloads/{d.id}/")
+        assert resp.status_code == 200
+        # No raw CR/LF should have leaked into header values
+        assert "\n" not in resp["Content-Disposition"]
+        assert "\r" not in resp["Content-Disposition"]
+
+
+@pytest.mark.django_db
+class TestSlopsDeleteCleansDownloads:
+    @patch("website.views.slops.sudo_rm_rf")
+    def test_delete_shells_rm_rf_for_session_downloads(self, mock_rm, client, auth_headers):
+        s = Session.objects.create(workspace="ws")
+        resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        rm_args = [c.args[0] for c in mock_rm.call_args_list]
+        assert any(f"downloads/{s.id}" in a for a in rm_args), f"no downloads rm: {rm_args}"
+
+    @patch("website.views.slops.sudo_rm_rf")
+    def test_delete_skips_rm_when_no_workspace(self, mock_rm, client, auth_headers):
+        s = Session.objects.create()  # workspace=""
+        resp = client.post(f"/api/slops/{s.id}/delete/", **auth_headers)
+        assert resp.status_code == 200
+        mock_rm.assert_not_called()
+
+
 @pytest.mark.django_db
 class TestSlopsSubmitWithFiles:
     @patch("website.views.slops.sudo_write_file")
@@ -583,9 +755,8 @@ class TestSlopsCleanupOnReject:
 
         resp = client.post(f"/api/slops/{session_id}/delete/", **auth_headers)
         assert resp.status_code == 200
-        mock_rm.assert_called_once()
-        call_arg = mock_rm.call_args[0][0]
-        assert call_arg.endswith(f"uploads/{session_id}")
+        rm_args = [c.args[0] for c in mock_rm.call_args_list]
+        assert any(a.endswith(f"uploads/{session_id}") for a in rm_args), f"no uploads rm: {rm_args}"
 
 
 @pytest.mark.django_db

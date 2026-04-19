@@ -821,6 +821,7 @@ export default function SlopsPage() {
                         trace={trace}
                         status={selected?.status ?? "pending"}
                         error={latestTurn?.error || ""}
+                        turns={selected?.turns ?? []}
                       />
                     )}
                   </>

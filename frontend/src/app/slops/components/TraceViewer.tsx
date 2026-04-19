@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { type SessionTrace } from "@/lib/api";
+import { type SessionTrace, type Turn, type Download, API } from "@/lib/api";
+import { formatSize } from "@/lib/slopsLimits";
 
 const ACCENT = "#39ff14";
 
@@ -160,11 +161,96 @@ function ToolResult({ content }: { content: string }) {
   );
 }
 
+/* ── DownloadChips ────────────────────────────────────── */
+
+function DownloadChips({ downloads }: { downloads: Download[] }) {
+  if (downloads.length === 0) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        marginTop: 8,
+      }}
+    >
+      {downloads.map((d) =>
+        d.oversize ? (
+          <span
+            key={d.id}
+            style={{
+              padding: "4px 8px",
+              border: `1px solid #333`,
+              borderRadius: 4,
+              background: "#111",
+              color: "#666",
+              fontSize: 11,
+              fontFamily: "monospace",
+            }}
+          >
+            {d.filename} · {formatSize(d.size)} · (too large)
+          </span>
+        ) : (
+          <a
+            key={d.id}
+            href={`${API}/api/slops/downloads/${d.id}/`}
+            download
+            style={{
+              padding: "4px 8px",
+              border: `1px solid ${ACCENT}40`,
+              borderRadius: 4,
+              background: `${ACCENT}10`,
+              color: "#ddd",
+              fontSize: 11,
+              fontFamily: "monospace",
+              textDecoration: "none",
+            }}
+          >
+            {d.filename} · {formatSize(d.size)} · ⬇
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
+
 /* ── TraceViewer ──────────────────────────────────────── */
 
-export default function TraceViewer({ trace, status, error }: { trace: SessionTrace; status: string; error?: string }) {
+export default function TraceViewer({
+  trace,
+  status,
+  error,
+  turns = [],
+}: {
+  trace: SessionTrace;
+  status: string;
+  error?: string;
+  turns?: Turn[];
+}) {
   const messages: TraceMessage[] =
     (trace.trace as { messages?: TraceMessage[] })?.messages ?? [];
+
+  // Turn boundaries: each user message = start of a new turn. The Nth user
+  // message corresponds to turns[N] (ordered chronologically, same as backend).
+  const lastAssistantOfTurn = new Map<number, number>(); // message_index -> turn_index
+  {
+    let turnIdx = -1;
+    let lastAssistantIdxInTurn = -1;
+    messages.forEach((m, i) => {
+      if (m.role === "user") {
+        if (turnIdx >= 0 && lastAssistantIdxInTurn >= 0) {
+          lastAssistantOfTurn.set(lastAssistantIdxInTurn, turnIdx);
+        }
+        turnIdx += 1;
+        lastAssistantIdxInTurn = -1;
+      } else if (m.role === "assistant" && m.content) {
+        lastAssistantIdxInTurn = i;
+      }
+    });
+    if (turnIdx >= 0 && lastAssistantIdxInTurn >= 0) {
+      lastAssistantOfTurn.set(lastAssistantIdxInTurn, turnIdx);
+    }
+  }
 
   if (messages.length === 0) {
     return (
@@ -246,6 +332,9 @@ export default function TraceViewer({ trace, status, error }: { trace: SessionTr
         /* Assistant messages — left-aligned with tool calls */
         if (msg.role === "assistant") {
           const isFinal = i === lastAssistantIdx;
+          const turnForChips = lastAssistantOfTurn.get(i);
+          const chipsDownloads =
+            turnForChips !== undefined ? (turns[turnForChips]?.downloads ?? []) : [];
           return (
             <div key={i} style={{ maxWidth: "90%" }}>
               {msg.content && (
@@ -271,6 +360,7 @@ export default function TraceViewer({ trace, status, error }: { trace: SessionTr
               {msg.tool_calls?.map((tc) => (
                 <ToolCallBlock key={tc.id} call={tc} />
               ))}
+              {chipsDownloads.length > 0 && <DownloadChips downloads={chipsDownloads} />}
             </div>
           );
         }

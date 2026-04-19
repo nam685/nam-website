@@ -60,6 +60,7 @@ urlpatterns = [
     path("slops/", views.slops_list),
     path("slops/submit/", views.slops_submit),
     path("slops/stats/", views.slops_stats),
+    path("slops/downloads/<int:download_id>/", views.slops_download),
     path("slops/<int:session_id>/", views.slops_detail),
     path("slops/<int:session_id>/delete/", views.slops_delete),
     path("slops/<int:session_id>/trace/", views.slops_trace),

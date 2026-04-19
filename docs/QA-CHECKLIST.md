@@ -214,6 +214,12 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Admin: reject a session with attachments — session updates; SSH to server and confirm `ls /home/klaude/workspace/klaude-playground/uploads/<id>/` is gone.
 - [ ] Admin: delete a session with attachments — session dir gone.
 
+### Slops downloads
+- [ ] Submit a prompt instructing klaude to write a small markdown file to `downloads/<session>/<turn>/hello.md`. Approve. After the turn completes, a clickable chip appears below klaude's final message; clicking downloads the bytes.
+- [ ] Submit a prompt instructing klaude to write 6 files. Only 5 chips appear.
+- [ ] Submit a prompt instructing klaude to write a file > 5 MB. The chip shows "(too large)" with no link.
+- [ ] Delete a session with downloads. Confirm `/home/klaude/workspace/<ws>/downloads/<id>/` is gone.
+
 ## Mobile
 
 - [ ] All pages render correctly on mobile viewport (375px)

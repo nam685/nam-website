@@ -24,10 +24,17 @@ describe("slopsLimits constants", () => {
 });
 
 describe("formatSize", () => {
-  it("formats bytes/KB/MB", () => {
-    expect(formatSize(500)).toBe("500 B");
-    expect(formatSize(2048)).toBe("2.0 KB");
+  it("formats bytes", () => {
+    expect(formatSize(0)).toBe("0 B");
+    expect(formatSize(512)).toBe("512 B");
+  });
+  it("formats kilobytes with one decimal", () => {
+    expect(formatSize(1024)).toBe("1.0 KB");
+    expect(formatSize(1536)).toBe("1.5 KB");
+  });
+  it("formats megabytes with one decimal", () => {
     expect(formatSize(5 * 1024 * 1024)).toBe("5.0 MB");
+    expect(formatSize(10 * 1024 * 1024)).toBe("10.0 MB");
   });
 });
 
