@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { store } from "@/lib/auth";
 import { timeAgo } from "@/lib/date";
+import { validateFiles, formatSize, ALLOWED_EXTENSIONS } from "@/lib/slopsLimits";
 import HeroSection from "./components/HeroSection";
 import MatrixBg from "./components/MatrixBg";
 import TraceViewer from "./components/TraceViewer";
@@ -66,6 +67,9 @@ export default function SlopsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tracePollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -250,6 +254,33 @@ export default function SlopsPage() {
       setActionLoading(false);
       setMenuOpen(false);
     }
+  };
+
+  const onPickFiles = () => fileInputRef.current?.click();
+
+  const onFilesChanged = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    const merged = [...pendingFiles];
+    for (const f of picked) {
+      if (!merged.some((m) => m.name === f.name && m.size === f.size)) {
+        merged.push(f);
+      }
+    }
+    const res = validateFiles(merged);
+    if (!res.ok) {
+      setFileError(res.error);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setFileError(null);
+    setPendingFiles(merged);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (idx: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+    setFileError(null);
   };
 
   const handleSubmit = async () => {
@@ -830,7 +861,96 @@ export default function SlopsPage() {
               Waiting for current turn to complete...
             </div>
           )}
+          {pendingFiles.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginBottom: 8,
+              }}
+            >
+              {pendingFiles.map((f, i) => (
+                <span
+                  key={`${f.name}-${f.size}-${i}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: `1px solid ${ACCENT}40`,
+                    background: `${ACCENT}10`,
+                    color: "#ccc",
+                    fontSize: 11,
+                  }}
+                >
+                  {f.name}
+                  <span style={{ color: "#666" }}>· {formatSize(f.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(i)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#ccc",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      lineHeight: 1,
+                      padding: 0,
+                    }}
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {fileError && (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "6px 12px",
+                borderRadius: 6,
+                background: "rgba(239,68,68,0.1)",
+                border: "1px solid rgba(239,68,68,0.3)",
+                color: "#f87171",
+                fontSize: 11,
+              }}
+            >
+              {fileError}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={Array.from(ALLOWED_EXTENSIONS).join(",")}
+              style={{ display: "none" }}
+              onChange={onFilesChanged}
+            />
+            <button
+              type="button"
+              onClick={onPickFiles}
+              disabled={!!hasActiveTurn}
+              aria-label="Attach files"
+              style={{
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: `1px solid ${ACCENT}44`,
+                background: "#000",
+                color: ACCENT,
+                fontSize: 18,
+                fontFamily: "monospace",
+                cursor: hasActiveTurn ? "not-allowed" : "pointer",
+                opacity: hasActiveTurn ? 0.3 : 1,
+                lineHeight: 1,
+              }}
+            >
+              +
+            </button>
             <input
               type="text"
               value={prompt}
