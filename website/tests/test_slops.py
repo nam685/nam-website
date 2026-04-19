@@ -479,3 +479,82 @@ class TestSlopsStats:
         assert data["total_tokens"] == 150
         assert data["total_tool_calls"] == 7
         assert data["success_rate"] == 50.0
+
+
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from website.models import Attachment
+from website.slops_limits import MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
+
+
+@pytest.mark.django_db
+class TestSlopsSubmitWithFiles:
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_submit_with_single_file(self, mock_mkdir, mock_write, client):
+        f = SimpleUploadedFile("data.csv", b"a,b\n1,2\n", content_type="text/csv")
+        resp = client.post(
+            "/api/slops/submit/",
+            {"prompt": "summarize this", "files": [f]},
+        )
+        assert resp.status_code == 201, resp.content
+        data = resp.json()
+        assert len(data["turns"]) == 1
+        turn = data["turns"][0]
+        assert len(turn["attachments"]) == 1
+        a = turn["attachments"][0]
+        assert a["filename"] == "data.csv"
+        assert a["size"] == 8
+        assert a["previewable"] is True
+        assert Attachment.objects.count() == 1
+        mock_mkdir.assert_called_once()
+        mock_write.assert_called_once()
+
+    @patch("website.views.slops.sudo_write_file")
+    @patch("website.views.slops.sudo_mkdir_p")
+    def test_submit_multiple_files(self, mock_mkdir, mock_write, client):
+        f1 = SimpleUploadedFile("a.txt", b"hello", content_type="text/plain")
+        f2 = SimpleUploadedFile("b.pdf", b"%PDF-1.4...", content_type="application/pdf")
+        resp = client.post(
+            "/api/slops/submit/",
+            {"prompt": "look at these", "files": [f1, f2]},
+        )
+        assert resp.status_code == 201
+        turn = resp.json()["turns"][0]
+        assert len(turn["attachments"]) == 2
+        names = [a["filename"] for a in turn["attachments"]]
+        assert names == ["a.txt", "b.pdf"]
+        assert [a["previewable"] for a in turn["attachments"]] == [True, False]
+
+    def test_reject_oversize_single(self, client):
+        big = SimpleUploadedFile("big.txt", b"x" * (MAX_SINGLE_FILE + 1))
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [big]})
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["error"].lower()
+        assert Attachment.objects.count() == 0
+
+    def test_reject_oversize_total(self, client):
+        half = b"x" * ((MAX_TOTAL_UPLOAD // 2) + 1)
+        f1 = SimpleUploadedFile("a.txt", half)
+        f2 = SimpleUploadedFile("b.txt", half)
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f1, f2]})
+        assert resp.status_code == 413
+        assert Attachment.objects.count() == 0
+
+    def test_reject_too_many_files(self, client):
+        files = [SimpleUploadedFile(f"f{i}.txt", b"x") for i in range(6)]
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": files})
+        assert resp.status_code == 400
+        assert "too many" in resp.json()["error"].lower()
+
+    def test_reject_disallowed_extension(self, client):
+        f = SimpleUploadedFile("evil.exe", b"MZ...")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 400
+        assert ".exe" in resp.json()["error"]
+
+    def test_reject_dotfile(self, client):
+        f = SimpleUploadedFile(".env", b"SECRET=1")
+        resp = client.post("/api/slops/submit/", {"prompt": "p", "files": [f]})
+        assert resp.status_code == 400
