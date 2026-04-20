@@ -233,6 +233,7 @@ export default function TraceViewer({
   // Turn boundaries: each user message = start of a new turn. The Nth user
   // message corresponds to turns[N] (ordered chronologically, same as backend).
   const lastAssistantOfTurn = new Map<number, number>(); // message_index -> turn_index
+  const userMessageToTurn = new Map<number, number>(); // message_index -> turn_index
   {
     let turnIdx = -1;
     let lastAssistantIdxInTurn = -1;
@@ -243,6 +244,7 @@ export default function TraceViewer({
         }
         turnIdx += 1;
         lastAssistantIdxInTurn = -1;
+        userMessageToTurn.set(i, turnIdx);
       } else if (m.role === "assistant" && m.content) {
         lastAssistantIdxInTurn = i;
       }
@@ -297,8 +299,19 @@ export default function TraceViewer({
           );
         }
 
-        /* User messages — right-aligned bubble */
+        /* User messages — right-aligned bubble. Render the raw turn prompt
+           (not msg.content) so the LLM-side wrapper prefixes
+           ([downloads — …], [attachments — read these first]) stay out of
+           the UI. Fall back to msg.content if no matching turn. */
         if (msg.role === "user") {
+          const turnIdx = userMessageToTurn.get(i);
+          const rawPrompt =
+            turnIdx !== undefined ? turns[turnIdx]?.prompt : undefined;
+          const displayContent =
+            rawPrompt ??
+            (typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content));
           return (
             <div
               key={i}
@@ -321,9 +334,7 @@ export default function TraceViewer({
                   wordBreak: "break-word",
                 }}
               >
-                {typeof msg.content === "string"
-                  ? msg.content
-                  : JSON.stringify(msg.content)}
+                {displayContent}
               </div>
             </div>
           );
