@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("website", "0019_session_turn_and_more"),
+        ("website", "0021_download"),
     ]
 
     operations = [
