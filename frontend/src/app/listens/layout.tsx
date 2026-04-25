@@ -36,6 +36,10 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<
     "idle" | "syncing" | "done" | "error"
   >("idle");
+  const [showReauth, setShowReauth] = useState(false);
+  const [reauthHeaders, setReauthHeaders] = useState("");
+  const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [reauthError, setReauthError] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -237,63 +241,89 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
                 </div>
               </div>
               {isAdmin && (
-                <button
-                  disabled={syncStatus === "syncing"}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const token = store("adminToken");
-                    if (!token) return;
-                    setSyncStatus("syncing");
-                    try {
-                      const res = await fetch(`${API}/api/listens/sync/`, {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${token}` },
-                      });
-                      if (!res.ok) {
-                        const data = await res.json().catch(() => null);
-                        console.error("Sync failed:", data?.error || res.status);
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    disabled={syncStatus === "syncing"}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const token = store("adminToken");
+                      if (!token) return;
+                      setSyncStatus("syncing");
+                      try {
+                        const res = await fetch(`${API}/api/listens/sync/`, {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (!res.ok) {
+                          const data = await res.json().catch(() => null);
+                          console.error("Sync failed:", data?.error || res.status);
+                          setSyncStatus("error");
+                        } else {
+                          const data = await res.json();
+                          console.log(`Synced ${data.synced} tracks, ${data.synced_liked} liked`);
+                          setSyncStatus("done");
+                          if (data.synced > 0) window.location.reload();
+                        }
+                      } catch {
                         setSyncStatus("error");
-                      } else {
-                        const data = await res.json();
-                        console.log(`Synced ${data.synced} tracks`);
-                        setSyncStatus("done");
-                        if (data.synced > 0) window.location.reload();
                       }
-                    } catch {
-                      setSyncStatus("error");
-                    }
-                    setTimeout(() => setSyncStatus("idle"), 3000);
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = `rgba(249,115,22,0.15)`;
-                    e.currentTarget.style.borderColor = ACCENT;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "none";
-                    e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
-                  }}
-                  style={{
-                    background: "none",
-                    border: `1px solid rgba(249,115,22,0.3)`,
-                    color: ACCENT,
-                    borderRadius: 4,
-                    padding: "4px 10px",
-                    cursor: "pointer",
-                    fontSize: 10,
-                    fontFamily: "monospace",
-                    letterSpacing: 1,
-                    flexShrink: 0,
-                    transition: "background 0.15s, border-color 0.15s",
-                  }}
-                >
-                  {syncStatus === "syncing"
-                    ? "SYNCING..."
-                    : syncStatus === "done"
-                      ? "SYNCED!"
-                      : syncStatus === "error"
-                        ? "FAILED"
-                        : "SYNC"}
-                </button>
+                      setTimeout(() => setSyncStatus("idle"), 3000);
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `rgba(249,115,22,0.15)`;
+                      e.currentTarget.style.borderColor = ACCENT;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "none";
+                      e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
+                    }}
+                    style={{
+                      background: "none",
+                      border: `1px solid rgba(249,115,22,0.3)`,
+                      color: ACCENT,
+                      borderRadius: 4,
+                      padding: "4px 10px",
+                      cursor: "pointer",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                      letterSpacing: 1,
+                      transition: "background 0.15s, border-color 0.15s",
+                    }}
+                  >
+                    {syncStatus === "syncing"
+                      ? "SYNCING..."
+                      : syncStatus === "done"
+                        ? "SYNCED!"
+                        : syncStatus === "error"
+                          ? "FAILED"
+                          : "SYNC"}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowReauth(!showReauth); }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `rgba(249,115,22,0.15)`;
+                      e.currentTarget.style.borderColor = ACCENT;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "none";
+                      e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)";
+                    }}
+                    style={{
+                      background: showReauth ? "rgba(249,115,22,0.15)" : "none",
+                      border: `1px solid rgba(249,115,22,0.3)`,
+                      color: ACCENT,
+                      borderRadius: 4,
+                      padding: "4px 10px",
+                      cursor: "pointer",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                      letterSpacing: 1,
+                      transition: "background 0.15s, border-color 0.15s",
+                    }}
+                  >
+                    AUTH
+                  </button>
+                </div>
               )}
             </div>
           ) : (
@@ -612,6 +642,74 @@ export default function ListensLayout({ children }: { children: ReactNode }) {
           </div>
         )}
       </div>
+
+      {/* ---- Reauth form (admin only) ---- */}
+      {isAdmin && showReauth && (
+        <div style={{ background: "rgba(20,20,20,0.8)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 8, padding: 16, marginTop: 8 }}>
+          <div style={{ color: "#888", fontSize: 10, fontFamily: "monospace", letterSpacing: 1, marginBottom: 8 }}>
+            YTM RE-AUTH
+          </div>
+          <div style={{ color: "#555", fontSize: 10, marginBottom: 10, lineHeight: 1.5 }}>
+            music.youtube.com → DevTools → Network → click a song → right-click the POST request → Copy request headers → paste below
+          </div>
+          <textarea
+            value={reauthHeaders}
+            onChange={(e) => setReauthHeaders(e.target.value)}
+            placeholder="Paste request headers here..."
+            style={{
+              width: "100%", minHeight: 120, background: "#111", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 4, color: "#ccc", fontSize: 11, fontFamily: "monospace", padding: 10,
+              resize: "vertical", outline: "none",
+            }}
+          />
+          {reauthError && (
+            <div style={{ color: "#f87171", fontSize: 10, marginTop: 6 }}>{reauthError}</div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+            <button
+              onClick={() => { setShowReauth(false); setReauthHeaders(""); setReauthError(""); setReauthStatus("idle"); }}
+              style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#888", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontFamily: "monospace" }}
+            >
+              CANCEL
+            </button>
+            <button
+              disabled={reauthStatus === "saving" || !reauthHeaders.trim()}
+              onClick={async () => {
+                const token = store("adminToken");
+                if (!token) return;
+                setReauthStatus("saving");
+                setReauthError("");
+                try {
+                  const res = await fetch(`${API}/api/listens/reauth/`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ headers: reauthHeaders }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setReauthError(data.error || "Failed");
+                    setReauthStatus("error");
+                  } else {
+                    setReauthStatus("done");
+                    setTimeout(() => { setShowReauth(false); setReauthHeaders(""); setReauthStatus("idle"); }, 1500);
+                  }
+                } catch {
+                  setReauthError("Network error");
+                  setReauthStatus("error");
+                }
+              }}
+              style={{
+                background: reauthStatus === "done" ? "rgba(34,197,94,0.2)" : "rgba(249,115,22,0.15)",
+                border: `1px solid ${reauthStatus === "done" ? "rgba(34,197,94,0.4)" : "rgba(249,115,22,0.3)"}`,
+                color: reauthStatus === "done" ? "#22c55e" : ACCENT,
+                borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontFamily: "monospace", letterSpacing: 1,
+              }}
+            >
+              {reauthStatus === "saving" ? "SAVING..." : reauthStatus === "done" ? "SAVED!" : "SAVE"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ---- Tab bar ---- */}
       <div

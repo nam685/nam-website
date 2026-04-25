@@ -67,7 +67,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] History feed shows 20 items initially, two-column grid desktop, single column mobile
 - [ ] "Load More" fetches next 20 items
 - [ ] Tab navigation works: History / Tracks / Artists / Albums
-- [ ] `/listens/tracks` shows ranked track list with play counts, artist names truncated
+- [ ] `/listens/tracks` shows weighted-shuffled track list (no play counts), album name shown
 - [ ] `/listens/artists` shows artist cards — collab artists credited independently
 - [ ] `/listens/artists` — no view count strings in artist names (e.g., "89M views")
 - [ ] `/listens/albums` shows only albums with 2+ tracks, square cover art
@@ -80,7 +80,11 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Sync button appears and triggers sync
 - [ ] Sync cooldown (5 min) is enforced
 - [ ] Google Takeout import works via POST /api/listens/import/
+- [ ] Sync also pulls liked tracks (synced_liked count in response)
 - [ ] Deduplication works (no duplicate tracks after re-sync)
+- [ ] AUTH button toggles re-auth form with textarea for pasting browser headers
+- [ ] Re-auth saves headers and validates YTMusic init before writing
+- [ ] Daily automated sync runs via Celery Beat at 4am UTC
 - [ ] Play buttons appear on tracks, artist cards, album cards
 - [ ] Clicking play opens the mini player
 - [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek

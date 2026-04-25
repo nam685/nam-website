@@ -11,6 +11,7 @@ class ListenTrack(models.Model):
     thumbnail_url = models.URLField(max_length=1000, blank=True, default="")
     duration = models.CharField(max_length=16, blank=True, default="")
     played_at = models.DateTimeField()
+    is_liked = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-played_at"]

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -16,7 +17,7 @@ from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
-from ..utils import parse_pagination
+from ..utils import parse_json_body, parse_pagination
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,124 @@ def listen_list(request):
     return JsonResponse({"tracks": data, "total": total})
 
 
+def _get_auth_path():
+    return os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
+
+
+def _init_ytmusic():
+    """Initialize YTMusic client from browser.json. Returns (YTMusic, None) or (None, error_str)."""
+    from ytmusicapi import YTMusic
+    from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
+
+    auth_path = _get_auth_path()
+    if not os.path.isfile(auth_path):
+        return None, "Browser auth not configured. Run: ytmusicapi browser"
+
+    with open(auth_path) as f:
+        headers = json.load(f)
+    if "authorization" not in headers and "cookie" in headers:
+        sapisid = sapisid_from_cookie(headers["cookie"])
+        origin = headers.get("origin", "https://music.youtube.com")
+        headers["authorization"] = get_authorization(sapisid + " " + origin)
+    return YTMusic(headers), None
+
+
+def _parse_track_item(item):
+    """Extract track fields from a ytmusicapi item dict."""
+    video_id = item.get("videoId", "")
+    if not video_id:
+        return None
+
+    artists = item.get("artists", [])
+    artist_names = [a.get("name", "") for a in artists if a.get("name") and not VIEW_COUNT_RE.match(a.get("name", ""))]
+    artist_name = ", ".join(artist_names) if artist_names else "Unknown"
+
+    album_info = item.get("album")
+    album_name = album_info.get("name", "") if album_info else ""
+
+    thumbnails = item.get("thumbnails", [])
+    thumb_url = thumbnails[-1].get("url", "") if thumbnails else ""
+
+    return {
+        "video_id": video_id,
+        "title": item.get("title", "Unknown"),
+        "artist": artist_name,
+        "album": album_name,
+        "thumbnail_url": thumb_url,
+        "duration": item.get("duration", ""),
+    }
+
+
+def _do_sync():
+    """Core sync logic shared by the view and Celery task.
+
+    Returns {"synced_history": int, "synced_liked": int} or raises on auth failure.
+    """
+    yt, err = _init_ytmusic()
+    if err:
+        raise RuntimeError(err)
+
+    # --- Sync play history ---
+    history = yt.get_history()
+
+    cutoff = timezone.now() - timezone.timedelta(hours=24)
+    recent_ids = set(ListenTrack.objects.filter(played_at__gte=cutoff).values_list("video_id", flat=True))
+
+    new_tracks = []
+    sync_time = timezone.now()
+    for i, item in enumerate(history):
+        parsed = _parse_track_item(item)
+        if not parsed or parsed["video_id"] in recent_ids:
+            continue
+
+        new_tracks.append(
+            ListenTrack(
+                **parsed,
+                played_at=sync_time - timezone.timedelta(seconds=i),
+            )
+        )
+
+    if new_tracks:
+        ListenTrack.objects.bulk_create(new_tracks)
+
+    # --- Sync liked tracks ---
+    try:
+        liked = yt.get_liked_songs(limit=200)
+        liked_items = liked.get("tracks", [])
+    except Exception:
+        logger.warning("Failed to fetch liked songs — skipping")
+        liked_items = []
+
+    existing_liked_ids = set(ListenTrack.objects.filter(is_liked=True).values_list("video_id", flat=True))
+
+    new_liked = []
+    for item in liked_items:
+        parsed = _parse_track_item(item)
+        if not parsed or parsed["video_id"] in existing_liked_ids:
+            continue
+
+        new_liked.append(
+            ListenTrack(
+                **parsed,
+                played_at=timezone.now(),
+                is_liked=True,
+            )
+        )
+
+    if new_liked:
+        ListenTrack.objects.bulk_create(new_liked)
+
+    if new_tracks or new_liked:
+        redis_cache.delete("listen_stats")
+        redis_cache.delete("listen_total_count")
+
+    return {"synced_history": len(new_tracks), "synced_liked": len(new_liked)}
+
+
 @csrf_exempt
 @require_admin
 def listen_sync(request):
-    """Sync YouTube Music history using browser auth credentials."""
+    """Sync YouTube Music history + liked tracks using browser auth credentials."""
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
@@ -67,79 +182,17 @@ def listen_sync(request):
         remaining = int(SYNC_COOLDOWN - (now - last_sync))
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
-    # Fetch history using browser auth file
     try:
-        import os
-
-        from ytmusicapi import YTMusic
-        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
-
-        auth_path = os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
-        if not os.path.isfile(auth_path):
-            return JsonResponse({"error": "Browser auth not configured. Run: ytmusicapi browser"}, status=500)
-
-        # ytmusicapi v1.11.5 requires an authorization header with SAPISIDHASH
-        # to detect browser auth, but `ytmusicapi browser` doesn't generate it.
-        # Compute it from the __Secure-3PAPISID cookie before passing to YTMusic.
-        with open(auth_path) as f:
-            headers = json.load(f)
-        if "authorization" not in headers and "cookie" in headers:
-            sapisid = sapisid_from_cookie(headers["cookie"])
-            origin = headers.get("origin", "https://music.youtube.com")
-            headers["authorization"] = get_authorization(sapisid + " " + origin)
-        yt = YTMusic(headers)
-        history = yt.get_history()
+        result = _do_sync()
+    except RuntimeError as e:
+        return JsonResponse({"error": str(e)}, status=500)
     except Exception:
-        logger.exception("Failed to fetch YouTube Music history")
+        logger.exception("Failed to sync YouTube Music")
         return JsonResponse({"error": "Failed to fetch YTM history"}, status=502)
-
-    # Deduplicate against last 24h
-    cutoff = timezone.now() - timezone.timedelta(hours=24)
-    recent_ids = set(ListenTrack.objects.filter(played_at__gte=cutoff).values_list("video_id", flat=True))
-
-    new_tracks = []
-    sync_time = timezone.now()
-    for i, item in enumerate(history):
-        video_id = item.get("videoId", "")
-        if not video_id or video_id in recent_ids:
-            continue
-
-        artists = item.get("artists", [])
-        artist_names = [
-            a.get("name", "") for a in artists if a.get("name") and not VIEW_COUNT_RE.match(a.get("name", ""))
-        ]
-        artist_name = ", ".join(artist_names) if artist_names else "Unknown"
-
-        album_info = item.get("album")
-        album_name = album_info.get("name", "") if album_info else ""
-
-        thumbnails = item.get("thumbnails", [])
-        thumb_url = thumbnails[-1].get("url", "") if thumbnails else ""
-
-        duration = item.get("duration", "")
-
-        played_at = sync_time - timezone.timedelta(seconds=i)
-
-        new_tracks.append(
-            ListenTrack(
-                video_id=video_id,
-                title=item.get("title", "Unknown"),
-                artist=artist_name,
-                album=album_name,
-                thumbnail_url=thumb_url,
-                duration=duration,
-                played_at=played_at,
-            )
-        )
-
-    if new_tracks:
-        ListenTrack.objects.bulk_create(new_tracks)
-        redis_cache.delete("listen_stats")
-        redis_cache.delete("listen_total_count")
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
-    return JsonResponse({"synced": len(new_tracks)})
+    return JsonResponse({"synced": result["synced_history"], "synced_liked": result["synced_liked"]})
 
 
 def listen_stats(_request):
@@ -260,19 +313,45 @@ def listen_recommended(_request):
 
 @require_GET
 def listen_top_tracks(request):
-    """Return tracks ranked by play count (public)."""
+    """Return tracks ranked by play count (public).
+
+    ?sort=weighted returns a weighted-random ordering (play_count * random),
+    cached for 5 minutes so pagination is stable within the same shuffle.
+    """
     try:
         limit, offset = parse_pagination(request)
     except (ValueError, TypeError):
         return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
 
-    tracks = (
-        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
-        .annotate(play_count=Count("id"))
-        .order_by("-play_count")
-    )
-    total = tracks.count()
-    page = list(tracks[offset : offset + limit])
+    sort_mode = request.GET.get("sort", "")
+
+    if sort_mode == "weighted":
+        cache_key = "listen_tracks_weighted"
+        cached = redis_cache.get(cache_key)
+        if cached is None:
+            all_tracks = list(
+                ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+                .annotate(play_count=Count("id"))
+                .order_by("-play_count")
+            )
+            for t in all_tracks:
+                t["_score"] = t["play_count"] * random.random()
+            all_tracks.sort(key=lambda t: -t["_score"])
+            for t in all_tracks:
+                del t["_score"]
+            cached = all_tracks
+            redis_cache.set(cache_key, cached, 300)
+
+        total = len(cached)
+        page = cached[offset : offset + limit]
+    else:
+        tracks = (
+            ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
+            .annotate(play_count=Count("id"))
+            .order_by("-play_count")
+        )
+        total = tracks.count()
+        page = list(tracks[offset : offset + limit])
 
     return JsonResponse({"tracks": page, "total": total})
 
@@ -490,3 +569,65 @@ def listen_import(request):
         imported += len(batch)
 
     return JsonResponse({"imported": imported, "skipped": skipped})
+
+
+@csrf_exempt
+@require_admin
+def listen_reauth(request):
+    """Save new browser auth headers for ytmusicapi.
+
+    Accepts JSON body {"headers": "<raw request headers text>"}.
+    Parses "Header-Name: value" lines into the JSON dict that ytmusicapi expects.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    raw_headers = body.get("headers", "").strip()
+    if not raw_headers:
+        return JsonResponse({"error": "Missing 'headers' field"}, status=400)
+
+    # Parse "Key: Value" lines into a dict
+    parsed = {}
+    for line in raw_headers.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        # Skip pseudo-headers from HTTP/2 (like :authority, :method)
+        if line.startswith(":"):
+            continue
+        key, _, value = line.partition(":")
+        parsed[key.strip().lower()] = value.strip()
+
+    if "cookie" not in parsed:
+        return JsonResponse({"error": "No 'cookie' header found in pasted headers"}, status=400)
+
+    # Ensure required fields
+    if "origin" not in parsed:
+        parsed["origin"] = "https://music.youtube.com"
+    if "user-agent" not in parsed:
+        parsed["user-agent"] = "Mozilla/5.0"
+
+    # Validate by trying to init YTMusic
+    try:
+        from ytmusicapi import YTMusic
+        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
+
+        if "authorization" not in parsed and "cookie" in parsed:
+            sapisid = sapisid_from_cookie(parsed["cookie"])
+            origin = parsed.get("origin", "https://music.youtube.com")
+            parsed["authorization"] = get_authorization(sapisid + " " + origin)
+
+        YTMusic(parsed)
+    except Exception as e:
+        return JsonResponse({"error": f"Headers invalid — YTMusic init failed: {e}"}, status=400)
+
+    # Write to browser.json
+    auth_path = _get_auth_path()
+    with open(auth_path, "w") as f:
+        json.dump(parsed, f, indent=2)
+
+    return JsonResponse({"ok": True})

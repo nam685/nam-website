@@ -10,12 +10,12 @@ from config.celery import app
 from website.models import Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
+logger = logging.getLogger(__name__)
+
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
 WORKSPACE_BASE = "/home/klaude/workspace"
 TRACES_BASE = "/home/klaude/traces"
-
-logger = logging.getLogger(__name__)
 
 
 def _fmt_size(n):
@@ -250,3 +250,15 @@ def _register_downloads(turn):
         if not oversize:
             servable_total += size
         created += 1
+
+
+@app.task(max_retries=0)
+def sync_listens():
+    """Daily sync of YouTube Music history + liked tracks."""
+    from website.views.listen import _do_sync
+
+    try:
+        result = _do_sync()
+        logger.info("Listens sync complete: %d history, %d liked", result["synced_history"], result["synced_liked"])
+    except Exception:
+        logger.exception("Automated listens sync failed (likely expired browser auth)")
