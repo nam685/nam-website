@@ -31,7 +31,7 @@ export default function ListensTracksPage() {
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
 
   const fetchTracks = useCallback(async (offset: number) => {
-    const resp = await fetch(`${API}/api/listens/tracks/?limit=${PAGE_SIZE}&offset=${offset}`);
+    const resp = await fetch(`${API}/api/listens/tracks/?sort=weighted&limit=${PAGE_SIZE}&offset=${offset}`);
     return resp.json();
   }, []);
 
@@ -95,10 +95,9 @@ export default function ListensTracksPage() {
               style={{
                 width: 28,
                 textAlign: "right",
-                color: i < 3 ? ACCENT : "#555",
+                color: "#555",
                 fontSize: 13,
                 fontFamily: "monospace",
-                fontWeight: i < 3 ? "bold" : "normal",
                 flexShrink: 0,
               }}
             >
@@ -121,9 +120,11 @@ export default function ListensTracksPage() {
               </div>
               <div style={{ color: "#666", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</div>
             </div>
-            <div style={{ color: ACCENT, fontSize: 12, fontFamily: "monospace", flexShrink: 0 }}>
-              {track.play_count}×
-            </div>
+            {track.album && (
+              <div style={{ color: "#444", fontSize: 10, fontFamily: "monospace", flexShrink: 0, maxWidth: 120, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {track.album}
+              </div>
+            )}
           </div>
         ))}
       </div>

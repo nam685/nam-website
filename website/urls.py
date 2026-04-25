@@ -41,6 +41,7 @@ urlpatterns = [
     path("listens/sync/", views.listen_sync),
     path("listens/stats/", views.listen_stats),
     path("listens/sync-status/", views.listen_sync_status),
+    path("listens/reauth/", views.listen_reauth),
     path("watches/recommended/", views.watch_recommended),
     path("watches/backfill-stats/", views.watch_backfill_stats),
     path("watches/", views.watch_list),
