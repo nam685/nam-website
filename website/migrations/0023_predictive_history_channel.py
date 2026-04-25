@@ -3,7 +3,7 @@
 from django.db import migrations
 
 
-def seed_predictive_history(apps, schema_editor):
+def seed_predictive_history(apps, _schema_editor):
     WatchChannel = apps.get_model("website", "WatchChannel")
     WatchVideo = apps.get_model("website", "WatchVideo")
 
@@ -56,7 +56,7 @@ def seed_predictive_history(apps, schema_editor):
         )
 
 
-def unseed(apps, schema_editor):
+def unseed(apps, _schema_editor):
     WatchVideo = apps.get_model("website", "WatchVideo")
     WatchChannel = apps.get_model("website", "WatchChannel")
     WatchVideo.objects.filter(youtube_video_id__in=["7y_hbz6loEo", "HvVTNTPzq7E", "ef-Ch2LGDDI"]).delete()
