@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0019_session_turn_and_more'),
+        ("website", "0019_session_turn_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='listentrack',
-            name='is_liked',
+            model_name="listentrack",
+            name="is_liked",
             field=models.BooleanField(default=False),
         ),
     ]
