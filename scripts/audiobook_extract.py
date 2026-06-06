@@ -81,9 +81,9 @@ def extract_text_and_outline(pdf_path: Path, out_dir: Path) -> tuple[str, list]:
     for page in doc:
         pages_text.append(page.get_text("text"))
     raw_text = "\n\n".join(pages_text)
-    (out_dir / "raw.txt").write_text(raw_text)
+    (out_dir / "raw.txt").write_text(raw_text, encoding="utf-8")
     outline = [{"level": level, "title": title, "page": page} for (level, title, page) in doc.get_toc()]
-    (out_dir / "raw_outline.json").write_text(json.dumps(outline, indent=2, ensure_ascii=False))
+    (out_dir / "raw_outline.json").write_text(json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
     doc.close()
     return raw_text, outline
 
@@ -134,7 +134,7 @@ def haiku_clean_chapter(
     cleaned_input = clean_pdf_text(chapter_text)
     cache = _cache_path(out_dir, chapter_id, cleaned_input)
     if cache.exists():
-        return json.loads(cache.read_text())
+        return json.loads(cache.read_text(encoding="utf-8"))
 
     max_call = 50_000
     pieces = [cleaned_input[i : i + max_call] for i in range(0, len(cleaned_input), max_call)]
@@ -152,10 +152,10 @@ def haiku_clean_chapter(
             segments = json.loads(raw)
             if isinstance(segments, list):
                 all_segments.extend(segments)
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:  # noqa: BLE001 — script-level catch-all
             print(f"  [warn] piece failed ({e}); falling back to plain prose")
             all_segments.append({"text": piece, "kind": "prose"})
-    cache.write_text(json.dumps(all_segments, indent=2, ensure_ascii=False))
+    cache.write_text(json.dumps(all_segments, indent=2, ensure_ascii=False), encoding="utf-8")
     return all_segments
 
 
@@ -235,7 +235,7 @@ def main() -> int:
         raw_text=raw_text,
         outline=outline,
     )
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[ok] wrote manifest.json — {len(manifest['chunks'])} chunks")
     return 0
 

@@ -115,7 +115,7 @@ def main() -> int:
     manifest_path = book_dir / "manifest.json"
     if not manifest_path.exists():
         sys.exit(f"missing {manifest_path} — run audiobook_extract.py first")
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     audio_dir = book_dir / "audio"
     audio_dir.mkdir(exist_ok=True)
@@ -140,7 +140,7 @@ def main() -> int:
     for chunk in manifest["chunks"]:
         if chunk.get("duration_s") is None:
             chunk["duration_s"] = round(measure_duration(audio_dir / f"{chunk['id']:05d}.mp3"), 2)
-    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print("[ok] durations measured")
 
     print(f"[upload] uploading to {base_url}")

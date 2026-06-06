@@ -31,7 +31,7 @@ def audiobook_manifest(request, slug: str):  # noqa: ARG001
     path = _manifest_path(slug)
     if not path.exists():
         return JsonResponse({"error": "Not found"}, status=404)
-    return JsonResponse(json.loads(path.read_text()))
+    return JsonResponse(json.loads(path.read_text(encoding="utf-8")))
 
 
 @require_GET
@@ -114,13 +114,14 @@ def audiobook_publish(request, slug: str):
     book_dir.mkdir(parents=True, exist_ok=True)
     target = _manifest_path(slug)
     tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+    tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, target)
     return JsonResponse({"ok": True})
 
 
 REQUIRED_TOP_KEYS = {"slug", "title", "author", "voice", "chapters", "chunks"}
 REQUIRED_CHUNK_KEYS = {"id", "text", "duration_s", "kind"}
+REQUIRED_CHAPTER_KEYS = {"id", "label", "chunk_start"}
 
 
 def _validate_manifest(manifest, slug: str) -> str | None:
@@ -142,4 +143,16 @@ def _validate_manifest(manifest, slug: str) -> str | None:
             return f"chunk {i} missing keys: {sorted(cm)}"
         if chunk["id"] != i:
             return f"chunk index {i} has id {chunk['id']} (must be contiguous from 0)"
+    chapters = manifest["chapters"]
+    if not isinstance(chapters, list):
+        return "chapters must be a list"
+    for i, chapter in enumerate(chapters):
+        if not isinstance(chapter, dict):
+            return f"chapter {i} is not an object"
+        cm = REQUIRED_CHAPTER_KEYS - set(chapter.keys())
+        if cm:
+            return f"chapter {i} missing keys: {sorted(cm)}"
+        cs = chapter["chunk_start"]
+        if not isinstance(cs, int) or cs < 0 or cs >= len(chunks):
+            return f"chapter {i} has invalid chunk_start {cs!r}"
     return None
