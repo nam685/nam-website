@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
+import AudiobookPill from "@/components/AudiobookPill";
 import FeedbackButton from "@/components/FeedbackButton";
 import MiniPlayer from "@/components/MiniPlayer";
 import Navbar from "@/components/Navbar";
 import PageBackground from "@/components/PageBackground";
+import { AudiobookPlayerProvider } from "@/lib/audiobookPlayer";
 import { PlayerProvider } from "@/lib/player";
 
 const spaceGrotesk = Space_Grotesk({
@@ -45,14 +47,17 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <PlayerProvider>
-          <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
-          <PageBackground />
-          <Navbar />
-          {children}
-          <MiniPlayer />
-          <FeedbackButton />
-        </PlayerProvider>
+        <AudiobookPlayerProvider>
+          <PlayerProvider>
+            <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
+            <PageBackground />
+            <Navbar />
+            {children}
+            <MiniPlayer />
+            <AudiobookPill />
+            <FeedbackButton />
+          </PlayerProvider>
+        </AudiobookPlayerProvider>
       </body>
     </html>
   );
