@@ -1,3 +1,11 @@
+from .audiobook import (
+    audiobook_audio,
+    audiobook_chunk_exists,
+    audiobook_manifest,
+    audiobook_playback_token,
+    audiobook_publish,
+    audiobook_upload_chunk,
+)
 from .auth import check as auth_check
 from .auth import login as auth_login
 from .auth import nonce as auth_nonce
@@ -66,6 +74,12 @@ from .watch import (
 )
 
 __all__ = [
+    "audiobook_audio",
+    "audiobook_chunk_exists",
+    "audiobook_manifest",
+    "audiobook_playback_token",
+    "audiobook_publish",
+    "audiobook_upload_chunk",
     "auth_check",
     "auth_login",
     "auth_nonce",
