@@ -101,3 +101,89 @@ def test_upload_chunk_rejects_huge_file(client, media_root, auth_headers, settin
         **auth_headers,
     )
     assert res.status_code == 413
+
+
+@pytest.mark.django_db
+def test_publish_writes_manifest(client, media_root, auth_headers):
+    book = media_root / "audiobooks" / "ddia"
+    book.mkdir(parents=True)
+    (book / "00000.mp3").write_bytes(b"x")
+    manifest = {
+        "slug": "ddia",
+        "title": "DDIA",
+        "author": "Kleppmann",
+        "voice": "Charon",
+        "chapters": [{"id": "ch01", "label": "Ch 1", "chunk_start": 0}],
+        "chunks": [{"id": 0, "text": "hello", "duration_s": 1.0, "kind": "prose"}],
+    }
+    res = client.post(
+        "/api/audiobooks/ddia/publish/",
+        data=json.dumps(manifest),
+        content_type="application/json",
+        **auth_headers,
+    )
+    assert res.status_code == 200
+    written = json.loads((book / "manifest.json").read_text())
+    assert written == manifest
+
+
+@pytest.mark.django_db
+def test_publish_rejects_slug_mismatch(client, media_root, auth_headers):  # noqa: ARG001
+    manifest = {
+        "slug": "other",
+        "title": "DDIA",
+        "author": "K",
+        "voice": "Charon",
+        "chapters": [],
+        "chunks": [{"id": 0, "text": "x", "duration_s": 1.0, "kind": "prose"}],
+    }
+    res = client.post(
+        "/api/audiobooks/ddia/publish/",
+        data=json.dumps(manifest),
+        content_type="application/json",
+        **auth_headers,
+    )
+    assert res.status_code == 400
+    assert "slug mismatch" in res.json()["error"]
+
+
+@pytest.mark.django_db
+def test_publish_rejects_non_contiguous_chunks(client, media_root, auth_headers):  # noqa: ARG001
+    manifest = {
+        "slug": "ddia",
+        "title": "DDIA",
+        "author": "K",
+        "voice": "Charon",
+        "chapters": [],
+        "chunks": [
+            {"id": 0, "text": "a", "duration_s": 1.0, "kind": "prose"},
+            {"id": 2, "text": "b", "duration_s": 1.0, "kind": "prose"},
+        ],
+    }
+    res = client.post(
+        "/api/audiobooks/ddia/publish/",
+        data=json.dumps(manifest),
+        content_type="application/json",
+        **auth_headers,
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_publish_rejects_when_audio_missing(client, media_root, auth_headers):  # noqa: ARG001
+    manifest = {
+        "slug": "ddia",
+        "title": "DDIA",
+        "author": "K",
+        "voice": "Charon",
+        "chapters": [],
+        "chunks": [{"id": 0, "text": "x", "duration_s": 1.0, "kind": "prose"}],
+    }
+    res = client.post(
+        "/api/audiobooks/ddia/publish/",
+        data=json.dumps(manifest),
+        content_type="application/json",
+        **auth_headers,
+    )
+    assert res.status_code == 400
+    assert "missing audio" in res.json()["error"]
