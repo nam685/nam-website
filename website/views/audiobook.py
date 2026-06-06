@@ -51,7 +51,7 @@ def audiobook_audio(request, slug: str, chunk_id: int):
     path = _audio_path(slug, chunk_id)
     if not path.exists():
         return JsonResponse({"error": "Not found"}, status=404)
-    response = FileResponse(open(path, "rb"), content_type="audio/mpeg")
+    response = FileResponse(path.open("rb"), content_type="audio/mpeg")
     response["Accept-Ranges"] = "bytes"
     return response
 
@@ -84,10 +84,15 @@ def audiobook_upload_chunk(request, slug: str):
     book_dir.mkdir(parents=True, exist_ok=True)
     target = _audio_path(slug, chunk_id)
     tmp = target.with_suffix(".mp3.tmp")
-    with open(tmp, "wb") as out:
-        for chunk in f.chunks():
-            out.write(chunk)
-    os.rename(tmp, target)
+    try:
+        with open(tmp, "wb") as out:
+            for chunk in f.chunks():
+                out.write(chunk)
+        os.replace(tmp, target)
+    except Exception:
+        if tmp.exists():
+            tmp.unlink()
+        raise
     return JsonResponse({"ok": True, "chunk_id": chunk_id, "size": f.size})
 
 
@@ -110,7 +115,7 @@ def audiobook_publish(request, slug: str):
     target = _manifest_path(slug)
     tmp = target.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
-    os.rename(tmp, target)
+    os.replace(tmp, target)
     return JsonResponse({"ok": True})
 
 
