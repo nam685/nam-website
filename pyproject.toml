@@ -25,6 +25,10 @@ dev = [
     "pytest>=8.0",
     "pytest-django>=4.9",
     "pytest-cov>=6.0",
+    "pymupdf>=1.24",
+    "mutagen>=1.47",
+    "anthropic>=0.40",
+    "google-genai>=0.8",
 ]
 
 [tool.ruff]
