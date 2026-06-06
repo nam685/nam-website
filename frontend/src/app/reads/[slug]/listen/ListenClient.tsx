@@ -136,7 +136,7 @@ export default function ListenClient({ slug }: { slug: string }) {
               marginBottom: "0.75rem",
             }}
           >
-            // Chapters
+            {"// Chapters"}
           </div>
           {m.chapters.map((ch) => {
             const active = currentChapter?.id === ch.id;
