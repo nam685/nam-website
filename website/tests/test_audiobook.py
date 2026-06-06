@@ -44,3 +44,60 @@ def test_manifest_get_returns_json(client, media_root, auth_headers):
     res = client.get("/api/audiobooks/ddia/", **auth_headers)
     assert res.status_code == 200
     assert res.json() == manifest
+
+
+@pytest.mark.django_db
+def test_chunk_exists_returns_404_when_missing(client, media_root, auth_headers):  # noqa: ARG001
+    res = client.get("/api/audiobooks/ddia/exists/0/", **auth_headers)
+    assert res.status_code == 404
+
+
+@pytest.mark.django_db
+def test_chunk_exists_returns_200_when_present(client, media_root, auth_headers):
+    book = media_root / "audiobooks" / "ddia"
+    book.mkdir(parents=True)
+    (book / "00000.mp3").write_bytes(b"\xff\xfb" + b"0" * 100)
+    res = client.get("/api/audiobooks/ddia/exists/0/", **auth_headers)
+    assert res.status_code == 200
+
+
+@pytest.mark.django_db
+def test_upload_chunk_writes_file(client, media_root, auth_headers):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    payload = b"\xff\xfb" + b"0" * 100
+    res = client.post(
+        "/api/audiobooks/ddia/upload-chunk/",
+        {"chunk_id": "42", "mp3": SimpleUploadedFile("42.mp3", payload, content_type="audio/mpeg")},
+        **auth_headers,
+    )
+    assert res.status_code == 200
+    written = (media_root / "audiobooks" / "ddia" / "00042.mp3").read_bytes()
+    assert written == payload
+
+
+@pytest.mark.django_db
+def test_upload_chunk_rejects_bad_chunk_id(client, media_root, auth_headers):  # noqa: ARG001
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    res = client.post(
+        "/api/audiobooks/ddia/upload-chunk/",
+        {"chunk_id": "abc", "mp3": SimpleUploadedFile("x.mp3", b"x", content_type="audio/mpeg")},
+        **auth_headers,
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.django_db
+def test_upload_chunk_rejects_huge_file(client, media_root, auth_headers, settings):  # noqa: ARG001
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    big = b"x" * (51 * 1024 * 1024)
+    settings.DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+    settings.FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024
+    res = client.post(
+        "/api/audiobooks/ddia/upload-chunk/",
+        {"chunk_id": "1", "mp3": SimpleUploadedFile("x.mp3", big, content_type="audio/mpeg")},
+        **auth_headers,
+    )
+    assert res.status_code == 413
