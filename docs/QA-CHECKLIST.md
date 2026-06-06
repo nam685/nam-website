@@ -230,3 +230,22 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Touch interactions work (nav, buttons, forms)
 - [ ] No horizontal scroll
 - [ ] Text is readable without zooming
+
+## Reads — Audiobook (admin)
+
+- [ ] Logged out: `/reads` page does NOT show LISTEN buttons.
+- [ ] Logged out: visiting `/reads/ddia/listen` directly redirects to `/sudo`.
+- [ ] Logged in: LISTEN button appears on the DDIA card.
+- [ ] Click LISTEN: chapter list renders; first chapter active.
+- [ ] Click chapter → audio jumps to its first chunk.
+- [ ] Play → audio plays; progress bar updates within chunk.
+- [ ] At chunk end → next chunk autoplays gaplessly.
+- [ ] Adjust speed → playback rate changes immediately.
+- [ ] Skip -15s → seeks back 15s, crossing chunk boundary if needed.
+- [ ] Skip +30s → seeks forward 30s, crossing chunk boundary if needed.
+- [ ] Minimize → pill appears bottom-right; tap pill plays/pauses.
+- [ ] Navigate to `/listens`, start music → audiobook pauses (mutual exclusion).
+- [ ] Navigate back to `/reads/ddia/listen` → state restored.
+- [ ] Reload page mid-playback → position restored (paused); play button resumes from saved offset.
+- [ ] curl `/media/audiobooks/ddia/00000.mp3` without token → 403.
+- [ ] curl `/api/audiobooks/ddia/audio/0/?t=<expired>` → 403.

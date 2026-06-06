@@ -1,6 +1,8 @@
 "use client";
 
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
+import { useEffect, useState } from "react";
+import { store } from "@/lib/auth";
 
 /* ── TODO: AI Explorer ─────────────────────────────────
  *
@@ -38,6 +40,7 @@ interface ReadItem {
   description: string;
   tags: string[];
   url: string;
+  audiobookSlug?: string;
 }
 
 const READS: ReadItem[] = [
@@ -67,6 +70,16 @@ const READS: ReadItem[] = [
       "Clear and systematic introduction to macroeconomic theory and policy.",
     tags: ["economics", "macro", "textbook"],
     url: "https://home.ufam.edu.br/andersonlfc/MacroI/Livro%20Macro.pdf",
+  },
+  {
+    title: "Designing Data-Intensive Applications",
+    author: "Martin Kleppmann",
+    type: "book",
+    description:
+      "The deep, surprisingly readable systems book on storage, replication, partitioning, and consensus.",
+    tags: ["systems", "databases", "distributed"],
+    url: "https://0-lucas.github.io/digital-garden/99.-Books/Martin-Kleppmann---Designing-Data-Intensive-Applications_-O%E2%80%99Reilly-Media-(2017).pdf",
+    audiobookSlug: "ddia",
   },
   {
     title: "Nexus",
@@ -123,7 +136,15 @@ const TYPE_LABEL: Record<string, string> = {
 
 /* ── Read card ──────────────────────────────────── */
 
-function ReadCard({ item, dimmed }: { item: ReadItem; dimmed?: boolean }) {
+function ReadCard({
+  item,
+  dimmed,
+  isAdmin,
+}: {
+  item: ReadItem;
+  dimmed?: boolean;
+  isAdmin?: boolean;
+}) {
   const linkLabel =
     item.type === "essay"
       ? "READ ESSAY"
@@ -274,26 +295,48 @@ function ReadCard({ item, dimmed }: { item: ReadItem; dimmed?: boolean }) {
         }}
       >
         {item.url ? (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="read-link"
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.7rem",
-              color: ACCENT,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              fontWeight: 700,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            {linkLabel}
-            <span style={{ fontSize: "0.85rem" }}>&#8599;</span>
-          </a>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="read-link"
+              style={{
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.7rem",
+                color: ACCENT,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+              }}
+            >
+              {linkLabel}
+              <span style={{ fontSize: "0.85rem" }}>&#8599;</span>
+            </a>
+            {isAdmin && item.audiobookSlug ? (
+              <a
+                href={`/reads/${item.audiobookSlug}/listen`}
+                className="read-link"
+                style={{
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.7rem",
+                  color: ACCENT,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                }}
+              >
+                LISTEN
+                <span style={{ fontSize: "0.85rem" }}>&#9654;</span>
+              </a>
+            ) : null}
+          </div>
         ) : (
           <span
             style={{
@@ -354,6 +397,10 @@ function SectionHeader({ label }: { label: string }) {
 /* ── Main component ──────────────────────────────── */
 
 export default function ReadsClient() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    setIsAdmin(!!store("adminToken"));
+  }, []);
   return (
     <>
       <style>{`
@@ -427,7 +474,7 @@ export default function ReadsClient() {
           }}
         >
           {READS.map((item) => (
-            <ReadCard key={item.title} item={item} />
+            <ReadCard key={item.title} item={item} isAdmin={isAdmin} />
           ))}
         </div>
 
@@ -445,7 +492,7 @@ export default function ReadsClient() {
           }}
         >
           {ONGOING_READS.map((item) => (
-            <ReadCard key={item.title} item={item} />
+            <ReadCard key={item.title} item={item} isAdmin={isAdmin} />
           ))}
         </div>
 
@@ -463,7 +510,7 @@ export default function ReadsClient() {
           }}
         >
           {FUTURE_READS.map((item) => (
-            <ReadCard key={item.title} item={item} dimmed />
+            <ReadCard key={item.title} item={item} dimmed isAdmin={isAdmin} />
           ))}
         </div>
       </div>
