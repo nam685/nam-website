@@ -109,11 +109,45 @@ def _parse_track_item(item):
     }
 
 
+# Home-feed rows that surface YOUR frequently/previously played tracks (not recommendations).
+# Matched case-insensitively against the localized row title.
+_FREQUENT_HOME_ROW_KEYWORDS = ("listen again", "favourite", "favorite", "forgotten", "your top")
+
+
+def _fetch_frequent_from_home(yt):
+    """Parse song items from the personalized 'listen again / favourites' home rows.
+
+    These are history-derived (things you actually play often), so they respect the
+    "my universe" rule — unlike recommendation rows (Quick Picks / Mixed for you),
+    which are skipped.
+    """
+    try:
+        home = yt.get_home(limit=8)
+    except Exception:
+        logger.warning("Failed to fetch home feed — skipping frequent listens")
+        return []
+
+    if not isinstance(home, list):
+        return []
+
+    parsed_tracks = []
+    for row in home:
+        title = (row.get("title") or "").lower()
+        if not any(keyword in title for keyword in _FREQUENT_HOME_ROW_KEYWORDS):
+            continue
+        for item in row.get("contents", []):
+            if item.get("videoId"):
+                parsed = _parse_track_item(item)
+                if parsed:
+                    parsed_tracks.append(parsed)
+    return parsed_tracks
+
+
 def _do_sync(progress=None):
     """Core sync logic shared by the view and Celery task.
 
     `progress` is an optional callable(str) for live status output (e.g. a CLI writer).
-    Returns {"synced_history": int, "synced_liked": int} or raises on auth failure.
+    Returns {"synced_history": int, "synced_liked": int, "synced_frequent": int} or raises on auth failure.
     """
 
     def report(msg):
@@ -176,11 +210,24 @@ def _do_sync(progress=None):
     if new_liked:
         ListenTrack.objects.bulk_create(new_liked)
 
-    if new_tracks or new_liked:
+    # --- Frequently-listened tracks (from the personalized home feed) ---
+    report("Fetching frequently-listened songs…")
+    existing_ids = set(ListenTrack.objects.values_list("video_id", flat=True))
+    new_frequent = []
+    for parsed in _fetch_frequent_from_home(yt):
+        if parsed["video_id"] in existing_ids:
+            continue
+        existing_ids.add(parsed["video_id"])  # dedup within this batch too
+        new_frequent.append(ListenTrack(**parsed, played_at=timezone.now()))
+
+    if new_frequent:
+        ListenTrack.objects.bulk_create(new_frequent)
+
+    if new_tracks or new_liked or new_frequent:
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
 
-    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked; rebuilding graph…")
+    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked + {len(new_frequent)} frequent; rebuilding graph…")
 
     # Rebuild the listening graph from the freshly-synced data. Non-fatal: a graph
     # failure must not break the sync. Runs for both the view and the Celery task.
@@ -193,7 +240,11 @@ def _do_sync(progress=None):
     except Exception:
         logger.exception("Graph rebuild after sync failed")
 
-    return {"synced_history": len(new_tracks), "synced_liked": len(new_liked)}
+    return {
+        "synced_history": len(new_tracks),
+        "synced_liked": len(new_liked),
+        "synced_frequent": len(new_frequent),
+    }
 
 
 @csrf_exempt
@@ -220,7 +271,13 @@ def listen_sync(request):
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
-    return JsonResponse({"synced": result["synced_history"], "synced_liked": result["synced_liked"]})
+    return JsonResponse(
+        {
+            "synced": result["synced_history"],
+            "synced_liked": result["synced_liked"],
+            "synced_frequent": result["synced_frequent"],
+        }
+    )
 
 
 def listen_stats(_request):

@@ -296,3 +296,41 @@ class TestListenImport:
     def test_no_file(self, client, auth_headers):
         resp = client.post("/api/listens/import/", **auth_headers)
         assert resp.status_code == 400
+
+
+class TestFrequentFromHome:
+    """_fetch_frequent_from_home pulls songs only from history-derived home rows."""
+
+    def test_extracts_songs_from_history_rows_only(self):
+        class FakeYT:
+            def get_home(self, limit=8):  # noqa: ARG002
+                return [
+                    {
+                        "title": "Listen again",
+                        "contents": [
+                            {
+                                "videoId": "freq1",
+                                "title": "Song A",
+                                "artists": [{"name": "Artist A"}],
+                                "album": {"name": "Album A"},
+                                "thumbnails": [{"url": "https://img/a.jpg"}],
+                            }
+                        ],
+                    },
+                    {
+                        "title": "Quick picks",  # recommendations — must be skipped
+                        "contents": [{"videoId": "rec1", "title": "Rec", "artists": [{"name": "X"}]}],
+                    },
+                ]
+
+        out = listen._fetch_frequent_from_home(FakeYT())
+        ids = {t["video_id"] for t in out}
+        assert "freq1" in ids
+        assert "rec1" not in ids
+
+    def test_handles_non_list_response(self):
+        class FakeYT:
+            def get_home(self, limit=8):  # noqa: ARG002
+                return None
+
+        assert listen._fetch_frequent_from_home(FakeYT()) == []

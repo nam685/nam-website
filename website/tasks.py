@@ -259,6 +259,11 @@ def sync_listens():
 
     try:
         result = _do_sync()
-        logger.info("Listens sync complete: %d history, %d liked", result["synced_history"], result["synced_liked"])
+        logger.info(
+            "Listens sync complete: %d history, %d liked, %d frequent",
+            result["synced_history"],
+            result["synced_liked"],
+            result["synced_frequent"],
+        )
     except Exception:
         logger.exception("Automated listens sync failed (likely expired browser auth)")
