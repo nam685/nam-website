@@ -73,3 +73,28 @@ def test_rebuild_nodes_aggregates_tracks_artists_albums(plays):  # noqa: ARG001
     assert radiohead.play_count == 3  # 2x v1 + 1x v2
     # Albums keyed by artist::album
     assert MusicNode.objects.get(node_type="album", key="radiohead::ok computer").play_count == 3
+
+
+@pytest.mark.django_db
+def test_structural_edges_link_track_to_artist_and_album(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_structural_edges()
+    v1 = MusicNode.objects.get(node_type="track", key="v1")
+    artist = MusicNode.objects.get(node_type="artist", key="radiohead")
+    album = MusicNode.objects.get(node_type="album", key="radiohead::ok computer")
+    # An edge exists between v1 and its artist, and v1 and its album (order-independent).
+    assert music_graph.edge_exists(v1, artist, "structural")
+    assert music_graph.edge_exists(v1, album, "structural")
+
+
+@pytest.mark.django_db
+def test_colisten_edges_link_tracks_within_window(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_colisten_edges(window_minutes=30)
+    v1 = MusicNode.objects.get(node_type="track", key="v1")
+    v2 = MusicNode.objects.get(node_type="track", key="v2")
+    v3 = MusicNode.objects.get(node_type="track", key="v3")
+    # v1 (5m ago) and v2 (10m ago) are within 30m -> linked.
+    assert music_graph.edge_exists(v1, v2, "colisten")
+    # v3 (90m ago) is far from everything -> no colisten edge.
+    assert not music_graph.edge_exists(v2, v3, "colisten")

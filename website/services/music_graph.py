@@ -1,8 +1,9 @@
 import logging
 
 from django.db.models import Count, Max
+from django.utils import timezone
 
-from website.models import ListenTrack, MusicNode
+from website.models import ListenTrack, MusicEdge, MusicNode
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +115,69 @@ def rebuild_nodes():
             play_count=al["play_count"],
             last_played=al["last_played"],
         )
+
+
+COLISTEN_WINDOW_MINUTES = 30
+STRUCTURAL_WEIGHT = 0.5
+
+
+def _canonical(a: MusicNode, b: MusicNode):
+    """Return (source, target) ordered so source_id < target_id."""
+    return (a, b) if a.id < b.id else (b, a)
+
+
+def edge_exists(a: MusicNode, b: MusicNode, edge_type: str) -> bool:
+    src, tgt = _canonical(a, b)
+    return MusicEdge.objects.filter(source=src, target=tgt, edge_type=edge_type).exists()
+
+
+def _upsert_edge(a: MusicNode, b: MusicNode, edge_type: str, weight: float):
+    if a.id == b.id:
+        return
+    src, tgt = _canonical(a, b)
+    MusicEdge.objects.update_or_create(source=src, target=tgt, edge_type=edge_type, defaults={"weight": weight})
+
+
+def rebuild_structural_edges():
+    """track -> its artist(s) and album. Thin connective tissue between node types."""
+    MusicEdge.objects.filter(edge_type="structural").delete()
+    artists = {n.key: n for n in MusicNode.objects.filter(node_type="artist")}
+    albums = {n.key: n for n in MusicNode.objects.filter(node_type="album")}
+    tracks = {n.key: n for n in MusicNode.objects.filter(node_type="track")}
+
+    for t in ListenTrack.objects.all().iterator():
+        track_node = tracks.get(t.video_id)
+        if not track_node:
+            continue
+        names = split_artists(t.artist)
+        for name in names:
+            artist_node = artists.get(normalize(name))
+            if artist_node:
+                _upsert_edge(track_node, artist_node, "structural", STRUCTURAL_WEIGHT)
+        if t.album and names:
+            album_node = albums.get(f"{normalize(names[0])}::{normalize(t.album)}")
+            if album_node:
+                _upsert_edge(track_node, album_node, "structural", STRUCTURAL_WEIGHT)
+
+
+def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
+    """Link tracks played within `window_minutes` of each other. Weight = co-occurrence count."""
+    MusicEdge.objects.filter(edge_type="colisten").delete()
+    tracks = {n.key: n for n in MusicNode.objects.filter(node_type="track")}
+    window = timezone.timedelta(minutes=window_minutes)
+
+    ordered = list(ListenTrack.objects.order_by("played_at").values("video_id", "played_at"))
+    counts: dict[tuple[str, str], int] = {}
+    for i, cur in enumerate(ordered):
+        for nxt in ordered[i + 1 :]:
+            if nxt["played_at"] - cur["played_at"] > window:
+                break
+            if nxt["video_id"] == cur["video_id"]:
+                continue
+            pair = tuple(sorted((cur["video_id"], nxt["video_id"])))
+            counts[pair] = counts.get(pair, 0) + 1
+
+    for (a_key, b_key), count in counts.items():
+        a, b = tracks.get(a_key), tracks.get(b_key)
+        if a and b:
+            _upsert_edge(a, b, "colisten", float(count))
