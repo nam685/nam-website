@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   API,
   type GraphPatch,
@@ -31,6 +31,7 @@ export default function ListensGraphPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphSearchResult[]>([]);
   const [selected, setSelected] = useState<ForceNode | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
   const [showReauth, setShowReauth] = useState(false);
   const [reauthHeaders, setReauthHeaders] = useState("");
@@ -158,7 +159,13 @@ export default function ListensGraphPage() {
     }
   };
 
-  const data = patch ? toForceData(patch) : { nodes: [], links: [] };
+  // Memoize on `patch` so the graphData reference stays stable across re-renders
+  // (e.g. the player ticking every second while a song plays). A fresh object each
+  // render would make react-force-graph reheat the simulation in an endless loop.
+  const data = useMemo(
+    () => (patch ? toForceData(patch) : { nodes: [], links: [] }),
+    [patch],
+  );
 
   return (
     <div style={{ position: "relative" }}>
@@ -212,7 +219,7 @@ export default function ListensGraphPage() {
             letterSpacing: 1, cursor: "pointer",
           }}
         >
-          ↻ NEW PATCH
+          ↻ SHUFFLE
         </button>
         {isAdmin && (
           <>
@@ -324,13 +331,34 @@ export default function ListensGraphPage() {
           onNodeClick={(node: ForceNode) => {
             setSelected(node);
           }}
+          onNodeHover={(node: ForceNode | null) => setHovered(node ? node.key : null)}
+          nodePointerAreaPaint={(
+            node: ForceNode & { x: number; y: number },
+            color: string,
+            ctx: CanvasRenderingContext2D,
+          ) => {
+            // Match the hover/click hit-area to the drawn dot (nodes are small).
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, nodeRadius(node.play_count) + 2, 0, 2 * Math.PI);
+            ctx.fill();
+          }}
           nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
-            const r = nodeRadius(node.play_count);
             const isSeed = patch?.seed === node.key;
+            const isHovered = hovered === node.key;
+            // Hover grows the dot ~1.6x, just like the home-page constellation.
+            const r = nodeRadius(node.play_count) * (isHovered ? 1.6 : 1);
+            const fill = isSeed ? ACCENT : "#c2540a";
+            // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
+            ctx.save();
+            ctx.shadowColor = fill;
+            ctx.shadowBlur = r * (isSeed || isHovered ? 2.4 : 1.5);
+            ctx.globalAlpha = isHovered ? 1 : 0.92;
             ctx.beginPath();
             ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = isSeed ? ACCENT : "#a8480a";
+            ctx.fillStyle = fill;
             ctx.fill();
+            ctx.restore();
             if (node.is_liked) {
               ctx.strokeStyle = "#ffd400";
               ctx.lineWidth = 2 / scale;
@@ -347,9 +375,9 @@ export default function ListensGraphPage() {
               ctx.stroke();
               ctx.setLineDash([]);
             }
-            // Only label the seed and (when zoomed in) larger nodes, to avoid a
-            // wall of overlapping text at the default overview zoom.
-            if (isSeed || scale > 1.6) {
+            // Label the seed, the hovered node, and (when zoomed in) larger nodes —
+            // avoids a wall of overlapping text at the default overview zoom.
+            if (isSeed || isHovered || scale > 1.6) {
               const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
               ctx.font = `${10 / scale}px monospace`;
               ctx.fillStyle = "#ccc";
