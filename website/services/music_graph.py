@@ -365,3 +365,51 @@ def search_nodes(query: str, limit: int = 10) -> list[dict]:
         }
         for n in qs
     ]
+
+
+def _load_personalization_from_ytm(ytm_headers):
+    """Pull liked/library/subscriptions from YTM. Returns kwargs for apply_personalization.
+
+    Any failure logs a warning and returns empty sets so the build still completes.
+    """
+    empty = {
+        "liked_video_ids": set(),
+        "library_album_keys": set(),
+        "subscribed_artist_keys": set(),
+        "library_video_ids": set(),
+    }
+    if not ytm_headers:
+        return empty
+    try:
+        from ytmusicapi import YTMusic
+
+        yt = YTMusic(ytm_headers)
+        liked = {s.get("videoId") for s in yt.get_liked_songs(limit=500).get("tracks", []) if s.get("videoId")}
+        lib_songs = {s.get("videoId") for s in yt.get_library_songs(limit=1000) if s.get("videoId")}
+        album_keys = set()
+        for al in yt.get_library_albums(limit=500):
+            name = al.get("title", "")
+            artist = (al.get("artists") or [{}])[0].get("name", "")
+            if name and artist:
+                album_keys.add(f"{normalize(artist)}::{normalize(name)}")
+        subs = {normalize(a.get("artist", "")) for a in yt.get_library_subscriptions(limit=1000) if a.get("artist")}
+        return {
+            "liked_video_ids": liked,
+            "library_album_keys": album_keys,
+            "subscribed_artist_keys": subs,
+            "library_video_ids": lib_songs,
+        }
+    except Exception:
+        logger.warning("YTM personalization pull failed; building graph without flags", exc_info=True)
+        return empty
+
+
+def build_graph(api_key: str, ytm_headers=None):
+    """Full idempotent rebuild of the music graph from ListenTrack + YTM + Last.fm."""
+    rebuild_nodes()
+    apply_personalization(**_load_personalization_from_ytm(ytm_headers))
+    rebuild_structural_edges()
+    rebuild_colisten_edges()
+    rebuild_similarity_edges(api_key=api_key)
+    compute_recommend_scores()
+    logger.info("Graph rebuilt: %d nodes, %d edges", MusicNode.objects.count(), MusicEdge.objects.count())

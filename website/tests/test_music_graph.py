@@ -1,6 +1,8 @@
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.management import call_command
 from django.db import transaction
 from django.db.utils import IntegrityError
 from django.utils import timezone
@@ -244,3 +246,23 @@ def test_search_nodes_matches_title_and_subtitle(plays):  # noqa: ARG001
     results = music_graph.search_nodes("radio")
     titles = {r["title"] for r in results}
     assert "Radiohead" in titles
+
+
+@pytest.mark.django_db
+def test_build_graph_runs_full_pipeline(plays):  # noqa: ARG001
+    with (
+        patch.object(music_graph.lastfm, "fetch_similar_artists", return_value=[]),
+        patch.object(music_graph.lastfm, "fetch_similar_tracks", return_value=[]),
+    ):
+        music_graph.build_graph(api_key="", ytm_headers=None)
+    assert MusicNode.objects.filter(node_type="track").count() == 3
+    assert MusicEdge.objects.filter(edge_type="structural").exists()
+    assert MusicNode.objects.filter(recommend_score__gt=0).exists()
+
+
+@pytest.mark.django_db
+def test_build_music_graph_command(plays):  # noqa: ARG001
+    out = StringIO()
+    with patch.object(music_graph, "build_graph") as mock_build:
+        call_command("build_music_graph", stdout=out)
+    mock_build.assert_called_once()
