@@ -99,35 +99,38 @@ from website.services.ecb import fetch_ecb  # noqa: E402
 class TestAlphaVantageAdapter:
     @patch("website.services.alpha_vantage.httpx.get")
     def test_fetch_stock_history(self, mock_get):
+        # Use dates relative to today so they always fall within the adapter's `days` window.
+        d2, d1, d0 = (date.today() - timedelta(days=n) for n in (2, 1, 0))
         mock_get.return_value = MagicMock(
             status_code=200,
             json=lambda: {
                 "Time Series (Daily)": {
-                    "2026-04-03": {"4. close": "121.3400"},
-                    "2026-04-02": {"4. close": "120.8200"},
-                    "2026-04-01": {"4. close": "119.5000"},
+                    d0.isoformat(): {"4. close": "121.3400"},
+                    d1.isoformat(): {"4. close": "120.8200"},
+                    d2.isoformat(): {"4. close": "119.5000"},
                 }
             },
         )
         result = fetch_alpha_vantage("VWCE.DE", days=30)
         assert len(result) == 3
-        assert result[0] == (date(2026, 4, 1), Decimal("119.5000"))
-        assert result[2] == (date(2026, 4, 3), Decimal("121.3400"))
+        assert result[0] == (d2, Decimal("119.5000"))
+        assert result[2] == (d0, Decimal("121.3400"))
 
     @patch("website.services.alpha_vantage.httpx.get")
     def test_fetch_gold_etf(self, mock_get):
+        d1, d0 = (date.today() - timedelta(days=n) for n in (1, 0))
         mock_get.return_value = MagicMock(
             status_code=200,
             json=lambda: {
                 "Time Series (Daily)": {
-                    "2026-04-03": {"4. close": "231.2500"},
-                    "2026-04-02": {"4. close": "229.8200"},
+                    d0.isoformat(): {"4. close": "231.2500"},
+                    d1.isoformat(): {"4. close": "229.8200"},
                 }
             },
         )
         result = fetch_alpha_vantage("GLD", days=30)
         assert len(result) == 2
-        assert result[0] == (date(2026, 4, 2), Decimal("229.8200"))
+        assert result[0] == (d1, Decimal("229.8200"))
 
     @patch("website.services.alpha_vantage.httpx.get")
     def test_fetch_raises_on_quota(self, mock_get):
@@ -551,14 +554,16 @@ class TestBetsHistoryEndpoint:
             provider_id="bitcoin",
             currency="USD",
         )
-        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 1), price=Decimal("80000"))
-        PriceSnapshot.objects.create(ticker=t, date=date(2026, 4, 2), price=Decimal("82000"), change_pct=Decimal("2.5"))
+        # Dates relative to today so they fall inside the default 1M history window.
+        d1, d0 = date.today() - timedelta(days=1), date.today()
+        PriceSnapshot.objects.create(ticker=t, date=d1, price=Decimal("80000"))
+        PriceSnapshot.objects.create(ticker=t, date=d0, price=Decimal("82000"), change_pct=Decimal("2.5"))
 
         data = client.get(f"/api/bets/{t.id}/history/").json()
         assert data["symbol"] == "BTC"
         assert data["currency"] == "USD"
         assert len(data["prices"]) == 2
-        assert data["prices"][0]["date"] == "2026-04-01"
+        assert data["prices"][0]["date"] == d1.isoformat()
 
     def test_period_filter(self, client):
         t = Ticker.objects.create(
