@@ -1,10 +1,12 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from django.db import transaction
 from django.db.utils import IntegrityError
 from django.utils import timezone
 
 from website.models import LastfmCache, ListenTrack, MusicEdge, MusicNode
-from website.services import music_graph
+from website.services import lastfm, music_graph
 
 
 @pytest.mark.django_db
@@ -98,3 +100,43 @@ def test_colisten_edges_link_tracks_within_window(plays):  # noqa: ARG001
     assert music_graph.edge_exists(v1, v2, "colisten")
     # v3 (90m ago) is far from everything -> no colisten edge.
     assert not music_graph.edge_exists(v2, v3, "colisten")
+
+
+def _resp(json_body):
+    m = MagicMock()
+    m.json.return_value = json_body
+    m.raise_for_status.return_value = None
+    return m
+
+
+def test_fetch_similar_artists_parses_match_scores():
+    body = {
+        "similarartists": {
+            "artist": [
+                {"name": "Muse", "match": "0.9"},
+                {"name": "Coldplay", "match": "0.4"},
+            ]
+        }
+    }
+    with patch("website.services.lastfm.httpx.get", return_value=_resp(body)) as g:
+        out = lastfm.fetch_similar_artists("Radiohead", "KEY")
+    assert out == [{"name": "Muse", "match": 0.9}, {"name": "Coldplay", "match": 0.4}]
+    assert g.call_args.kwargs["params"]["method"] == "artist.getsimilar"
+
+
+def test_fetch_similar_tracks_parses_artist_and_title():
+    body = {
+        "similartracks": {
+            "track": [
+                {"name": "Karma Police", "artist": {"name": "Radiohead"}, "match": "1.0"},
+            ]
+        }
+    }
+    with patch("website.services.lastfm.httpx.get", return_value=_resp(body)):
+        out = lastfm.fetch_similar_tracks("Radiohead", "Let Down", "KEY")
+    assert out == [{"artist": "Radiohead", "title": "Karma Police", "match": 1.0}]
+
+
+def test_fetch_similar_artists_returns_empty_on_error():
+    with patch("website.services.lastfm.httpx.get", side_effect=Exception("boom")):
+        assert lastfm.fetch_similar_artists("X", "KEY") == []
