@@ -7,6 +7,9 @@ from .lichess import LichessToken
 from .listen import ListenTrack
 from .music_edge import MusicEdge
 from .music_node import MusicNode
+from .paper_account import PaperAccount
+from .paper_snapshot import PaperSnapshot
+from .paper_trade import PaperTrade
 from .price_snapshot import PriceSnapshot
 from .project import Project
 from .session import Session, Turn
@@ -25,6 +28,9 @@ __all__ = [
     "ListenTrack",
     "MusicEdge",
     "MusicNode",
+    "PaperAccount",
+    "PaperSnapshot",
+    "PaperTrade",
     "PriceSnapshot",
     "Project",
     "Session",

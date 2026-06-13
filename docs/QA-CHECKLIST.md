@@ -193,6 +193,24 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Mobile: cards stack single column, expanded card full width
 - [ ] Empty state shows message when no tickers exist
 
+### Bets — Backtester
+- [ ] `/bets` shows the "Backtest sandbox" section below the ticker grid
+- [ ] Selecting a ticker + strategy + params and clicking "Run backtest" renders an equity curve
+- [ ] The strategy line and the dashed buy & hold line both render
+- [ ] Buy (green) and sell (red) markers appear on the curve for trading strategies
+- [ ] Metrics table shows return / CAGR / drawdown / Sharpe / trades / win rate vs. buy & hold
+- [ ] An asset with too little history shows a clear "not enough history" message, not a crash
+- [ ] Spamming "Run" eventually returns a rate-limit message (HTTP 429)
+
+### Bets — Paper trading
+- [ ] Public `/bets` shows the "Paper trading" section when accounts exist
+- [ ] Each account card shows current value, total return %, and in-position/cash status
+- [ ] "Show chart" expands a live equity curve with trade markers
+- [ ] As admin (`/sudo`), "Start paper run" creates a new account that appears immediately
+- [ ] As admin, "Stop" marks the account stopped (history retained); "Delete" removes it
+- [ ] Non-admins cannot create/stop/delete (API returns 401)
+- [ ] Running `sync_prices` advances active accounts (new snapshot per new day, no duplicates)
+
 ### Slops (/slops)
 - [ ] Page loads with hero section and neon green accent
 - [ ] Prompt box accepts input, submits new session, shows rate limit error on second submit

@@ -1,0 +1,124 @@
+from website.strategies.base import coerce_params
+from website.strategies.buy_hold import BuyHoldStrategy
+
+
+def test_buy_hold_buys_once_then_holds():
+    s = BuyHoldStrategy()
+    assert s.signal([100.0], 0, {}).action == "buy"
+    assert s.signal([100.0, 110.0], 5.0, {}).action == "hold"
+
+
+def test_ma_crossover_buys_on_golden_cross():
+    from website.strategies.ma_crossover import MACrossoverStrategy
+
+    s = MACrossoverStrategy()
+    params = {"short": 2, "long": 3}
+    closes = [10, 10, 10, 9, 12]
+    closes2 = [10, 10, 10, 9, 12, 14]
+    assert s.signal(closes, 0, params).action in ("hold", "buy")
+    assert s.signal(closes2, 0, params).action == "buy"
+
+
+def test_ma_crossover_sells_on_death_cross():
+    from website.strategies.ma_crossover import MACrossoverStrategy
+
+    s = MACrossoverStrategy()
+    params = {"short": 2, "long": 3}
+    closes = [10, 14, 14, 14, 8, 6]
+    assert s.signal(closes, 3.0, params).action == "sell"
+
+
+def test_coerce_params_clamps():
+    from website.strategies.ma_crossover import MACrossoverStrategy
+
+    s = MACrossoverStrategy()
+    p = coerce_params(s, {"short": 0, "long": 9999})
+    assert p["short"] == 2  # clamped to min
+    assert p["long"] == 400  # clamped to max
+
+
+def test_dca_buys_fixed_dollars_on_interval():
+    from website.strategies.dca import DCAStrategy
+
+    s = DCAStrategy()
+    params = {"amount": 500, "interval": 5}
+    buy = s.signal([1, 2, 3, 4, 5], 0, params)
+    assert buy.action == "hold"
+    buy2 = s.signal([1], 0, params)
+    assert buy2.action == "buy" and buy2.dollars == 500.0
+    buy3 = s.signal([1, 2, 3, 4, 5, 6], 3.0, params)
+    assert buy3.action == "buy" and buy3.dollars == 500.0
+
+
+def test_macd_signal_actions_are_valid():
+    from website.strategies.macd import MACDStrategy
+
+    s = MACDStrategy()
+    params = {"fast": 12, "slow": 26, "signal": 9}
+    rising = [float(x) for x in range(1, 80)]
+    out = s.signal(rising, 0, params)
+    assert out.action in ("buy", "hold")
+    assert s.signal([1, 2, 3], 0, params).action == "hold"
+
+
+def test_bollinger_buys_below_lower_band():
+    from website.strategies.bollinger import BollingerStrategy
+
+    s = BollingerStrategy()
+    params = {"window": 5, "width": 2.0}
+    closes = [100, 100, 100, 100, 100, 90]
+    assert s.signal(closes, 0, params).action == "buy"
+
+
+def test_bollinger_sells_above_upper_band():
+    from website.strategies.bollinger import BollingerStrategy
+
+    s = BollingerStrategy()
+    params = {"window": 5, "width": 2.0}
+    closes = [100, 100, 100, 100, 100, 110]
+    assert s.signal(closes, 4.0, params).action == "sell"
+
+
+def test_rsi_buys_when_oversold():
+    from website.strategies.rsi import RSIStrategy
+
+    s = RSIStrategy()
+    params = {"period": 5, "low": 30, "high": 70}
+    falling = [100, 95, 90, 85, 80, 75]
+    assert s.signal(falling, 0, params).action == "buy"
+
+
+def test_rsi_sells_when_overbought():
+    from website.strategies.rsi import RSIStrategy
+
+    s = RSIStrategy()
+    params = {"period": 5, "low": 30, "high": 70}
+    rising = [80, 85, 90, 95, 100, 105]
+    assert s.signal(rising, 3.0, params).action == "sell"
+
+
+def test_momentum_holds_when_up_over_lookback():
+    from website.strategies.momentum import MomentumStrategy
+
+    s = MomentumStrategy()
+    params = {"lookback": 3}
+    up = [100, 101, 102, 110]
+    assert s.signal(up, 0, params).action == "buy"
+
+
+def test_momentum_sells_when_down_over_lookback():
+    from website.strategies.momentum import MomentumStrategy
+
+    s = MomentumStrategy()
+    params = {"lookback": 3}
+    down = [100, 99, 98, 90]
+    assert s.signal(down, 5.0, params).action == "sell"
+
+
+def test_registry_has_all_seven_strategies():
+    from website.strategies import STRATEGIES, list_strategies
+
+    assert set(STRATEGIES) == {"buy_hold", "ma_crossover", "dca", "macd", "bollinger", "rsi", "momentum"}
+    catalog = list_strategies()
+    assert len(catalog) == 7
+    assert all("key" in c and "label" in c and "params" in c for c in catalog)
