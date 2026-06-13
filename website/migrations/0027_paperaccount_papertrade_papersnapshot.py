@@ -5,58 +5,72 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0022_add_is_liked_to_listentrack'),
+        ("website", "0026_lastfmcache_musicnode_musicedge"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='PaperAccount',
+            name="PaperAccount",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('strategy', models.CharField(max_length=32)),
-                ('params', models.JSONField(default=dict)),
-                ('starting_cash', models.DecimalField(decimal_places=2, default=10000, max_digits=14)),
-                ('started_on', models.DateField()),
-                ('is_active', models.BooleanField(default=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('ticker', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='paper_accounts', to='website.ticker')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("strategy", models.CharField(max_length=32)),
+                ("params", models.JSONField(default=dict)),
+                ("starting_cash", models.DecimalField(decimal_places=2, default=10000, max_digits=14)),
+                ("started_on", models.DateField()),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "ticker",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="paper_accounts", to="website.ticker"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
         migrations.CreateModel(
-            name='PaperTrade',
+            name="PaperTrade",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('date', models.DateField()),
-                ('side', models.CharField(max_length=4)),
-                ('shares', models.DecimalField(decimal_places=8, max_digits=20)),
-                ('price', models.DecimalField(decimal_places=4, max_digits=14)),
-                ('cash_after', models.DecimalField(decimal_places=2, max_digits=14)),
-                ('reason', models.CharField(blank=True, max_length=120)),
-                ('account', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='trades', to='website.paperaccount')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("date", models.DateField()),
+                ("side", models.CharField(max_length=4)),
+                ("shares", models.DecimalField(decimal_places=8, max_digits=20)),
+                ("price", models.DecimalField(decimal_places=4, max_digits=14)),
+                ("cash_after", models.DecimalField(decimal_places=2, max_digits=14)),
+                ("reason", models.CharField(blank=True, max_length=120)),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="trades", to="website.paperaccount"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['date'],
+                "ordering": ["date"],
             },
         ),
         migrations.CreateModel(
-            name='PaperSnapshot',
+            name="PaperSnapshot",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('date', models.DateField()),
-                ('portfolio_value', models.DecimalField(decimal_places=2, max_digits=16)),
-                ('cash', models.DecimalField(decimal_places=2, max_digits=16)),
-                ('position_value', models.DecimalField(decimal_places=2, max_digits=16)),
-                ('account', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='snapshots', to='website.paperaccount')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("date", models.DateField()),
+                ("portfolio_value", models.DecimalField(decimal_places=2, max_digits=16)),
+                ("cash", models.DecimalField(decimal_places=2, max_digits=16)),
+                ("position_value", models.DecimalField(decimal_places=2, max_digits=16)),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="snapshots", to="website.paperaccount"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['date'],
-                'indexes': [models.Index(fields=['account', 'date'], name='website_pap_account_35878b_idx')],
-                'unique_together': {('account', 'date')},
+                "ordering": ["date"],
+                "indexes": [models.Index(fields=["account", "date"], name="website_pap_account_35878b_idx")],
+                "unique_together": {("account", "date")},
             },
         ),
     ]
