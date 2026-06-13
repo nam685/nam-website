@@ -29,20 +29,22 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 ## Thinks
 
-- [ ] Thought list loads and paginates
-- [ ] "Load more" fetches next page
-- [ ] Admin can create a new thought
-- [ ] 18-hour cooldown is enforced between thoughts
+- [ ] Feed loads as a single-column timeline and paginates
+- [ ] "Load more" fetches the next page
+- [ ] Admin compose card is visible when logged in
+- [ ] Admin can submit a text-only post (succeeds)
+- [ ] Admin can submit an image-only post (succeeds)
+- [ ] Admin can submit a post with both text and image (succeeds)
+- [ ] 18-hour cooldown is enforced — rapid reposts are blocked
 - [ ] Content length limit (2000 chars) is enforced
-
-## Draws
-
-- [ ] Gallery loads with pencil and camera categories
-- [ ] Category filter (tabs) works
-- [ ] Admin can upload an image (JPEG, PNG, GIF, WEBP)
-- [ ] 10MB file size limit is enforced
-- [ ] Admin can delete a drawing
-- [ ] Images display correctly (no broken URLs)
+- [ ] Image attach works via drag-and-drop, paste, and click-to-browse
+- [ ] Large image fills the column width; small image renders at natural size (not stretched)
+- [ ] Clicking an image opens the full-screen lightbox
+- [ ] Lightbox: ← / → navigate only between image posts (text-only posts skipped)
+- [ ] Lightbox: Esc closes the lightbox
+- [ ] Lightbox: admin delete button removes the post and closes the lightbox
+- [ ] Typed text in the compose box survives a redirect to `/sudo` to log in and is restored on return
+- [ ] Visiting `/draws` 301-redirects to `/thinks`
 
 ## Codes
 

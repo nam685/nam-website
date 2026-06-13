@@ -18,7 +18,6 @@ from .bets import (
     bets_sync,
     bets_sync_status,
 )
-from .drawing import drawing_delete, drawing_list, drawing_upload
 from .feedback import feedback_create
 from .github import contributions as github_contributions
 from .github import github_auth, github_callback
@@ -52,7 +51,7 @@ from .slops import (
     slops_trace,
     slops_trace_download,
 )
-from .thought import thought_create, thought_list
+from .thought import thought_create, thought_delete, thought_list
 from .todo import todo_list
 from .watch import (
     watch_auth,
@@ -90,9 +89,6 @@ __all__ = [
     "bets_search",
     "bets_sync",
     "bets_sync_status",
-    "drawing_delete",
-    "drawing_list",
-    "drawing_upload",
     "feedback_create",
     "github_auth",
     "github_callback",
@@ -129,6 +125,7 @@ __all__ = [
     "slops_trace",
     "slops_trace_download",
     "thought_create",
+    "thought_delete",
     "thought_list",
     "todo_list",
     "watch_auth",

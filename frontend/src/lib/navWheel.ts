@@ -2,7 +2,6 @@
 
 export const NAV_ITEMS = [
   { label: "thinks", href: "/thinks", accent: "#FF1744" },
-  { label: "draws", href: "/draws", accent: "#a855f7" },
   { label: "codes", href: "/codes", accent: "#22c55e" },
   { label: "grinds", href: "/grinds", accent: "#f59e0b" },
   { label: "listens", href: "/listens", accent: "#f97316" },
