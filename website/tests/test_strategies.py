@@ -95,3 +95,30 @@ def test_rsi_sells_when_overbought():
     params = {"period": 5, "low": 30, "high": 70}
     rising = [80, 85, 90, 95, 100, 105]
     assert s.signal(rising, 3.0, params).action == "sell"
+
+
+def test_momentum_holds_when_up_over_lookback():
+    from website.strategies.momentum import MomentumStrategy
+
+    s = MomentumStrategy()
+    params = {"lookback": 3}
+    up = [100, 101, 102, 110]
+    assert s.signal(up, 0, params).action == "buy"
+
+
+def test_momentum_sells_when_down_over_lookback():
+    from website.strategies.momentum import MomentumStrategy
+
+    s = MomentumStrategy()
+    params = {"lookback": 3}
+    down = [100, 99, 98, 90]
+    assert s.signal(down, 5.0, params).action == "sell"
+
+
+def test_registry_has_all_seven_strategies():
+    from website.strategies import STRATEGIES, list_strategies
+
+    assert set(STRATEGIES) == {"buy_hold", "ma_crossover", "dca", "macd", "bollinger", "rsi", "momentum"}
+    catalog = list_strategies()
+    assert len(catalog) == 7
+    assert all("key" in c and "label" in c and "params" in c for c in catalog)
