@@ -10,14 +10,7 @@ export const API_INTERNAL =
 export interface Thought {
   id: number;
   content: string;
-  created_at: string;
-}
-
-export interface Drawing {
-  id: number;
-  image: string;
-  category: "pencil" | "camera";
-  caption: string;
+  image: string | null;
   created_at: string;
 }
 
@@ -237,6 +230,20 @@ export type TurnStatus =
   | "failed"
   | "rejected";
 
+export interface Download {
+  id: number;
+  filename: string;
+  size: number;
+  oversize: boolean;
+}
+
+export interface Attachment {
+  id: number;
+  filename: string;
+  size: number;
+  previewable: boolean;
+}
+
 export interface Turn {
   id: number;
   prompt: string;
@@ -250,6 +257,8 @@ export interface Turn {
   approved_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  downloads?: Download[];
+  attachments: Attachment[];
 }
 
 export interface Session {
@@ -275,4 +284,71 @@ export interface SlopsStats {
   total_tokens: number;
   total_tool_calls: number;
   success_rate: number;
+}
+
+/* ── Audiobook ─────────────────────────────────────── */
+
+export type AudiobookChunkKind =
+  | "prose"
+  | "paraphrased_code"
+  | "code_bridge"
+  | "figure_bridge"
+  | "table_bridge"
+  | "equation_bridge";
+
+export interface AudiobookChunk {
+  id: number;
+  text: string;
+  duration_s: number;
+  kind: AudiobookChunkKind;
+  page?: number;
+  original?: string;
+}
+
+export interface AudiobookChapter {
+  id: string;
+  label: string;
+  chunk_start: number;
+}
+
+export interface AudiobookManifest {
+  slug: string;
+  title: string;
+  author: string;
+  source_pdf_url?: string;
+  voice: string;
+  preprocessor?: { model: string; version: string };
+  chapters: AudiobookChapter[];
+  chunks: AudiobookChunk[];
+}
+
+export async function fetchAudiobookManifest(
+  slug: string,
+  token: string,
+): Promise<AudiobookManifest | null> {
+  const res = await fetch(`${API}/api/audiobooks/${slug}/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`manifest fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAudiobookPlaybackToken(
+  slug: string,
+  token: string,
+): Promise<{ token: string; expires_at: string }> {
+  const res = await fetch(`${API}/api/audiobooks/${slug}/playback-token/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`playback-token fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export function audiobookAudioUrl(
+  slug: string,
+  chunkId: number,
+  playbackToken: string,
+): string {
+  return `${API}/api/audiobooks/${slug}/audio/${chunkId}/?t=${encodeURIComponent(playbackToken)}`;
 }

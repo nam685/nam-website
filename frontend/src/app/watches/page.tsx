@@ -10,7 +10,7 @@ import {
   type WatchVideo,
   API,
 } from "@/lib/api";
-import { store } from "@/lib/auth";
+import { fetchAdminNonce, store } from "@/lib/auth";
 
 const ACCENT = "#1e40af";
 const PAGE_SIZE = 100;
@@ -689,10 +689,11 @@ export default function WatchesPage() {
     }
   }
 
-  function handleConnectYouTube() {
-    const token = store("adminToken");
-    if (!token) return;
-    window.location.href = `${API}/api/watches/auth/?token=${encodeURIComponent(token)}`;
+  async function handleConnectYouTube() {
+    const nonce = await fetchAdminNonce();
+    if (nonce) {
+      window.location.href = `${API}/api/watches/auth/?nonce=${encodeURIComponent(nonce)}`;
+    }
   }
 
   function handleGridScroll() {

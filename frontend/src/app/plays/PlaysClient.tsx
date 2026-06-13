@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { API } from "@/lib/api";
 import type { LichessStatus } from "@/lib/api";
-import { store } from "@/lib/auth";
+import { fetchAdminNonce, store } from "@/lib/auth";
 
 const OpeningExplorer = dynamic(() => import("@/components/OpeningExplorer"), {
   ssr: false,
@@ -72,10 +72,10 @@ export default function PlaysClient() {
       .catch(() => {});
   }, [isAdmin, tab]);
 
-  function handleConnect() {
-    const adminToken = store("adminToken");
-    if (adminToken) {
-      window.location.href = `${API}/api/lichess/auth/?token=${adminToken}`;
+  async function handleConnect() {
+    const nonce = await fetchAdminNonce();
+    if (nonce) {
+      window.location.href = `${API}/api/lichess/auth/?nonce=${encodeURIComponent(nonce)}`;
     }
   }
 

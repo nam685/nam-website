@@ -18,7 +18,8 @@
 - **Caddy** — reverse proxy on ports 80/443, auto HTTPS via Let's Encrypt
 - **Next.js frontend** — port 3000, systemd service (`nextjs`)
 - **Django backend** — port 8000, systemd service (`django`) via gunicorn
-- **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet)
+- **Celery worker** — systemd service (`celery`), uses Redis as broker
+- **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet, `restart: unless-stopped`)
 
 ---
 
@@ -81,9 +82,10 @@ uv run python manage.py migrate
 ```bash
 sudo cp infra/django.service /etc/systemd/system/django.service
 sudo cp infra/nextjs.service /etc/systemd/system/nextjs.service
+sudo cp infra/celery.service /etc/systemd/system/celery.service
 sudo systemctl daemon-reload
-sudo systemctl enable django nextjs
-sudo systemctl start django nextjs
+sudo systemctl enable django nextjs celery
+sudo systemctl start django nextjs celery
 ```
 
 ### 7. Configure Caddy

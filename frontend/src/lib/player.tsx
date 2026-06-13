@@ -284,6 +284,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
+  // Mutual exclusion with audiobook player
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPauseMusic = () => {
+      if (playerRef.current && playingRef.current) {
+        userRequestedPauseRef.current = true;
+        playerRef.current.pauseVideo();
+        setPlaying(false);
+      }
+    };
+    window.addEventListener("nam:pause-music", onPauseMusic);
+    return () => window.removeEventListener("nam:pause-music", onPauseMusic);
+  }, []);
+
   /* ── Progress polling ──────────────────────────────────── */
 
   useEffect(() => {
@@ -466,6 +480,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       );
       const finalIdx = idx >= 0 ? idx : 0;
 
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("nam:pause-audiobook"));
+      }
       setQueue(q);
       setCurrentIndex(finalIdx);
       setVisible(true);

@@ -1,0 +1,16 @@
+[Unit]
+Description=Celery Worker for nam-website
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=nam
+WorkingDirectory=/home/nam/nam-website-deploy
+ExecStart=/home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1
+EnvironmentFile=/home/nam/nam-website-deploy/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

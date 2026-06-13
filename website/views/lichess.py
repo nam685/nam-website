@@ -13,9 +13,9 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt  # used on lichess_disconnect
 from django.views.decorators.http import require_GET
 
-from ..auth import require_admin, verify_token
+from ..auth import require_admin
 from ..models import LichessToken
-from ..utils import create_oauth_nonce, verify_oauth_nonce
+from ..utils import create_oauth_nonce, verify_admin_nonce, verify_oauth_nonce
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ _SYNC_KEY = "lichess_last_sync_ts"
 
 
 def lichess_auth(request):
-    """Redirect to Lichess OAuth. Requires admin token as ?token= param."""
-    admin_token = request.GET.get("token", "")
-    if not admin_token or not verify_token(admin_token):
+    """Redirect to Lichess OAuth. Requires short-lived admin nonce as ?nonce= param."""
+    nonce = request.GET.get("nonce", "")
+    if not verify_admin_nonce(nonce):
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
     # PKCE: generate verifier + S256 challenge

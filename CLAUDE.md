@@ -52,10 +52,8 @@ GET  /api/health/
 POST /api/auth/login/           body: {"secret": "<ADMIN_SECRET>"} → {"token": "..."}
 GET  /api/auth/check/           Authorization: Bearer <token>
 GET  /api/thoughts/?page=N
-POST /api/thoughts/create/      auth required, body: {"content": "..."}
-GET  /api/drawings/
-POST /api/drawings/upload/      auth required, multipart (image + category)
-POST /api/drawings/<id>/delete/ auth required
+POST /api/thoughts/create/      auth required, multipart: optional content + optional image
+POST /api/thoughts/<id>/delete/ auth required
 POST /api/feedback/             body: {"message": "..."}, rate-limited per IP
 GET  /api/projects/
 GET  /api/todo/
@@ -64,13 +62,14 @@ GET  /api/github/auth/          auth required, initiates GitHub OAuth
 GET  /api/github/callback/
 GET  /api/github/refresh-status/ auth required
 GET  /api/listens/?limit=N&offset=N
-GET  /api/listens/tracks/       top tracks by play count
+GET  /api/listens/tracks/       top tracks (?sort=weighted for shuffled)
 GET  /api/listens/artists/      top artists by play count
 GET  /api/listens/albums/       top albums by play count
 GET  /api/listens/recommended/   recommended track (rediscovery algorithm)
 GET  /api/listens/stats/
-POST /api/listens/sync/         auth required, triggers YTM history sync
+POST /api/listens/sync/         auth required, triggers YTM history + liked sync
 GET  /api/listens/sync-status/  auth required
+POST /api/listens/reauth/       auth required, body: {"headers": "<raw request headers>"}
 POST /api/listens/import/       auth required, Google Takeout file upload
 GET  /api/watches/?limit=N&offset=N
 GET  /api/watches/staging/      auth required
@@ -100,10 +99,17 @@ GET  /api/lichess/status/       public, returns connection status
 GET  /api/slops/                    session list (paginated, with turns)
 GET  /api/slops/<id>/               single session detail with turns
 GET  /api/slops/<id>/trace/         ATIF trace file contents
-POST /api/slops/submit/             submit prompt (1/hr/IP + 10/hr global), optional session_id for follow-up
+POST /api/slops/submit/             submit prompt (1/hr/IP + 10/hr global), optional session_id, optional multipart `files[]`
+GET  /api/slops/attachments/<id>/preview/ auth required, UTF-8 text content (64 KB cap)
 POST /api/slops/turns/<id>/approve/ auth required, approve turn + queue
 POST /api/slops/turns/<id>/reject/  auth required, reject turn
 GET  /api/slops/stats/              aggregate stats (from turns)
+GET  /api/audiobooks/<slug>/                  auth required, returns manifest.json
+GET  /api/audiobooks/<slug>/playback-token/   auth required, returns short-lived signed token
+GET  /api/audiobooks/<slug>/audio/<id>/?t=...   signed-token required, streams MP3 with Range
+GET  /api/audiobooks/<slug>/exists/<id>/      auth required, 200/404
+POST /api/audiobooks/<slug>/upload-chunk/     auth required, multipart {chunk_id, mp3}
+POST /api/audiobooks/<slug>/publish/          auth required, body = manifest JSON
 ```
 
 ## Auth

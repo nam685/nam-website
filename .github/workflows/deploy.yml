@@ -42,8 +42,19 @@ jobs:
             pnpm exec next build
             sudo systemctl restart nextjs
 
-            # Caddy (update config if changed)
+            # Sync systemd service files + Caddy config
             cd ~/nam-website-deploy
+            RELOAD_SYSTEMD=false
+            for svc in django nextjs celery; do
+              if ! diff -q infra/$svc.service /etc/systemd/system/$svc.service > /dev/null 2>&1; then
+                sudo cp infra/$svc.service /etc/systemd/system/$svc.service
+                RELOAD_SYSTEMD=true
+              fi
+            done
+            if [ "$RELOAD_SYSTEMD" = true ]; then
+              sudo systemctl daemon-reload
+            fi
+
             if ! diff -q infra/Caddyfile /etc/caddy/Caddyfile > /dev/null 2>&1; then
               sudo cp infra/Caddyfile /etc/caddy/Caddyfile
               sudo systemctl reload caddy

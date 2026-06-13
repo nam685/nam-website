@@ -1,6 +1,8 @@
 "use client";
 
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
+import { useEffect, useState } from "react";
+import { store } from "@/lib/auth";
 
 /* ── TODO: AI Explorer ─────────────────────────────────
  *
@@ -34,10 +36,11 @@ import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
 interface ReadItem {
   title: string;
   author: string;
-  type: "book" | "paper" | "essay";
+  type: "book" | "paper" | "essay" | "audio book";
   description: string;
   tags: string[];
   url: string;
+  audiobookSlug?: string;
 }
 
 const READS: ReadItem[] = [
@@ -69,6 +72,16 @@ const READS: ReadItem[] = [
     url: "https://home.ufam.edu.br/andersonlfc/MacroI/Livro%20Macro.pdf",
   },
   {
+    title: "Designing Data-Intensive Applications",
+    author: "Martin Kleppmann",
+    type: "book",
+    description:
+      "The deep, surprisingly readable systems book on storage, replication, partitioning, and consensus.",
+    tags: ["systems", "databases", "distributed"],
+    url: "https://0-lucas.github.io/digital-garden/99.-Books/Martin-Kleppmann---Designing-Data-Intensive-Applications_-O%E2%80%99Reilly-Media-(2017).pdf",
+    audiobookSlug: "ddia",
+  },
+  {
     title: "Nexus",
     author: "Yuval Noah Harari",
     type: "book",
@@ -85,6 +98,18 @@ const READS: ReadItem[] = [
       "Anthropic CEO's vision of AI's trajectory and what comes next.",
     tags: ["ai", "future", "technology"],
     url: "https://www.darioamodei.com/essay/the-adolescence-of-technology",
+  },
+];
+
+const ONGOING_READS: ReadItem[] = [
+  {
+    title: "The History of China",
+    author: "Chris Stewart",
+    type: "audio book",
+    description:
+      "A sweeping podcast journey through Chinese history from ancient dynasties to the modern era.",
+    tags: ["history", "china", "podcast"],
+    url: "https://www.airwavemedia.com/our-shows/the-history-of-china",
   },
 ];
 
@@ -106,12 +131,26 @@ const TYPE_LABEL: Record<string, string> = {
   book: "BOOK",
   paper: "PAPER",
   essay: "ESSAY",
+  "audio book": "AUDIO BOOK",
 };
 
 /* ── Read card ──────────────────────────────────── */
 
-function ReadCard({ item, dimmed }: { item: ReadItem; dimmed?: boolean }) {
-  const linkLabel = item.type === "essay" ? "READ ESSAY" : "READ PDF";
+function ReadCard({
+  item,
+  dimmed,
+  isAdmin,
+}: {
+  item: ReadItem;
+  dimmed?: boolean;
+  isAdmin?: boolean;
+}) {
+  const linkLabel =
+    item.type === "essay"
+      ? "READ ESSAY"
+      : item.type === "audio book"
+        ? "LISTEN"
+        : "READ PDF";
   return (
     <div
       className="read-card"
@@ -256,26 +295,48 @@ function ReadCard({ item, dimmed }: { item: ReadItem; dimmed?: boolean }) {
         }}
       >
         {item.url ? (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="read-link"
-            style={{
-              fontFamily: "var(--font-headline)",
-              fontSize: "0.7rem",
-              color: ACCENT,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              fontWeight: 700,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            {linkLabel}
-            <span style={{ fontSize: "0.85rem" }}>&#8599;</span>
-          </a>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="read-link"
+              style={{
+                fontFamily: "var(--font-headline)",
+                fontSize: "0.7rem",
+                color: ACCENT,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+              }}
+            >
+              {linkLabel}
+              <span style={{ fontSize: "0.85rem" }}>&#8599;</span>
+            </a>
+            {isAdmin && item.audiobookSlug ? (
+              <a
+                href={`/reads/${item.audiobookSlug}/listen`}
+                className="read-link"
+                style={{
+                  fontFamily: "var(--font-headline)",
+                  fontSize: "0.7rem",
+                  color: ACCENT,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                }}
+              >
+                LISTEN
+                <span style={{ fontSize: "0.85rem" }}>&#9654;</span>
+              </a>
+            ) : null}
+          </div>
         ) : (
           <span
             style={{
@@ -336,6 +397,10 @@ function SectionHeader({ label }: { label: string }) {
 /* ── Main component ──────────────────────────────── */
 
 export default function ReadsClient() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    setIsAdmin(!!store("adminToken"));
+  }, []);
   return (
     <>
       <style>{`
@@ -347,6 +412,7 @@ export default function ReadsClient() {
         .read-card:nth-child(3) { animation-delay: 0.2s; }
         .read-card:nth-child(4) { animation-delay: 0.3s; }
         .read-card:nth-child(5) { animation-delay: 0.4s; }
+        .read-card:nth-child(6) { animation-delay: 0.5s; }
         .read-card:hover {
           border-color: color-mix(in srgb, ${ACCENT} 50%, #1a1a1a) !important;
           box-shadow: 0 0 24px color-mix(in srgb, ${ACCENT} 15%, transparent);
@@ -399,7 +465,8 @@ export default function ReadsClient() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
             gap: "1.5rem",
             position: "relative",
             zIndex: 2,
@@ -407,7 +474,25 @@ export default function ReadsClient() {
           }}
         >
           {READS.map((item) => (
-            <ReadCard key={item.title} item={item} />
+            <ReadCard key={item.title} item={item} isAdmin={isAdmin} />
+          ))}
+        </div>
+
+        {/* ── Ongoing section ────────────────────────── */}
+        <SectionHeader label="// Ongoing" />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gap: "1.5rem",
+            position: "relative",
+            zIndex: 2,
+            marginBottom: "4rem",
+          }}
+        >
+          {ONGOING_READS.map((item) => (
+            <ReadCard key={item.title} item={item} isAdmin={isAdmin} />
           ))}
         </div>
 
@@ -416,7 +501,8 @@ export default function ReadsClient() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
             gap: "1.5rem",
             position: "relative",
             zIndex: 2,
@@ -424,10 +510,9 @@ export default function ReadsClient() {
           }}
         >
           {FUTURE_READS.map((item) => (
-            <ReadCard key={item.title} item={item} dimmed />
+            <ReadCard key={item.title} item={item} dimmed isAdmin={isAdmin} />
           ))}
         </div>
-
       </div>
     </>
   );

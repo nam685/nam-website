@@ -36,6 +36,16 @@ chmod 700 /home/nam/.ssh
 
 ## 5. Install klaude
 
+Install system dependencies first — klaude's `read_document` tool
+shells out to `pdftotext` (poppler) for PDFs and `tesseract` for
+image OCR. Required when `/slops` accepts PDF or image uploads.
+
+```bash
+sudo apt install -y poppler-utils tesseract-ocr
+```
+
+Then install klaude itself:
+
 ```bash
 sudo -u klaude bash
 pip install --user git+https://github.com/nam685/klaude.git
@@ -58,6 +68,12 @@ Set API key:
 ```bash
 echo 'export OPENROUTER_API_KEY="your-key-here"' >> /home/klaude/.bashrc
 ```
+
+The `OPENROUTER_API_KEY` is also reused by klaude's `read_document`
+VLM path (describes images via Llama 3.2 Vision free). If you'd
+rather use OCR-only, set `[vision].backend = "ocr"` in
+`.klaude.toml` — see the klaude USAGE docs for the full `[vision]`
+block.
 
 ## 7. GitHub deploy key for klaude-playground
 

@@ -1,3 +1,4 @@
+import hmac
 from functools import wraps
 
 from django.core import signing
@@ -13,7 +14,7 @@ def create_token():
 def verify_token(token: str) -> bool:
     try:
         value = signing.loads(token, salt="admin-auth", max_age=TOKEN_MAX_AGE)
-        return value == "admin"
+        return hmac.compare_digest(value, "admin")
     except (signing.BadSignature, signing.SignatureExpired):
         return False
 

@@ -37,12 +37,12 @@ class TestContributions:
 
 @pytest.mark.django_db
 class TestGitHubAuthGuard:
-    def test_auth_requires_admin_token(self, client):
+    def test_auth_requires_nonce(self, client):
         resp = client.get("/api/github/auth/")
         assert resp.status_code == 401
 
-    def test_auth_rejects_bad_token(self, client):
-        resp = client.get("/api/github/auth/?token=bad")
+    def test_auth_rejects_bad_nonce(self, client):
+        resp = client.get("/api/github/auth/?nonce=bad")
         assert resp.status_code == 401
 
     def test_refresh_status_requires_auth(self, client):
@@ -55,13 +55,19 @@ class TestGitHubAuthGuard:
 
 @pytest.mark.django_db
 class TestGitHubAuth:
-    def test_missing_client_id(self, client, admin_token):
-        resp = client.get(f"/api/github/auth/?token={admin_token}")
+    def test_missing_client_id(self, client):
+        from website.utils import create_admin_nonce
+
+        nonce = create_admin_nonce()
+        resp = client.get(f"/api/github/auth/?nonce={nonce}")
         assert resp.status_code == 500
 
     @patch.dict("os.environ", {"GITHUB_CLIENT_ID": "test-client-id"})
-    def test_redirects_to_github(self, client, admin_token):
-        resp = client.get(f"/api/github/auth/?token={admin_token}")
+    def test_redirects_to_github(self, client):
+        from website.utils import create_admin_nonce
+
+        nonce = create_admin_nonce()
+        resp = client.get(f"/api/github/auth/?nonce={nonce}")
         assert resp.status_code == 302
         location = resp["Location"]
         assert "github.com/login/oauth" in location

@@ -1,4 +1,5 @@
-from .drawing import Drawing
+from .attachment import Attachment
+from .download import Download
 from .feedback import Feedback
 from .github import GitHubContributions
 from .lastfm_cache import LastfmCache
@@ -15,7 +16,8 @@ from .todo import TodoItem, TodoSection
 from .watch import WatchChannel, WatchVideo
 
 __all__ = [
-    "Drawing",
+    "Attachment",
+    "Download",
     "Feedback",
     "GitHubContributions",
     "LastfmCache",

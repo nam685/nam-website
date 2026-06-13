@@ -31,6 +31,11 @@ export default function ListensGraphPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphSearchResult[]>([]);
   const [selected, setSelected] = useState<ForceNode | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [showReauth, setShowReauth] = useState(false);
+  const [reauthHeaders, setReauthHeaders] = useState("");
+  const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const [reauthError, setReauthError] = useState("");
 
   const loadPatch = useCallback(async (seed?: string, type?: string) => {
     const qs = seed ? `?seed=${encodeURIComponent(seed)}&type=${type ?? ""}` : "";
@@ -74,6 +79,58 @@ export default function ListensGraphPage() {
       played_at: "",
     };
     player.play(track, [track]);
+  };
+
+  const doSync = async () => {
+    const token = store("adminToken");
+    if (!token) return;
+    setSyncStatus("syncing");
+    try {
+      const res = await fetch(`${API}/api/listens/sync/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setSyncStatus("error");
+      } else {
+        const data = await res.json();
+        setSyncStatus("done");
+        // Sync rebuilds the graph server-side; refresh the current patch.
+        if (data.synced > 0 || data.synced_liked > 0) loadPatch();
+      }
+    } catch {
+      setSyncStatus("error");
+    }
+    setTimeout(() => setSyncStatus("idle"), 3000);
+  };
+
+  const saveReauth = async () => {
+    const token = store("adminToken");
+    if (!token) return;
+    setReauthStatus("saving");
+    setReauthError("");
+    try {
+      const res = await fetch(`${API}/api/listens/reauth/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ headers: reauthHeaders }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setReauthError(data.error || "Failed");
+        setReauthStatus("error");
+      } else {
+        setReauthStatus("done");
+        setTimeout(() => {
+          setShowReauth(false);
+          setReauthHeaders("");
+          setReauthStatus("idle");
+        }, 1500);
+      }
+    } catch {
+      setReauthError("Network error");
+      setReauthStatus("error");
+    }
   };
 
   const data = patch ? toForceData(patch) : { nodes: [], links: [] };
@@ -132,7 +189,73 @@ export default function ListensGraphPage() {
         >
           ↻ NEW PATCH
         </button>
+        {isAdmin && (
+          <>
+            <button
+              onClick={doSync}
+              disabled={syncStatus === "syncing"}
+              style={{
+                background: "none", border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
+                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
+                letterSpacing: 1, cursor: "pointer",
+              }}
+            >
+              {syncStatus === "syncing" ? "SYNCING..." : syncStatus === "done" ? "SYNCED!" : syncStatus === "error" ? "FAILED" : "SYNC"}
+            </button>
+            <button
+              onClick={() => setShowReauth(!showReauth)}
+              style={{
+                background: showReauth ? "rgba(249,115,22,0.15)" : "none",
+                border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
+                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
+                letterSpacing: 1, cursor: "pointer",
+              }}
+            >
+              AUTH
+            </button>
+          </>
+        )}
       </div>
+
+      {isAdmin && showReauth && (
+        <div style={{ background: "rgba(20,20,20,0.8)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 8, padding: 16, marginBottom: 8 }}>
+          <div style={{ color: "#888", fontSize: 10, fontFamily: "monospace", letterSpacing: 1, marginBottom: 8 }}>YTM RE-AUTH</div>
+          <div style={{ color: "#555", fontSize: 10, marginBottom: 10, lineHeight: 1.5 }}>
+            music.youtube.com → DevTools → Network → click a song → right-click the POST request → Copy request headers → paste below
+          </div>
+          <textarea
+            value={reauthHeaders}
+            onChange={(e) => setReauthHeaders(e.target.value)}
+            placeholder="Paste request headers here..."
+            style={{
+              width: "100%", minHeight: 120, background: "#111", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 4, color: "#ccc", fontSize: 11, fontFamily: "monospace", padding: 10,
+              resize: "vertical", outline: "none",
+            }}
+          />
+          {reauthError && <div style={{ color: "#f87171", fontSize: 10, marginTop: 6 }}>{reauthError}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+            <button
+              onClick={() => { setShowReauth(false); setReauthHeaders(""); setReauthError(""); setReauthStatus("idle"); }}
+              style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#888", borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontFamily: "monospace" }}
+            >
+              CANCEL
+            </button>
+            <button
+              disabled={reauthStatus === "saving" || !reauthHeaders.trim()}
+              onClick={saveReauth}
+              style={{
+                background: reauthStatus === "done" ? "rgba(34,197,94,0.2)" : "rgba(249,115,22,0.15)",
+                border: `1px solid ${reauthStatus === "done" ? "rgba(34,197,94,0.4)" : "rgba(249,115,22,0.3)"}`,
+                color: reauthStatus === "done" ? "#22c55e" : ACCENT,
+                borderRadius: 4, padding: "4px 12px", cursor: "pointer", fontSize: 10, fontFamily: "monospace", letterSpacing: 1,
+              }}
+            >
+              {reauthStatus === "saving" ? "SAVING..." : reauthStatus === "done" ? "SAVED!" : "SAVE"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {stats && (
         <div style={{ display: "flex", gap: 22, padding: "4px 4px 10px", fontFamily: "monospace" }}>

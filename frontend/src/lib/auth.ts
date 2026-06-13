@@ -24,3 +24,16 @@ export function getAdminToken(): string | null {
   }
   return null;
 }
+
+/** Fetch a short-lived nonce for OAuth redirects (keeps admin token out of URLs). */
+export async function fetchAdminNonce(): Promise<string | null> {
+  const token = store("adminToken");
+  if (!token) return null;
+  const res = await fetch("/api/auth/nonce/", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.nonce ?? null;
+}

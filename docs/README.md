@@ -4,15 +4,12 @@ A personal website and digital garden by Nam.
 
 ## What is this?
 
-**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, drawings, code projects, music listening history, reading lists, and more.
+**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, images, code projects, music listening history, reading lists, and more.
 
 ## Sections
 
 ### Thinks
-A public micro-journal. Short-form thoughts posted with an 18-hour cooldown between entries. No edits, no deletes — raw, unfiltered thinking.
-
-### Draws
-A gallery of hand-drawn sketches (pencil) and photographs (camera). Images are uploaded and organized by category with captions.
+A unified public feed of short-form thoughts and images, displayed as a single-column timeline. Each post can carry text, an image, or both. Images are centered in the feed — large images fill the column width, small images render at natural size. Clicking an image opens a full-screen lightbox with left/right navigation between image posts and Esc to close. New posts are composed inline with drag-and-drop / paste / click image attachment; text drafts survive a login redirect and are restored on return. An 18-hour cooldown is enforced between posts. The `/draws` URL redirects here.
 
 ### Codes
 A showcase of software projects with links to GitHub repos and live demos. Includes a live GitHub contribution graph pulled via the GitHub API.
@@ -25,6 +22,14 @@ A public, interactive **graph** of Nam's music, built from YouTube Music history
 
 ### Reads
 A curated reading list (coming soon).
+
+### Audiobook player (admin-only)
+
+For books with a generated audiobook, an admin-visible "LISTEN" button on the
+read card opens `/reads/<slug>/listen` — a chapter-aware HTML5 audio player that
+plays Gemini-narrated chunks of the book. The player persists position in
+localStorage and minimizes to a floating pill on navigation. Audio files are
+gated behind admin auth via short-lived signed URLs.
 
 ### Plays — Chess Explorer & Live Games
 The plays page features a chess opening explorer powered by live data from the Lichess Opening Explorer API. Users can navigate opening lines and see move statistics (game count, win/draw/loss percentages) from both the Masters database and all rated Lichess games. Toggle between databases and filter by rating bracket.
@@ -43,8 +48,10 @@ Agent showcase page for klaude, a DIY Claude Code harness powered by open-source
 
 - Three-panel layout mirroring claude.ai (session sidebar, trace viewer, prompt box)
 - Multi-turn sessions: submit follow-up prompts to continue existing sessions
-- Admin: approve/reject pending turns, view live traces
+- File attachments: visitors may attach text/PDF/image/Office files (≤5 MB each, ≤10 MB per turn)
+- Admin: approve/reject pending turns, view live traces, preview text attachments
 - Rate limiting: 1 submission/hr per IP + 10/hr global cap
+- File downloads: klaude can share files with the user by writing to a per-turn `downloads/` directory; files appear as clickable chips below its message (5 files max, 5 MB each, 10 MB total per turn)
 - Security: separate Linux user, scoped GitHub access, network restrictions
 
 ## Feedback
