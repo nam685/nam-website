@@ -9,7 +9,7 @@ class DCAStrategy:
         Param("interval", "Every N days", "int", 30, 1, 365),
     ]
 
-    def signal(self, closes: list[float], position_shares: float, params: dict) -> Signal:
+    def signal(self, closes: list[float], position_shares: float, params: dict) -> Signal:  # noqa: ARG002
         index = len(closes) - 1
         if index % params["interval"] == 0:
             return Signal(action="buy", dollars=float(params["amount"]), reason="Scheduled DCA buy")
