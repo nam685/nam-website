@@ -13,7 +13,9 @@ from website.auth import require_admin
 from website.models import PriceSnapshot, Ticker
 from website.services import search_alpha_vantage, search_coingecko
 from website.services.alpha_vantage import AlphaVantageQuotaError
-from website.utils import parse_json_body
+from website.services.backtest import run_backtest
+from website.strategies import coerce_params, get_strategy, list_strategies
+from website.utils import get_client_ip, parse_json_body
 
 PERIOD_DAYS = {
     "1W": 7,
@@ -22,6 +24,9 @@ PERIOD_DAYS = {
     "1Y": 365,
     "ALL": None,
 }
+
+BACKTEST_RATE_LIMIT = 30  # per IP
+BACKTEST_RATE_WINDOW = 60  # seconds
 
 
 @require_GET
@@ -263,3 +268,66 @@ def bets_search(request):
         return JsonResponse({"error": quota_error}, status=429)
 
     return JsonResponse(merged, safe=False)
+
+
+@require_GET
+def bets_strategies(_request):
+    """Public: strategy catalog with param schemas (drives the UI form)."""
+    return JsonResponse(list_strategies(), safe=False)
+
+
+@csrf_exempt
+def bets_backtest(request):
+    """Public, rate-limited: run a backtest and return curves + metrics. Not persisted."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    ip = get_client_ip(request)
+    key = f"backtest_rl:{ip}"
+    try:
+        count = cache.get(key, 0)
+        if count >= BACKTEST_RATE_LIMIT:
+            return JsonResponse({"error": "Too many backtests. Try again shortly."}, status=429)
+        cache.set(key, count + 1, BACKTEST_RATE_WINDOW)
+    except Exception:
+        pass  # fail open if Redis is down
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    strategy = get_strategy(body.get("strategy", ""))
+    if strategy is None:
+        return JsonResponse({"error": "Unknown strategy"}, status=400)
+
+    try:
+        ticker = Ticker.objects.get(pk=body.get("ticker_id"))
+    except (Ticker.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({"error": "Ticker not found"}, status=404)
+
+    period = body.get("period", "ALL")
+    days = PERIOD_DAYS.get(period)
+    qs = PriceSnapshot.objects.filter(ticker=ticker).order_by("date")
+    if days is not None:
+        qs = qs.filter(date__gte=date.today() - timedelta(days=days))
+
+    prices = [(d, float(p)) for d, p in qs.values_list("date", "price")]
+    if len(prices) < 2:
+        return JsonResponse({"error": "Not enough price history for this asset/period"}, status=400)
+
+    params = coerce_params(strategy, body.get("params") or {})
+    result = run_backtest(prices, strategy, params)
+
+    return JsonResponse(
+        {
+            "ticker": {"id": ticker.id, "symbol": ticker.symbol, "name": ticker.name, "currency": ticker.currency},
+            "strategy": strategy.key,
+            "params": params,
+            "dates": result.dates,
+            "equity_curve": result.equity_curve,
+            "benchmark_curve": result.benchmark_curve,
+            "trades": [t.to_dict() for t in result.trades],
+            "metrics": result.metrics,
+            "benchmark_metrics": result.benchmark_metrics,
+        }
+    )
