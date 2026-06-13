@@ -140,3 +140,35 @@ def test_fetch_similar_tracks_parses_artist_and_title():
 def test_fetch_similar_artists_returns_empty_on_error():
     with patch("website.services.lastfm.httpx.get", side_effect=Exception("boom")):
         assert lastfm.fetch_similar_artists("X", "KEY") == []
+
+
+@pytest.mark.django_db
+def test_similarity_edges_only_within_universe_and_cached(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+
+    # Radiohead is similar to Muse (in universe) and Coldplay (NOT in universe).
+    def fake_artists(name, _api_key, _limit=50):
+        if music_graph.normalize(name) == "radiohead":
+            return [{"name": "Muse", "match": 0.9}, {"name": "Coldplay", "match": 0.4}]
+        return []
+
+    with (
+        patch.object(music_graph.lastfm, "fetch_similar_artists", side_effect=fake_artists),
+        patch.object(music_graph.lastfm, "fetch_similar_tracks", return_value=[]),
+    ):
+        music_graph.rebuild_similarity_edges(api_key="KEY")
+
+    radiohead = MusicNode.objects.get(node_type="artist", key="radiohead")
+    muse = MusicNode.objects.get(node_type="artist", key="muse")
+    assert music_graph.edge_exists(radiohead, muse, "similar_artist")
+    # Coldplay is not a node, so no edge was created to it.
+    assert not MusicNode.objects.filter(node_type="artist", key="coldplay").exists()
+    # Response was cached.
+    assert LastfmCache.objects.filter(cache_key="artist.getsimilar::radiohead").exists()
+
+
+@pytest.mark.django_db
+def test_similarity_edges_noop_without_api_key(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_similarity_edges(api_key="")
+    assert not MusicEdge.objects.filter(edge_type="similar_artist").exists()

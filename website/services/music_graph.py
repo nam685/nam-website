@@ -1,9 +1,11 @@
 import logging
+import time
 
 from django.db.models import Count, Max
 from django.utils import timezone
 
-from website.models import ListenTrack, MusicEdge, MusicNode
+from website.models import LastfmCache, ListenTrack, MusicEdge, MusicNode
+from website.services import lastfm
 
 logger = logging.getLogger(__name__)
 
@@ -181,3 +183,60 @@ def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
         a, b = tracks.get(a_key), tracks.get(b_key)
         if a and b:
             _upsert_edge(a, b, "colisten", float(count))
+
+
+LASTFM_REQUEST_DELAY = 0.25  # ~4 req/s, polite
+SIMILAR_TRACK_NODE_LIMIT = 200  # cap track.getSimilar calls to the most-played tracks
+
+
+def _cached_lastfm(cache_key: str, fetch):
+    row = LastfmCache.objects.filter(cache_key=cache_key).first()
+    if row is not None:
+        return row.payload
+    payload = fetch()
+    LastfmCache.objects.update_or_create(cache_key=cache_key, defaults={"payload": payload})
+    time.sleep(LASTFM_REQUEST_DELAY)
+    return payload
+
+
+def rebuild_similarity_edges(api_key: str):
+    """Create similar_artist / similar_track edges between nodes already in the universe.
+
+    Last.fm responses are cached in LastfmCache. With no api_key, this is a no-op so the
+    graph still builds from co-listen + structural edges (useful in dev).
+    """
+    if not api_key:
+        logger.info("LASTFM_API_KEY unset; skipping similarity enrichment")
+        return
+
+    MusicEdge.objects.filter(edge_type__in=["similar_artist", "similar_track"]).delete()
+
+    artists = {n.key: n for n in MusicNode.objects.filter(node_type="artist")}
+    # Track lookup by (artist_norm, title_norm) so Last.fm name-based results map back to nodes.
+    tracks_by_name: dict[tuple[str, str], MusicNode] = {}
+    for n in MusicNode.objects.filter(node_type="track"):
+        tracks_by_name[(normalize(n.subtitle.split(",")[0]), normalize(n.title))] = n
+
+    # --- similar artists ---
+    for key, node in artists.items():
+        payload = _cached_lastfm(
+            f"artist.getsimilar::{key}",
+            lambda node=node: lastfm.fetch_similar_artists(node.title, api_key),
+        )
+        for sim in payload:
+            target = artists.get(normalize(sim["name"]))
+            if target:
+                _upsert_edge(node, target, "similar_artist", float(sim["match"]))
+
+    # --- similar tracks (only for the most-played tracks, to bound API calls) ---
+    top_tracks = MusicNode.objects.filter(node_type="track").order_by("-play_count")[:SIMILAR_TRACK_NODE_LIMIT]
+    for node in top_tracks:
+        artist_primary = node.subtitle.split(",")[0].strip()
+        payload = _cached_lastfm(
+            f"track.getsimilar::{normalize(artist_primary)}::{normalize(node.title)}",
+            lambda node=node, a=artist_primary: lastfm.fetch_similar_tracks(a, node.title, api_key),
+        )
+        for sim in payload:
+            target = tracks_by_name.get((normalize(sim["artist"]), normalize(sim["title"])))
+            if target:
+                _upsert_edge(node, target, "similar_track", float(sim["match"]))
