@@ -100,7 +100,7 @@ def test_run_backtest_sell_path_liquidates_position_at_t_plus_1():
         label = "bts"
         params: list = []
 
-        def signal(self, closes, position_shares, params):
+        def signal(self, closes, position_shares, params):  # noqa: ARG002
             if position_shares <= 0 and len(closes) == 1:
                 return Signal(action="buy")
             if position_shares > 0 and len(closes) == 3:
