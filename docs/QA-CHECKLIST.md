@@ -192,6 +192,15 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Mobile: cards stack single column, expanded card full width
 - [ ] Empty state shows message when no tickers exist
 
+### Bets — Backtester
+- [ ] `/bets` shows the "Backtest sandbox" section below the ticker grid
+- [ ] Selecting a ticker + strategy + params and clicking "Run backtest" renders an equity curve
+- [ ] The strategy line and the dashed buy & hold line both render
+- [ ] Buy (green) and sell (red) markers appear on the curve for trading strategies
+- [ ] Metrics table shows return / CAGR / drawdown / Sharpe / trades / win rate vs. buy & hold
+- [ ] An asset with too little history shows a clear "not enough history" message, not a crash
+- [ ] Spamming "Run" eventually returns a rate-limit message (HTTP 429)
+
 ### Slops (/slops)
 - [ ] Page loads with hero section and neon green accent
 - [ ] Prompt box accepts input, submits new session, shows rate limit error on second submit

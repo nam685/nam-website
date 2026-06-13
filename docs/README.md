@@ -37,6 +37,8 @@ A curated YouTube taste showcase with a two-column layout: a sticky hero video p
 ### Bets
 Mini Bloomberg — tracks stocks (VWCE), gold, Bitcoin, EU bond yields with daily price snapshots, sparkline charts, and expandable detail views. Admin can add/remove tickers and trigger manual price syncs.
 
+**Backtester:** the bets page now includes an interactive backtest sandbox. Visitors pick an asset, a strategy (Buy & Hold, Moving-Average Crossover, Dollar-Cost Averaging, MACD, Bollinger Bands, RSI, Time-Series Momentum), and parameters, then see an equity curve and performance metrics scored against a buy-and-hold benchmark. No real trades are made — it replays historical prices only.
+
 ### Slops
 
 Agent showcase page for klaude, a DIY Claude Code harness powered by open-source LLMs. Visitors submit prompts which go into a pending queue. The admin approves turns, and klaude executes them in a sandboxed environment. Sessions support multi-turn conversations via klaude's `-c` resume feature. Full agent traces (tool calls, reasoning, file changes) are recorded and displayed publicly.
