@@ -18,9 +18,7 @@ def test_strategies_endpoint_lists_all(client):
 
 
 def _seed_prices(days=120):
-    t = Ticker.objects.create(
-        symbol="BT", name="BTest", asset_type="stock", provider="alpha_vantage", provider_id="BT"
-    )
+    t = Ticker.objects.create(symbol="BT", name="BTest", asset_type="stock", provider="alpha_vantage", provider_id="BT")
     base = date(2020, 1, 1)
     for i in range(days):
         PriceSnapshot.objects.create(ticker=t, date=base + timedelta(days=i), price=Decimal(100 + i))
@@ -54,7 +52,7 @@ def test_backtest_unknown_strategy_400(client):
 
 
 @pytest.mark.django_db
-def test_backtest_rate_limited(client, settings):
+def test_backtest_rate_limited(client, settings):  # noqa: ARG001
     t = _seed_prices(30)
     payload = {"ticker_id": t.id, "strategy": "buy_hold", "params": {}}
     last = None
