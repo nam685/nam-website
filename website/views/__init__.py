@@ -43,7 +43,7 @@ from .slops import (
     slops_trace,
     slops_trace_download,
 )
-from .thought import thought_create, thought_list
+from .thought import thought_create, thought_delete, thought_list
 from .todo import todo_list
 from .watch import (
     watch_auth,
@@ -111,6 +111,7 @@ __all__ = [
     "slops_trace",
     "slops_trace_download",
     "thought_create",
+    "thought_delete",
     "thought_list",
     "todo_list",
     "watch_auth",

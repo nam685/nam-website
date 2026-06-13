@@ -18,6 +18,7 @@ urlpatterns = [
     path("projects/", views.project_list),
     path("thoughts/", views.thought_list),
     path("thoughts/create/", views.thought_create),
+    path("thoughts/<int:thought_id>/delete/", views.thought_delete),
     path("feedback/", views.feedback_create),
     path("github/contributions/", views.github_contributions),
     path("github/auth/", views.github_auth),
