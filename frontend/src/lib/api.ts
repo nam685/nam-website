@@ -55,38 +55,43 @@ export interface ListenStats {
   daily: { date: string; count: number }[];
 }
 
-export interface ListenTopTrack {
-  video_id: string;
+/* ── Listens graph ─────────────────────────────────────── */
+
+export type GraphNodeType = "artist" | "album" | "track";
+export type GraphEdgeType = "similar_artist" | "similar_track" | "colisten" | "structural";
+
+export interface GraphNode {
+  key: string;
+  node_type: GraphNodeType;
   title: string;
-  artist: string;
-  album: string;
+  subtitle: string;
   thumbnail_url: string;
-  play_count: number;
-}
-
-export interface ListenTopArtist {
-  name: string;
-  play_count: number;
-  track_count: number;
-  top_tracks: { video_id: string; title: string; thumbnail_url: string }[];
-}
-
-export interface ListenTopAlbum {
-  name: string;
-  artist: string;
-  thumbnail_url: string;
-  play_count: number;
-  track_count: number;
-}
-
-export interface ListenRecommended {
   video_id: string;
-  title: string;
-  artist: string;
-  album: string;
-  thumbnail_url: string;
   play_count: number;
-  last_played: string | null;
+  is_liked: boolean;
+  is_subscribed: boolean;
+  in_library: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  edge_type: GraphEdgeType;
+  weight: number;
+}
+
+export interface GraphPatch {
+  seed: string | null;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphSearchResult {
+  key: string;
+  node_type: GraphNodeType;
+  title: string;
+  subtitle: string;
+  thumbnail_url: string;
 }
 
 export interface WatchVideo {
