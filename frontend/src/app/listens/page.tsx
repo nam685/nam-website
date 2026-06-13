@@ -218,7 +218,7 @@ export default function ListensGraphPage() {
             letterSpacing: 1, cursor: "pointer",
           }}
         >
-          ↻ NEW PATCH
+          ↻ SHUFFLE
         </button>
         {isAdmin && (
           <>
