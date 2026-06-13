@@ -1178,7 +1178,7 @@ git commit -m "feat: merged thinks feed with image posts, compose card, lightbox
 
 **Files:**
 - Delete: `frontend/src/app/draws/page.tsx`
-- Modify: `frontend/src/lib/navWheel.ts`, `frontend/src/app/layout.tsx`, `frontend/src/components/PageBackground.tsx`, `frontend/next.config.ts`
+- Modify: `frontend/src/lib/navWheel.ts`, `frontend/src/app/layout.tsx`, `frontend/src/components/PageBackground.tsx`, `frontend/next.config.ts`, `frontend/src/lib/homepageContent.ts`, `frontend/src/lib/__tests__/homepageContent.test.ts`
 
 - [ ] **Step 1: Remove the draws nav entry**
 
@@ -1222,16 +1222,62 @@ In `frontend/next.config.ts`, add an async `redirects()` to the exported config 
 git rm frontend/src/app/draws/page.tsx
 ```
 
-- [ ] **Step 6: Lint**
+- [ ] **Step 6: Update the homepage orbit + random content (`frontend/src/lib/homepageContent.ts`)**
 
-Run: `cd frontend && pnpm lint`
-Expected: no errors (no remaining imports of the deleted `Drawing` type or draws page).
+The homepage has its own decorative orbit (`DOTS`) that includes a `draws` dot, and `fetchRandomContent()` fetches the now-removed `/api/drawings/`. Both must change.
 
-- [ ] **Step 7: Commit**
+6a. **Remove the `draws` dot and re-space the orbit to 9 dots, 40° apart.** Replace the entire `DOTS` array with (note: angles are now `i * 40`, draws removed, all other dots and metadata unchanged):
+
+```typescript
+export const DOTS: Dot[] = [
+  // Ordered by color wavelength (hue angle) — creates a smooth rainbow around the orbit
+  { label: "listens", href: "/listens", color: "#f97316", size: 7, angle: 0, desc: "vibing...", breatheDur: 4.4, breatheDelay: 0.6 },
+  { label: "grinds", href: "/grinds", color: "#f59e0b", size: 8, angle: 40, desc: "i press buttons to pay rent", breatheDur: 3.5, breatheDelay: 1.2 },
+  { label: "codes", href: "/codes", color: "#22c55e", size: 9, angle: 80, desc: "i embrace the slop", breatheDur: 4.1, breatheDelay: 0.8 },
+  { label: "slops", href: "/slops", color: "#39ff14", size: 8, angle: 120, desc: "handmade slop machine", breatheDur: 3.7, breatheDelay: 1.1 },
+  { label: "plays", href: "/plays", color: "#06b6d4", size: 9, angle: 160, desc: "i spent waaay too much time on this", breatheDur: 3.6, breatheDelay: 0.3 },
+  { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 200, desc: "i know many words", breatheDur: 3.9, breatheDelay: 1.5 },
+  { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 240, desc: "at least i don't doom scroll facebook et al.", breatheDur: 4.2, breatheDelay: 1.0 },
+  { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 280, desc: "i look here to feel very smart", breatheDur: 3.4, breatheDelay: 0.7 },
+  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 320, desc: "sometimes, some of my neurons fire", breatheDur: 3.2, breatheDelay: 0 },
+];
+```
+
+6b. **Re-source the random "drawing" content from image-bearing thoughts.** Change the import on line 1 from `import { API, type Thought, type Drawing } from "@/lib/api";` to `import { API, type Thought } from "@/lib/api";`. Then replace the `if (chosen === "drawing") { ... }` block with one that fetches thoughts and picks one that has an image (the `ContentItem` "drawing" variant and the homepage render are unchanged):
+
+```typescript
+    if (chosen === "drawing") {
+      const res = await fetch(`${API}/api/thoughts/?page=1`);
+      if (!res.ok) throw new Error();
+      const data: { thoughts: Thought[] } = await res.json();
+      const withImg = data.thoughts.filter((t) => t.image);
+      if (withImg.length === 0) throw new Error();
+      const t = withImg[Math.floor(Math.random() * withImg.length)];
+      return { type: "drawing", src: `${API}${t.image}`, alt: t.content || "drawing" };
+    }
+```
+
+6c. **Update the homepage test (`frontend/src/lib/__tests__/homepageContent.test.ts`).** The orbit now has 9 dots spaced 40° apart, and `lerpDotColor`'s sector size is `360/9 = 40`. Apply these edits:
+- `it("returns second dot color at its exact angle", ...)`: change the angle from `36` to `40` (grinds is now at 40°), keep the expected color `[245, 158, 11]`.
+- `it("has 10 entries", ...)`: change to `it("has 9 entries", ...)` and `expect(DOTS).toHaveLength(9);`.
+- `it("dots are spaced 36° apart", ...)`: change the title to `40°` and the assertion to `expect(DOTS[i].angle).toBe(i * 40);`.
+- The `lerpDotColor(0)` test (listens), the midpoint test, and the wrap test (`342`) remain valid — leave them, but verify they still pass after the change.
+
+- [ ] **Step 7: Lint + test the frontend**
+
+Run: `~/.local/share/pnpm/pnpm lint` and `~/.local/share/pnpm/pnpm vitest run`
+Expected: lint clean; all vitest suites pass (thoughtDraft + homepageContent + any others).
+
+- [ ] **Step 8: Build**
+
+Run: `~/.local/share/pnpm/pnpm build`
+Expected: production build succeeds (this is the first point where the whole frontend compiles cleanly — Tasks 5–6 left `Drawing` references that this task resolves).
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: drop draws page/nav/bg, brighten thinks bg, redirect /draws"
+git commit -m "feat: drop draws page/nav/bg, brighten thinks bg, redirect /draws, merge homepage orbit"
 ```
 
 ---
