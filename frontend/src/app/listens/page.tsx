@@ -41,6 +41,22 @@ export default function ListensGraphPage() {
     zoomToFit?: (ms: number, px: number) => void;
     d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
   } | null>(null);
+  // Auto-fit only once per patch (on first settle) — not on every engine stop, or
+  // interacting with the graph (dragging a node reheats the sim) would yank the view back.
+  const fittedRef = useRef(false);
+  // Measure the canvas container so the graph fills it (full page width, tall).
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ width: 1000, height: 600 });
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setDims({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Admin actions require a valid token; bounce expired/absent sessions to the login.
   const handleAuthExpired = () => {
@@ -77,11 +93,13 @@ export default function ListensGraphPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Spread nodes apart so a dense patch doesn't collapse into one blob.
+  // On each new patch: allow one auto-fit, and spread nodes apart so a dense patch
+  // sprawls to fill the canvas instead of collapsing into a tight ball.
   useEffect(() => {
+    fittedRef.current = false;
     if (!patch) return;
-    fgRef.current?.d3Force?.("charge")?.strength?.(-180);
-    fgRef.current?.d3Force?.("link")?.distance?.(50);
+    fgRef.current?.d3Force?.("charge")?.strength?.(-320);
+    fgRef.current?.d3Force?.("link")?.distance?.(70);
   }, [patch]);
 
   const playNode = (node: ForceNode) => {
@@ -315,14 +333,34 @@ export default function ListensGraphPage() {
         </div>
       )}
 
-      <div style={{ height: 540, border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, overflow: "hidden", background: "#0a0a0a" }}>
+      <div
+        ref={containerRef}
+        style={{
+          // Full-bleed: break out of the centered max-width layout to span the page width.
+          width: "100vw",
+          marginLeft: "calc(50% - 50vw)",
+          height: "calc(100vh - 200px)",
+          minHeight: 480,
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          overflow: "hidden",
+          background: "#0a0a0a",
+        }}
+      >
         <ForceGraph2D
           ref={fgRef as never}
+          width={dims.width}
+          height={dims.height}
           graphData={data}
           backgroundColor="#0a0a0a"
           nodeRelSize={1}
           cooldownTicks={120}
-          onEngineStop={() => fgRef.current?.zoomToFit?.(400, 60)}
+          onEngineStop={() => {
+            if (!fittedRef.current) {
+              fgRef.current?.zoomToFit?.(400, 80);
+              fittedRef.current = true;
+            }
+          }}
           linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
           linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
           linkWidth={(l: { edge_type: string; weight: number }) =>
