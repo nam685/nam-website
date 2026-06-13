@@ -1,18 +1,16 @@
 import json
 import logging
-import random
 import re
 import time
 from datetime import timedelta as td
 
 from django.core.cache import cache as redis_cache
-from django.db.models import Count, Max
+from django.db.models import Count
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
@@ -136,6 +134,14 @@ def listen_sync(request):
         ListenTrack.objects.bulk_create(new_tracks)
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
+        try:
+            from django.conf import settings
+
+            from ..services import music_graph
+
+            music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=headers)
+        except Exception:
+            logger.exception("Graph rebuild after sync failed")
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
@@ -181,210 +187,6 @@ def listen_stats(_request):
     }
     redis_cache.set("listen_stats", result, 300)
     return JsonResponse(result)
-
-
-@require_GET
-def listen_recommended(_request):
-    """Return a single recommended track using rediscovery algorithm."""
-    cached = redis_cache.get("listen_recommended")
-    if cached:
-        return JsonResponse(cached)
-
-    total_tracks = ListenTrack.objects.values("video_id").annotate(play_count=Count("id")).count()
-    if total_tracks == 0:
-        result = {"track": None}
-        redis_cache.set("listen_recommended", result, 3600)
-        return JsonResponse(result)
-
-    # Find tracks in top 25% by play count not played in last 14 days
-    cutoff = timezone.now() - timezone.timedelta(days=14)
-
-    candidates = (
-        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
-        .annotate(
-            play_count=Count("id"),
-            last_played=Max("played_at"),
-        )
-        .filter(last_played__lt=cutoff)
-        .order_by("-play_count")
-    )
-
-    # Determine top-25% threshold
-    all_play_counts = list(
-        ListenTrack.objects.values("video_id")
-        .annotate(play_count=Count("id"))
-        .order_by("-play_count")
-        .values_list("play_count", flat=True)
-    )
-    if all_play_counts:
-        threshold_idx = max(0, len(all_play_counts) // 4 - 1)
-        threshold = all_play_counts[threshold_idx]
-        candidates = candidates.filter(play_count__gte=threshold)
-
-    candidates = list(candidates[:50])
-
-    if candidates:
-        # Weighted random: play_count * days_since_last_play
-        now = timezone.now()
-        weights = []
-        for c in candidates:
-            days_since = (now - c["last_played"]).days
-            weights.append(c["play_count"] * max(days_since, 1))
-        pick = random.choices(candidates, weights=weights, k=1)[0]
-    else:
-        # Fallback: most played track overall
-        pick = (
-            ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
-            .annotate(play_count=Count("id"), last_played=Max("played_at"))
-            .order_by("-play_count")
-            .first()
-        )
-
-    if pick:
-        track = {
-            "video_id": pick["video_id"],
-            "title": pick["title"],
-            "artist": pick["artist"],
-            "album": pick["album"],
-            "thumbnail_url": pick["thumbnail_url"],
-            "play_count": pick["play_count"],
-            "last_played": pick["last_played"].isoformat() if pick["last_played"] else None,
-        }
-    else:
-        track = None
-
-    result = {"track": track}
-    redis_cache.set("listen_recommended", result, 3600)
-    return JsonResponse(result)
-
-
-@require_GET
-def listen_top_tracks(request):
-    """Return tracks ranked by play count (public)."""
-    try:
-        limit, offset = parse_pagination(request)
-    except (ValueError, TypeError):
-        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
-
-    tracks = (
-        ListenTrack.objects.values("video_id", "title", "artist", "album", "thumbnail_url")
-        .annotate(play_count=Count("id"))
-        .order_by("-play_count")
-    )
-    total = tracks.count()
-    page = list(tracks[offset : offset + limit])
-
-    return JsonResponse({"tracks": page, "total": total})
-
-
-@require_GET
-def listen_top_artists(request):
-    """Return artists ranked by play count (public).
-
-    Collab tracks stored as "Artist A, Artist B" are split and each artist
-    is credited independently.
-    """
-    try:
-        limit, offset = parse_pagination(request)
-    except (ValueError, TypeError):
-        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
-
-    # Fetch all tracks — personal site, at most a few thousand rows
-    all_tracks = list(ListenTrack.objects.values_list("id", "video_id", "title", "artist", "thumbnail_url"))
-
-    # Aggregate per individual artist name
-    artist_play_counts: dict[str, int] = {}
-    artist_video_ids: dict[str, set[str]] = {}
-    artist_track_refs: dict[str, list[tuple[str, str, str]]] = {}  # name → [(video_id, title, thumbnail_url)]
-
-    for _id, video_id, title, artist_field, thumbnail_url in all_tracks:
-        names = [n.strip() for n in artist_field.split(",") if n.strip()]
-        for name in names:
-            artist_play_counts[name] = artist_play_counts.get(name, 0) + 1
-            if name not in artist_video_ids:
-                artist_video_ids[name] = set()
-                artist_track_refs[name] = []
-            artist_video_ids[name].add(video_id)
-            artist_track_refs[name].append((video_id, title, thumbnail_url))
-
-    # Sort by play count descending
-    sorted_names = sorted(artist_play_counts.keys(), key=lambda n: -artist_play_counts[n])
-    total = len(sorted_names)
-
-    page_names = sorted_names[offset : offset + limit]
-
-    page = []
-    for name in page_names:
-        # Top 3 tracks for this artist by play count (count occurrences across all refs)
-        track_play_counts: dict[str, tuple[int, str, str, str]] = {}
-        for video_id, title, thumbnail_url in artist_track_refs[name]:
-            if video_id not in track_play_counts:
-                track_play_counts[video_id] = (0, title, thumbnail_url, video_id)
-            prev = track_play_counts[video_id]
-            track_play_counts[video_id] = (prev[0] + 1, prev[1], prev[2], prev[3])
-
-        top_tracks_sorted = sorted(track_play_counts.values(), key=lambda t: -t[0])[:3]
-
-        page.append(
-            {
-                "name": name,
-                "play_count": artist_play_counts[name],
-                "track_count": len(artist_video_ids[name]),
-                "top_tracks": [{"video_id": t[3], "title": t[1], "thumbnail_url": t[2]} for t in top_tracks_sorted],
-            }
-        )
-
-    return JsonResponse({"artists": page, "total": total})
-
-
-@require_GET
-def listen_top_albums(request):
-    """Return albums ranked by play count (public)."""
-    try:
-        limit, offset = parse_pagination(request)
-    except (ValueError, TypeError):
-        return JsonResponse({"error": "Invalid pagination parameters"}, status=400)
-
-    albums = (
-        ListenTrack.objects.exclude(album="")
-        .values("album")
-        .annotate(
-            play_count=Count("id"),
-            track_count=Count("video_id", distinct=True),
-        )
-        .filter(track_count__gte=2)
-        .order_by("-play_count")
-    )
-    total = albums.count()
-    page = list(albums[offset : offset + limit])
-
-    # Batch-fetch artist + thumbnail for all albums on this page (avoids N+1)
-    album_names = [e["album"] for e in page]
-    artist_qs = (
-        ListenTrack.objects.filter(album__in=album_names)
-        .values("album", "artist")
-        .annotate(cnt=Count("id"))
-        .order_by("album", "-cnt")
-    )
-    album_top_artist: dict[str, str] = {}
-    for row in artist_qs:
-        album_top_artist.setdefault(row["album"], row["artist"])
-
-    thumb_qs = (
-        ListenTrack.objects.filter(album__in=album_names)
-        .exclude(thumbnail_url="")
-        .values_list("album", "thumbnail_url")
-    )
-    album_thumb: dict[str, str] = {}
-    for album, thumb in thumb_qs:
-        album_thumb.setdefault(album, thumb)
-
-    for entry in page:
-        entry["artist"] = album_top_artist.get(entry["album"], "Unknown")
-        entry["thumbnail_url"] = album_thumb.get(entry["album"], "")
-        entry["name"] = entry.pop("album")
-
-    return JsonResponse({"albums": page, "total": total})
 
 
 @require_admin

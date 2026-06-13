@@ -19,13 +19,9 @@ from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess
 from .listen import (
     listen_import,
     listen_list,
-    listen_recommended,
     listen_stats,
     listen_sync,
     listen_sync_status,
-    listen_top_albums,
-    listen_top_artists,
-    listen_top_tracks,
 )
 from .listen_graph import graph_patch, graph_search
 from .project import project_list
@@ -90,13 +86,9 @@ __all__ = [
     "graph_search",
     "listen_import",
     "listen_list",
-    "listen_recommended",
     "listen_stats",
     "listen_sync",
     "listen_sync_status",
-    "listen_top_albums",
-    "listen_top_artists",
-    "listen_top_tracks",
     "project_list",
     "slops_approve",
     "slops_cancel",
