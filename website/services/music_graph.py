@@ -1,7 +1,8 @@
 import logging
+import random
 import time
 
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from website.models import LastfmCache, ListenTrack, MusicEdge, MusicNode
@@ -273,3 +274,94 @@ def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_art
         MusicNode.objects.filter(node_type="album", key__in=library_album_keys).update(in_library=True)
     if subscribed_artist_keys:
         MusicNode.objects.filter(node_type="artist", key__in=subscribed_artist_keys).update(is_subscribed=True)
+
+
+PATCH_MAX_NODES = 40
+
+
+def _serialize_node(n: MusicNode) -> dict:
+    return {
+        "key": n.key,
+        "node_type": n.node_type,
+        "title": n.title,
+        "subtitle": n.subtitle,
+        "thumbnail_url": n.thumbnail_url,
+        "video_id": n.video_id,
+        "play_count": n.play_count,
+        "is_liked": n.is_liked,
+        "is_subscribed": n.is_subscribed,
+        "in_library": n.in_library,
+    }
+
+
+def _neighbors(node_ids: set[int]):
+    """All edges with at least one endpoint in node_ids."""
+    edges = MusicEdge.objects.filter(source_id__in=node_ids).union(MusicEdge.objects.filter(target_id__in=node_ids))
+    return list(edges)
+
+
+def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES) -> dict:
+    """Return {seed, nodes, edges} for the seed node + BFS depth-2 neighborhood, capped."""
+    if seed_key is None:
+        seed = list(MusicNode.objects.filter(recommend_score__gt=0).order_by("-recommend_score")[:50])
+        seed = seed or list(MusicNode.objects.all()[:50])
+        if not seed:
+            return {"seed": None, "nodes": [], "edges": []}
+        weights = [n.recommend_score or 1.0 for n in seed]
+        seed_node = random.choices(seed, weights=weights, k=1)[0]
+    else:
+        seed_node = MusicNode.objects.filter(key=seed_key, node_type=seed_type).first()
+        if seed_node is None:
+            seed_node = MusicNode.objects.filter(key=seed_key).first()
+        if seed_node is None:
+            return {"seed": None, "nodes": [], "edges": []}
+
+    # BFS to depth 2 collecting node ids.
+    frontier = {seed_node.id}
+    collected = {seed_node.id}
+    for _ in range(2):
+        edges = _neighbors(frontier)
+        next_frontier = set()
+        for e in edges:
+            for nid in (e.source_id, e.target_id):
+                if nid not in collected and len(collected) < max_nodes:
+                    collected.add(nid)
+                    next_frontier.add(nid)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    nodes = list(MusicNode.objects.filter(id__in=collected))
+    id_to_key = {n.id: n.key for n in nodes}
+    edges = MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected)
+    return {
+        "seed": seed_node.key,
+        "nodes": [_serialize_node(n) for n in nodes],
+        "edges": [
+            {
+                "source": id_to_key[e.source_id],
+                "target": id_to_key[e.target_id],
+                "edge_type": e.edge_type,
+                "weight": e.weight,
+            }
+            for e in edges
+        ],
+    }
+
+
+def search_nodes(query: str, limit: int = 10) -> list[dict]:
+    if not query.strip():
+        return []
+    qs = MusicNode.objects.filter(Q(title__icontains=query) | Q(subtitle__icontains=query)).order_by(
+        "-recommend_score"
+    )[:limit]
+    return [
+        {
+            "key": n.key,
+            "node_type": n.node_type,
+            "title": n.title,
+            "subtitle": n.subtitle,
+            "thumbnail_url": n.thumbnail_url,
+        }
+        for n in qs
+    ]

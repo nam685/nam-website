@@ -212,3 +212,35 @@ def test_apply_personalization_sets_flags(plays):  # noqa: ARG001
     # Nodes not named in the input keep flags off (reset + scoping work).
     assert not MusicNode.objects.get(node_type="artist", key="muse").is_subscribed
     assert not MusicNode.objects.get(node_type="track", key="v2").is_liked
+
+
+@pytest.mark.django_db
+def test_get_patch_returns_seed_neighborhood(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_structural_edges()
+    patch = music_graph.get_patch(seed_key="v1", seed_type="track", max_nodes=40)
+    keys = {n["key"] for n in patch["nodes"]}
+    assert patch["seed"] == "v1"
+    assert "v1" in keys
+    assert "radiohead" in keys  # 1-hop structural neighbor
+    # Edges reference node keys present in the patch.
+    for e in patch["edges"]:
+        assert e["source"] in keys and e["target"] in keys
+
+
+@pytest.mark.django_db
+def test_get_patch_seedless_picks_by_recommend_score(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.compute_recommend_scores()
+    MusicNode.objects.filter(node_type="track", key="v3").update(recommend_score=10_000)
+    MusicNode.objects.exclude(key="v3").update(recommend_score=0)
+    patch = music_graph.get_patch(seed_key=None, seed_type=None, max_nodes=40)
+    assert patch["seed"] == "v3"
+
+
+@pytest.mark.django_db
+def test_search_nodes_matches_title_and_subtitle(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    results = music_graph.search_nodes("radio")
+    titles = {r["title"] for r in results}
+    assert "Radiohead" in titles
