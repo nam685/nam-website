@@ -52,10 +52,8 @@ GET  /api/health/
 POST /api/auth/login/           body: {"secret": "<ADMIN_SECRET>"} → {"token": "..."}
 GET  /api/auth/check/           Authorization: Bearer <token>
 GET  /api/thoughts/?page=N
-POST /api/thoughts/create/      auth required, body: {"content": "..."}
-GET  /api/drawings/
-POST /api/drawings/upload/      auth required, multipart (image + category)
-POST /api/drawings/<id>/delete/ auth required
+POST /api/thoughts/create/      auth required, multipart: optional content + optional image
+POST /api/thoughts/<id>/delete/ auth required
 POST /api/feedback/             body: {"message": "..."}, rate-limited per IP
 GET  /api/projects/
 GET  /api/todo/

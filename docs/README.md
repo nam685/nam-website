@@ -4,15 +4,12 @@ A personal website and digital garden by Nam.
 
 ## What is this?
 
-**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, drawings, code projects, music listening history, reading lists, and more.
+**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, images, code projects, music listening history, reading lists, and more.
 
 ## Sections
 
 ### Thinks
-A public micro-journal. Short-form thoughts posted with an 18-hour cooldown between entries. No edits, no deletes — raw, unfiltered thinking.
-
-### Draws
-A gallery of hand-drawn sketches (pencil) and photographs (camera). Images are uploaded and organized by category with captions.
+A unified public feed of short-form thoughts and images, displayed as a single-column timeline. Each post can carry text, an image, or both. Images are centered in the feed — large images fill the column width, small images render at natural size. Clicking an image opens a full-screen lightbox with left/right navigation between image posts and Esc to close. New posts are composed inline with drag-and-drop / paste / click image attachment; text drafts survive a login redirect and are restored on return. An 18-hour cooldown is enforced between posts. The `/draws` URL redirects here.
 
 ### Codes
 A showcase of software projects with links to GitHub repos and live demos. Includes a live GitHub contribution graph pulled via the GitHub API.
