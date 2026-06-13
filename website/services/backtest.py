@@ -88,11 +88,16 @@ class BacktestResult:
 
 
 def _simulate(prices, strategy, params, starting_cash, fee_pct):
-    """Core replay: returns (equity_curve, trades). Signal at day i fills at day i+1 close."""
+    """Core replay: returns (equity_curve, trades, cash_curve, shares_curve).
+
+    Signal at day i fills at day i+1 close.
+    """
     cash = starting_cash
     shares = 0.0
     trades: list[Trade] = []
     curve: list[float] = []
+    cash_curve: list[float] = []
+    shares_curve: list[float] = []
     closes: list[float] = []
     pending = None  # Signal decided on the previous day, filled today
 
@@ -121,11 +126,13 @@ def _simulate(prices, strategy, params, starting_cash, fee_pct):
 
         # 2. Record equity at today's close, after any fill.
         curve.append(cash + shares * close)
+        cash_curve.append(cash)
+        shares_curve.append(shares)
 
         # 3. Decide today's signal from the prefix (becomes tomorrow's pending).
         pending = strategy.signal(closes, shares, params)
 
-    return curve, trades
+    return curve, trades, cash_curve, shares_curve
 
 
 def run_backtest(prices, strategy, params, starting_cash=10000.0, fee_pct=0.001) -> BacktestResult:
@@ -133,8 +140,8 @@ def run_backtest(prices, strategy, params, starting_cash=10000.0, fee_pct=0.001)
     from website.strategies.buy_hold import BuyHoldStrategy
 
     dates = [d for d, _ in prices]
-    curve, trades = _simulate(prices, strategy, params, starting_cash, fee_pct)
-    bench_curve, _ = _simulate(prices, BuyHoldStrategy(), {}, starting_cash, fee_pct)
+    curve, trades, _, _ = _simulate(prices, strategy, params, starting_cash, fee_pct)
+    bench_curve, _, _, _ = _simulate(prices, BuyHoldStrategy(), {}, starting_cash, fee_pct)
 
     return BacktestResult(
         dates=[str(d) for d in dates],

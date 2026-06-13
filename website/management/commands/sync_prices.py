@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.core.cache import cache
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db.models import F, Max
 
@@ -67,6 +68,12 @@ class Command(BaseCommand):
             self.stdout.write(f"Sync complete with {len(errors)} error(s)")
         else:
             self.stdout.write(f"Sync complete: {len(tickers)} tickers updated")
+
+        # Advance paper-trading accounts with the freshly-synced prices.
+        try:
+            call_command("tick_paper_accounts")
+        except Exception as e:  # noqa: BLE001
+            self.stderr.write(f"Paper tick failed: {e}")
 
     def _upsert_snapshots(self, ticker: Ticker, history: list[tuple]) -> None:
         existing_dates = set(PriceSnapshot.objects.filter(ticker=ticker).values_list("date", flat=True))
