@@ -266,3 +266,35 @@ def test_build_music_graph_command(plays):  # noqa: ARG001
     with patch.object(music_graph, "build_graph") as mock_build:
         call_command("build_music_graph", stdout=out)
     mock_build.assert_called_once()
+
+
+def test_canonical_title_strips_remix_and_feat_suffixes():
+    assert music_graph.canonical_title("Let Down (VIP Remix)") == "let down"
+    assert music_graph.canonical_title("Distance [Radio Edit]") == "distance"
+    assert music_graph.canonical_title("Insane feat. Someone") == "insane"
+    assert music_graph.canonical_title("Plain Title") == "plain title"
+
+
+@pytest.mark.django_db
+def test_colisten_ignores_sync_rows(db):  # noqa: ARG001
+    now = timezone.now()
+    # Real-timestamp plays close together → should link.
+    ListenTrack.objects.create(video_id="r1", title="R1", artist="A", played_at=now)
+    ListenTrack.objects.create(
+        video_id="r2", title="R2", artist="A", played_at=now - timezone.timedelta(minutes=5)
+    )
+    # Sync rows with fabricated timestamps → must NOT form a co-listen session.
+    ListenTrack.objects.create(video_id="s1", title="S1", artist="B", played_at=now, from_sync=True)
+    ListenTrack.objects.create(video_id="s2", title="S2", artist="B", played_at=now, from_sync=True)
+
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_colisten_edges()
+
+    r1 = MusicNode.objects.get(node_type="track", key="r1")
+    r2 = MusicNode.objects.get(node_type="track", key="r2")
+    s1 = MusicNode.objects.get(node_type="track", key="s1")
+    s2 = MusicNode.objects.get(node_type="track", key="s2")
+    assert music_graph.edge_exists(r1, r2, "colisten")  # real plays linked
+    assert not music_graph.edge_exists(s1, s2, "colisten")  # sync plays excluded
+    # Sync rows are still nodes — just not co-listen-linked.
+    assert MusicNode.objects.filter(node_type="track", key="s1").exists()

@@ -176,6 +176,7 @@ def _do_sync(progress=None):
             ListenTrack(
                 **parsed,
                 played_at=sync_time - timezone.timedelta(seconds=i),
+                from_sync=True,
             )
         )
 
@@ -204,6 +205,7 @@ def _do_sync(progress=None):
                 **parsed,
                 played_at=timezone.now(),
                 is_liked=True,
+                from_sync=True,
             )
         )
 
@@ -218,7 +220,7 @@ def _do_sync(progress=None):
         if parsed["video_id"] in existing_ids:
             continue
         existing_ids.add(parsed["video_id"])  # dedup within this batch too
-        new_frequent.append(ListenTrack(**parsed, played_at=timezone.now()))
+        new_frequent.append(ListenTrack(**parsed, played_at=timezone.now(), from_sync=True))
 
     if new_frequent:
         ListenTrack.objects.bulk_create(new_frequent)
