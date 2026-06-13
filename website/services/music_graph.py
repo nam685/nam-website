@@ -2,6 +2,7 @@ import logging
 import random
 import re
 import time
+from collections import defaultdict
 
 from django.db.models import Count, Max, Q
 from django.utils import timezone
@@ -145,6 +146,7 @@ def rebuild_nodes():
 
 
 COLISTEN_WINDOW_MINUTES = 30
+COLISTEN_TOP_K = 6  # keep only each track's 6 strongest co-listen partners (caps density)
 STRUCTURAL_WEIGHT = 0.5
 
 
@@ -207,10 +209,24 @@ def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
             pair = tuple(sorted((cur["video_id"], nxt["video_id"])))
             counts[pair] = counts.get(pair, 0) + 1
 
+    # Cap each track to its K strongest (most-repeated) co-listen partners. Without this,
+    # a large listening history pairs nearly everything within the window and every patch
+    # collapses into a hairball. Keeping only the top-K per node bounds density while
+    # preserving the genuinely-recurring pairings.
+    neighbors: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for (a_key, b_key), count in counts.items():
-        a, b = tracks.get(a_key), tracks.get(b_key)
+        neighbors[a_key].append((count, b_key))
+        neighbors[b_key].append((count, a_key))
+    keep: set[tuple[str, str]] = set()
+    for key, partners in neighbors.items():
+        partners.sort(reverse=True)
+        for _count, other in partners[:COLISTEN_TOP_K]:
+            keep.add(tuple(sorted((key, other))))
+
+    for pair in keep:
+        a, b = tracks.get(pair[0]), tracks.get(pair[1])
         if a and b:
-            _upsert_edge(a, b, "colisten", float(count))
+            _upsert_edge(a, b, "colisten", float(counts[pair]))
 
 
 LASTFM_REQUEST_DELAY = 0.25  # ~4 req/s, polite
@@ -408,16 +424,13 @@ def search_nodes(query: str, limit: int = 10) -> list[dict]:
 def _load_personalization_from_ytm(ytm_headers):
     """Pull liked/library/subscriptions from YTM. Returns kwargs for apply_personalization.
 
-    Any failure logs a warning and returns empty sets so the build still completes.
+    Returns None (not empty sets) when the pull can't run — no auth, or an API/parse
+    failure. None means "don't touch the flags" so a failed-auth rebuild preserves the
+    flags from the last good sync instead of wiping them. A genuine empty library still
+    returns a dict (empty sets) and is applied normally.
     """
-    empty = {
-        "liked_video_ids": set(),
-        "library_album_keys": set(),
-        "subscribed_artist_keys": set(),
-        "library_video_ids": set(),
-    }
     if not ytm_headers:
-        return empty
+        return None
     try:
         from ytmusicapi import YTMusic
 
@@ -439,11 +452,11 @@ def _load_personalization_from_ytm(ytm_headers):
         }
     except Exception as e:
         logger.warning(
-            "YTM personalization unavailable (%s) — building graph without liked/subscribed flags. "
+            "YTM personalization unavailable (%s) — keeping existing liked/subscribed flags. "
             "Re-auth via the /listens AUTH button if this persists.",
             e.__class__.__name__,
         )
-        return empty
+        return None
 
 
 def build_graph(api_key: str, ytm_headers=None, progress=None):
@@ -454,7 +467,11 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     _report(progress, "Building nodes from play history…")
     rebuild_nodes()
     _report(progress, "Applying YTM personalization (liked / library / subscriptions)…")
-    apply_personalization(**_load_personalization_from_ytm(ytm_headers))
+    personalization = _load_personalization_from_ytm(ytm_headers)
+    if personalization is not None:
+        apply_personalization(**personalization)
+    else:
+        _report(progress, "  no YTM auth — keeping existing liked/subscribed flags")
     _report(progress, "Building structural + co-listen edges…")
     rebuild_structural_edges()
     rebuild_colisten_edges()
