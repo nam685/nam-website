@@ -88,3 +88,34 @@ def test_run_backtest_benchmark_curve_present():
     res = run_backtest(prices, BuyHoldStrategy(), {}, starting_cash=1000.0, fee_pct=0.0)
     assert len(res.benchmark_curve) == len(res.equity_curve) == 2
     assert "total_return_pct" in res.benchmark_metrics
+
+
+def test_run_backtest_sell_path_liquidates_position_at_t_plus_1():
+    """Exercise the sell branch: buy, hold, then sell — fill each at the next close."""
+    from website.services.backtest import run_backtest
+    from website.strategies.base import Signal
+
+    class BuyThenSell:
+        key = "bts"
+        label = "bts"
+        params: list = []
+
+        def signal(self, closes, position_shares, params):
+            if position_shares <= 0 and len(closes) == 1:
+                return Signal(action="buy")
+            if position_shares > 0 and len(closes) == 3:
+                return Signal(action="sell")
+            return Signal(action="hold")
+
+    prices = [
+        (date(2020, 1, 1), 100.0),  # decide buy
+        (date(2020, 1, 2), 100.0),  # fill buy @100 -> 10 shares
+        (date(2020, 1, 3), 100.0),  # decide sell
+        (date(2020, 1, 4), 120.0),  # fill sell @120 -> cash 1200
+    ]
+    res = run_backtest(prices, BuyThenSell(), {}, starting_cash=1000.0, fee_pct=0.0)
+    assert [t.side for t in res.trades] == ["buy", "sell"]
+    assert abs(res.trades[1].price - 120.0) < 1e-9
+    assert abs(res.trades[1].shares - 10.0) < 1e-9
+    # fully liquidated: final equity is all cash, no residual position
+    assert abs(res.equity_curve[-1] - 1200.0) < 1e-6
