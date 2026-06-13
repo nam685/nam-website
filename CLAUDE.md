@@ -52,10 +52,8 @@ GET  /api/health/
 POST /api/auth/login/           body: {"secret": "<ADMIN_SECRET>"} → {"token": "..."}
 GET  /api/auth/check/           Authorization: Bearer <token>
 GET  /api/thoughts/?page=N
-POST /api/thoughts/create/      auth required, body: {"content": "..."}
-GET  /api/drawings/
-POST /api/drawings/upload/      auth required, multipart (image + category)
-POST /api/drawings/<id>/delete/ auth required
+POST /api/thoughts/create/      auth required, multipart: optional content + optional image
+POST /api/thoughts/<id>/delete/ auth required
 POST /api/feedback/             body: {"message": "..."}, rate-limited per IP
 GET  /api/projects/
 GET  /api/todo/
@@ -106,6 +104,12 @@ GET  /api/slops/attachments/<id>/preview/ auth required, UTF-8 text content (64 
 POST /api/slops/turns/<id>/approve/ auth required, approve turn + queue
 POST /api/slops/turns/<id>/reject/  auth required, reject turn
 GET  /api/slops/stats/              aggregate stats (from turns)
+GET  /api/audiobooks/<slug>/                  auth required, returns manifest.json
+GET  /api/audiobooks/<slug>/playback-token/   auth required, returns short-lived signed token
+GET  /api/audiobooks/<slug>/audio/<id>/?t=...   signed-token required, streams MP3 with Range
+GET  /api/audiobooks/<slug>/exists/<id>/      auth required, 200/404
+POST /api/audiobooks/<slug>/upload-chunk/     auth required, multipart {chunk_id, mp3}
+POST /api/audiobooks/<slug>/publish/          auth required, body = manifest JSON
 ```
 
 ## Auth

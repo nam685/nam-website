@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
+import AudiobookPill from "@/components/AudiobookPill";
 import FeedbackButton from "@/components/FeedbackButton";
 import MiniPlayer from "@/components/MiniPlayer";
 import Navbar from "@/components/Navbar";
 import PageBackground from "@/components/PageBackground";
+import { AudiobookPlayerProvider } from "@/lib/audiobookPlayer";
 import { PlayerProvider } from "@/lib/player";
 
 const spaceGrotesk = Space_Grotesk({
@@ -40,19 +42,22 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var m={"/thinks":"#FF1744","/draws":"#a855f7","/codes":"#22c55e","/grinds":"#f59e0b","/listens":"#f97316","/reads":"#94a3b8","/plays":"#06b6d4","/watches":"#1e40af","/bets":"#db2777","/slops":"#39ff14"};var p=location.pathname;var c=m[p]||m["/"+p.split("/")[1]];if(c)document.documentElement.style.setProperty("--accent",c)})()`,
+            __html: `(function(){var m={"/thinks":"#FF1744","/codes":"#22c55e","/grinds":"#f59e0b","/listens":"#f97316","/reads":"#94a3b8","/plays":"#06b6d4","/watches":"#1e40af","/bets":"#db2777","/slops":"#39ff14"};var p=location.pathname;var c=m[p]||m["/"+p.split("/")[1]];if(c)document.documentElement.style.setProperty("--accent",c)})()`,
           }}
         />
       </head>
       <body>
-        <PlayerProvider>
-          <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
-          <PageBackground />
-          <Navbar />
-          {children}
-          <MiniPlayer />
-          <FeedbackButton />
-        </PlayerProvider>
+        <AudiobookPlayerProvider>
+          <PlayerProvider>
+            <div className="fixed inset-0 scanline z-[200] opacity-15 pointer-events-none" />
+            <PageBackground />
+            <Navbar />
+            {children}
+            <MiniPlayer />
+            <AudiobookPill />
+            <FeedbackButton />
+          </PlayerProvider>
+        </AudiobookPlayerProvider>
       </body>
     </html>
   );

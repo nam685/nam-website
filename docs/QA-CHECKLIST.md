@@ -29,20 +29,22 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 ## Thinks
 
-- [ ] Thought list loads and paginates
-- [ ] "Load more" fetches next page
-- [ ] Admin can create a new thought
-- [ ] 18-hour cooldown is enforced between thoughts
+- [ ] Feed loads as a single-column timeline and paginates
+- [ ] "Load more" fetches the next page
+- [ ] Admin compose card is visible when logged in
+- [ ] Admin can submit a text-only post (succeeds)
+- [ ] Admin can submit an image-only post (succeeds)
+- [ ] Admin can submit a post with both text and image (succeeds)
+- [ ] 18-hour cooldown is enforced — rapid reposts are blocked
 - [ ] Content length limit (2000 chars) is enforced
-
-## Draws
-
-- [ ] Gallery loads with pencil and camera categories
-- [ ] Category filter (tabs) works
-- [ ] Admin can upload an image (JPEG, PNG, GIF, WEBP)
-- [ ] 10MB file size limit is enforced
-- [ ] Admin can delete a drawing
-- [ ] Images display correctly (no broken URLs)
+- [ ] Image attach works via drag-and-drop, paste, and click-to-browse
+- [ ] Large image fills the column width; small image renders at natural size (not stretched)
+- [ ] Clicking an image opens the full-screen lightbox
+- [ ] Lightbox: ← / → navigate only between image posts (text-only posts skipped)
+- [ ] Lightbox: Esc closes the lightbox
+- [ ] Lightbox: admin delete button removes the post and closes the lightbox
+- [ ] Typed text in the compose box survives a redirect to `/sudo` to log in and is restored on return
+- [ ] Visiting `/draws` 301-redirects to `/thinks`
 
 ## Codes
 
@@ -61,20 +63,18 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 ## Listens
 
 ### Public (no auth)
-- [ ] `/listens` loads with hero panel (recommended track, top this month, stats, sparkline)
-- [ ] Hero shows "RECOMMENDED" label with rediscovery track (not "LATEST")
-- [ ] Top This Month carousel constrained to max 6 cards with square thumbnails
-- [ ] History feed shows 20 items initially, two-column grid desktop, single column mobile
-- [ ] "Load More" fetches next 20 items
-- [ ] Tab navigation works: History / Tracks / Artists / Albums
-- [ ] `/listens/tracks` shows weighted-shuffled track list (no play counts), album name shown
-- [ ] `/listens/artists` shows artist cards — collab artists credited independently
-- [ ] `/listens/artists` — no view count strings in artist names (e.g., "89M views")
-- [ ] `/listens/albums` shows only albums with 2+ tracks, square cover art
-- [ ] All text truncated with ellipsis (no overflow)
-- [ ] Content area has semi-transparent background (background visible through)
-- [ ] Feedback button at bottom-left (not bottom-right)
-- [ ] No play buttons or sync button visible when logged out
+- [ ] `/listens` loads showing an interactive force-directed graph of nodes and edges
+- [ ] A stat strip shows total plays + today, plus "walking near · <seed>"
+- [ ] "↻ NEW PATCH" loads a different neighborhood (seed changes)
+- [ ] Search box returns matches; selecting a result re-seeds the graph to that region
+- [ ] Search with an empty query shows no dropdown
+- [ ] Clicking a node opens the detail card (thumbnail, title, subtitle/type, play count)
+- [ ] "⊙ CENTER" on the card re-centers the graph on that node
+- [ ] Node size scales with play count
+- [ ] Liked nodes render a yellow ring; subscribed artists render a dashed accent ring
+- [ ] Similarity edges are solid accent; structural/co-listen edges are faint/dashed
+- [ ] Legend strip renders at the bottom
+- [ ] No "▶ PLAY", SYNC, or AUTH controls visible when logged out
 
 ### Admin
 - [ ] Sync button appears and triggers sync
@@ -82,15 +82,16 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Google Takeout import works via POST /api/listens/import/
 - [ ] Sync also pulls liked tracks (synced_liked count in response)
 - [ ] Deduplication works (no duplicate tracks after re-sync)
+- [ ] Sync rebuilds the graph (nodes/edges refresh after new tracks land)
+- [ ] `python manage.py build_music_graph` rebuilds the graph from the CLI
+- [ ] "▶ PLAY" appears on a selected node's card (track plays; artist/album plays its top track)
 - [ ] AUTH button toggles re-auth form with textarea for pasting browser headers
 - [ ] Re-auth saves headers and validates YTMusic init before writing
-- [ ] Daily automated sync runs via Celery Beat at 4am UTC
-- [ ] Play buttons appear on tracks, artist cards, album cards
+- [ ] Daily automated sync runs via Celery Beat (also rebuilds the graph)
 - [ ] Clicking play opens the mini player
 - [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek
 - [ ] Mini player persists when navigating to other pages (/watches, /thinks, etc.)
 - [ ] Mini player minimize/close work
-- [ ] Playing a list (top this month, artist, album) builds correct queue
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
@@ -248,3 +249,22 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Touch interactions work (nav, buttons, forms)
 - [ ] No horizontal scroll
 - [ ] Text is readable without zooming
+
+## Reads — Audiobook (admin)
+
+- [ ] Logged out: `/reads` page does NOT show LISTEN buttons.
+- [ ] Logged out: visiting `/reads/ddia/listen` directly redirects to `/sudo`.
+- [ ] Logged in: LISTEN button appears on the DDIA card.
+- [ ] Click LISTEN: chapter list renders; first chapter active.
+- [ ] Click chapter → audio jumps to its first chunk.
+- [ ] Play → audio plays; progress bar updates within chunk.
+- [ ] At chunk end → next chunk autoplays gaplessly.
+- [ ] Adjust speed → playback rate changes immediately.
+- [ ] Skip -15s → seeks back 15s, crossing chunk boundary if needed.
+- [ ] Skip +30s → seeks forward 30s, crossing chunk boundary if needed.
+- [ ] Minimize → pill appears bottom-right; tap pill plays/pauses.
+- [ ] Navigate to `/listens`, start music → audiobook pauses (mutual exclusion).
+- [ ] Navigate back to `/reads/ddia/listen` → state restored.
+- [ ] Reload page mid-playback → position restored (paused); play button resumes from saved offset.
+- [ ] curl `/media/audiobooks/ddia/00000.mp3` without token → 403.
+- [ ] curl `/api/audiobooks/ddia/audio/0/?t=<expired>` → 403.

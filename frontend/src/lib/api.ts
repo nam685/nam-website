@@ -10,14 +10,7 @@ export const API_INTERNAL =
 export interface Thought {
   id: number;
   content: string;
-  created_at: string;
-}
-
-export interface Drawing {
-  id: number;
-  image: string;
-  category: "pencil" | "camera";
-  caption: string;
+  image: string | null;
   created_at: string;
 }
 
@@ -62,38 +55,43 @@ export interface ListenStats {
   daily: { date: string; count: number }[];
 }
 
-export interface ListenTopTrack {
-  video_id: string;
+/* ── Listens graph ─────────────────────────────────────── */
+
+export type GraphNodeType = "artist" | "album" | "track";
+export type GraphEdgeType = "similar_artist" | "similar_track" | "colisten" | "structural";
+
+export interface GraphNode {
+  key: string;
+  node_type: GraphNodeType;
   title: string;
-  artist: string;
-  album: string;
+  subtitle: string;
   thumbnail_url: string;
-  play_count: number;
-}
-
-export interface ListenTopArtist {
-  name: string;
-  play_count: number;
-  track_count: number;
-  top_tracks: { video_id: string; title: string; thumbnail_url: string }[];
-}
-
-export interface ListenTopAlbum {
-  name: string;
-  artist: string;
-  thumbnail_url: string;
-  play_count: number;
-  track_count: number;
-}
-
-export interface ListenRecommended {
   video_id: string;
-  title: string;
-  artist: string;
-  album: string;
-  thumbnail_url: string;
   play_count: number;
-  last_played: string | null;
+  is_liked: boolean;
+  is_subscribed: boolean;
+  in_library: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  edge_type: GraphEdgeType;
+  weight: number;
+}
+
+export interface GraphPatch {
+  seed: string | null;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphSearchResult {
+  key: string;
+  node_type: GraphNodeType;
+  title: string;
+  subtitle: string;
+  thumbnail_url: string;
 }
 
 export interface WatchVideo {
@@ -352,4 +350,71 @@ export interface SlopsStats {
   total_tokens: number;
   total_tool_calls: number;
   success_rate: number;
+}
+
+/* ── Audiobook ─────────────────────────────────────── */
+
+export type AudiobookChunkKind =
+  | "prose"
+  | "paraphrased_code"
+  | "code_bridge"
+  | "figure_bridge"
+  | "table_bridge"
+  | "equation_bridge";
+
+export interface AudiobookChunk {
+  id: number;
+  text: string;
+  duration_s: number;
+  kind: AudiobookChunkKind;
+  page?: number;
+  original?: string;
+}
+
+export interface AudiobookChapter {
+  id: string;
+  label: string;
+  chunk_start: number;
+}
+
+export interface AudiobookManifest {
+  slug: string;
+  title: string;
+  author: string;
+  source_pdf_url?: string;
+  voice: string;
+  preprocessor?: { model: string; version: string };
+  chapters: AudiobookChapter[];
+  chunks: AudiobookChunk[];
+}
+
+export async function fetchAudiobookManifest(
+  slug: string,
+  token: string,
+): Promise<AudiobookManifest | null> {
+  const res = await fetch(`${API}/api/audiobooks/${slug}/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`manifest fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAudiobookPlaybackToken(
+  slug: string,
+  token: string,
+): Promise<{ token: string; expires_at: string }> {
+  const res = await fetch(`${API}/api/audiobooks/${slug}/playback-token/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`playback-token fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export function audiobookAudioUrl(
+  slug: string,
+  chunkId: number,
+  playbackToken: string,
+): string {
+  return `${API}/api/audiobooks/${slug}/audio/${chunkId}/?t=${encodeURIComponent(playbackToken)}`;
 }

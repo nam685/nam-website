@@ -1,13 +1,6 @@
 from django.contrib import admin
 
-from .models import Drawing, Feedback, Project, Thought, TodoItem, TodoSection
-
-
-@admin.register(Drawing)
-class DrawingAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "category", "is_published", "created_at"]
-    list_editable = ["is_published"]
-    list_filter = ["category", "is_published"]
+from .models import Feedback, Project, Thought, TodoItem, TodoSection
 
 
 @admin.register(Feedback)

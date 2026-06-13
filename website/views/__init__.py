@@ -1,3 +1,11 @@
+from .audiobook import (
+    audiobook_audio,
+    audiobook_chunk_exists,
+    audiobook_manifest,
+    audiobook_playback_token,
+    audiobook_publish,
+    audiobook_upload_chunk,
+)
 from .auth import check as auth_check
 from .auth import login as auth_login
 from .auth import nonce as auth_nonce
@@ -17,7 +25,6 @@ from .bets import (
     bets_sync,
     bets_sync_status,
 )
-from .drawing import drawing_delete, drawing_list, drawing_upload
 from .feedback import feedback_create
 from .github import contributions as github_contributions
 from .github import github_auth, github_callback
@@ -28,14 +35,11 @@ from .listen import (
     listen_import,
     listen_list,
     listen_reauth,
-    listen_recommended,
     listen_stats,
     listen_sync,
     listen_sync_status,
-    listen_top_albums,
-    listen_top_artists,
-    listen_top_tracks,
 )
+from .listen_graph import graph_patch, graph_search
 from .project import project_list
 from .slops import (
     slops_approve,
@@ -51,7 +55,7 @@ from .slops import (
     slops_trace,
     slops_trace_download,
 )
-from .thought import thought_create, thought_list
+from .thought import thought_create, thought_delete, thought_list
 from .todo import todo_list
 from .watch import (
     watch_auth,
@@ -73,6 +77,12 @@ from .watch import (
 )
 
 __all__ = [
+    "audiobook_audio",
+    "audiobook_chunk_exists",
+    "audiobook_manifest",
+    "audiobook_playback_token",
+    "audiobook_publish",
+    "audiobook_upload_chunk",
     "auth_check",
     "auth_login",
     "auth_nonce",
@@ -90,9 +100,6 @@ __all__ = [
     "bets_strategies",
     "bets_sync",
     "bets_sync_status",
-    "drawing_delete",
-    "drawing_list",
-    "drawing_upload",
     "feedback_create",
     "github_auth",
     "github_callback",
@@ -105,16 +112,14 @@ __all__ = [
     "lichess_explorer",
     "lichess_status",
     "lichess_token",
+    "graph_patch",
+    "graph_search",
     "listen_import",
     "listen_list",
     "listen_reauth",
-    "listen_recommended",
     "listen_stats",
     "listen_sync",
     "listen_sync_status",
-    "listen_top_albums",
-    "listen_top_artists",
-    "listen_top_tracks",
     "project_list",
     "slops_approve",
     "slops_attachment_preview",
@@ -129,6 +134,7 @@ __all__ = [
     "slops_trace",
     "slops_trace_download",
     "thought_create",
+    "thought_delete",
     "thought_list",
     "todo_list",
     "watch_auth",

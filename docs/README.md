@@ -4,15 +4,12 @@ A personal website and digital garden by Nam.
 
 ## What is this?
 
-**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, drawings, code projects, music listening history, reading lists, and more.
+**nam685.de** is a personal website that serves as a creative hub — part portfolio, part journal, part playground. It's where Nam shares thoughts, images, code projects, music listening history, reading lists, and more.
 
 ## Sections
 
 ### Thinks
-A public micro-journal. Short-form thoughts posted with an 18-hour cooldown between entries. No edits, no deletes — raw, unfiltered thinking.
-
-### Draws
-A gallery of hand-drawn sketches (pencil) and photographs (camera). Images are uploaded and organized by category with captions.
+A unified public feed of short-form thoughts and images, displayed as a single-column timeline. Each post can carry text, an image, or both. Images are centered in the feed — large images fill the column width, small images render at natural size. Clicking an image opens a full-screen lightbox with left/right navigation between image posts and Esc to close. New posts are composed inline with drag-and-drop / paste / click image attachment; text drafts survive a login redirect and are restored on return. An 18-hour cooldown is enforced between posts. The `/draws` URL redirects here.
 
 ### Codes
 A showcase of software projects with links to GitHub repos and live demos. Includes a live GitHub contribution graph pulled via the GitHub API.
@@ -21,10 +18,18 @@ A showcase of software projects with links to GitHub repos and live demos. Inclu
 A visual timeline of professional experience, education, and side projects. Each entry is tagged and linked to relevant organizations.
 
 ### Listens
-A public music listening dashboard that syncs with YouTube Music. Features a magazine-style layout with a hero panel showing a recommended rediscovery track, top tracks this month, listening stats, and a 30-day activity sparkline. Four sub-pages: chronological history feed, top tracks ranked by play count, top artists with collab-aware crediting, and top albums (2+ tracks). Admin users can sync new data, import Google Takeout history, and play tracks via an embedded mini music player that persists site-wide with queue management, shuffle, and repeat controls.
+A public, interactive **graph** of Nam's music, built from YouTube Music history. Tracks, artists, and albums are nodes; edges are listening affinity — collaborative-filtering similarity from Last.fm (`artist.getSimilar`/`track.getSimilar`, kept only between things already in the library) layered with Nam's own co-listen habits, plus thin structural links binding a track to its artist and album. The graph is tailored to Nam's library: liked songs, saved albums, and subscribed artists (pulled from YouTube Music) raise a node's recommendation score. Each visit reveals a **patch** — a seed node and its neighborhood — chosen with likelihood proportional to that score; the "↻ New Patch" button surfaces a fresh region. A search box jumps to any artist/track/album, and clicking a node re-centers the graph to walk outward. Node size reflects play count; liked nodes show a yellow ring and subscribed artists a dashed ring. Admin users can sync new data, import Google Takeout history, and play tracks (and artist/album top tracks) via the embedded mini music player that persists site-wide with queue management, shuffle, and repeat controls.
 
 ### Reads
 A curated reading list (coming soon).
+
+### Audiobook player (admin-only)
+
+For books with a generated audiobook, an admin-visible "LISTEN" button on the
+read card opens `/reads/<slug>/listen` — a chapter-aware HTML5 audio player that
+plays Gemini-narrated chunks of the book. The player persists position in
+localStorage and minimizes to a floating pill on navigation. Audio files are
+gated behind admin auth via short-lived signed URLs.
 
 ### Plays — Chess Explorer & Live Games
 The plays page features a chess opening explorer powered by live data from the Lichess Opening Explorer API. Users can navigate opening lines and see move statistics (game count, win/draw/loss percentages) from both the Masters database and all rated Lichess games. Toggle between databases and filter by rating bracket.
