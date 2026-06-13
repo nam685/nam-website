@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { edgeColor, edgeDashed, nodeRadius, toForceData } from "../graph";
+import { edgeColor, edgeDashed, nodeColor, nodeRadius, toForceData } from "../graph";
 import type { GraphPatch } from "../api";
 
 describe("nodeRadius", () => {
   it("grows with play count and is capped", () => {
     expect(nodeRadius(0)).toBeGreaterThan(0);
     expect(nodeRadius(100)).toBeGreaterThan(nodeRadius(1));
-    expect(nodeRadius(1_000_000)).toBeLessThanOrEqual(14);
+    expect(nodeRadius(1_000_000)).toBeLessThanOrEqual(10);
+  });
+});
+
+describe("nodeColor", () => {
+  it("maps each type to a distinct color, song = orange", () => {
+    expect(nodeColor("track")).toBe("#f97316");
+    expect(new Set([nodeColor("track"), nodeColor("artist"), nodeColor("album")]).size).toBe(3);
   });
 });
 
