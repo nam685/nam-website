@@ -10,7 +10,7 @@ import {
   type ListenTrack,
 } from "@/lib/api";
 import { getAdminToken, store, storeDel } from "@/lib/auth";
-import { edgeColor, edgeDashed, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
+import { edgeColor, edgeDashed, nodeColor, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
 import { usePlayer } from "@/lib/player";
 
 // Cast to permissive type at import boundary: react-force-graph-2d's callback
@@ -332,7 +332,8 @@ export default function ListensGraphPage() {
           borderTop: "1px solid rgba(255,255,255,0.06)",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
           overflow: "hidden",
-          background: "#0a0a0a",
+          // Ambient orange hue behind the dots, like the home-page constellation backdrop.
+          background: "radial-gradient(circle at 50% 42%, rgba(249,115,22,0.07) 0%, #0a0a0a 68%)",
         }}
       >
         <ForceGraph2D
@@ -340,7 +341,7 @@ export default function ListensGraphPage() {
           width={dims.width}
           height={dims.height}
           graphData={data}
-          backgroundColor="#0a0a0a"
+          backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={1}
           cooldownTicks={120}
           onEngineStop={() => {
@@ -376,7 +377,8 @@ export default function ListensGraphPage() {
             const isHovered = hovered === node.key;
             // Hover grows the dot ~1.6x, just like the home-page constellation.
             const r = nodeRadius(node.play_count) * (isHovered ? 1.6 : 1);
-            const fill = isSeed ? ACCENT : "#c2540a";
+            // Color-coded by type: song=orange, artist=amber, album=teal.
+            const fill = nodeColor(node.node_type);
             // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
             ctx.save();
             ctx.shadowColor = fill;
@@ -387,6 +389,14 @@ export default function ListensGraphPage() {
             ctx.fillStyle = fill;
             ctx.fill();
             ctx.restore();
+            // Seed is marked by a bright outer ring (color now encodes type, not seed).
+            if (isSeed) {
+              ctx.strokeStyle = "rgba(255,255,255,0.9)";
+              ctx.lineWidth = 1.5 / scale;
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
+              ctx.stroke();
+            }
             if (node.is_liked) {
               ctx.strokeStyle = "#ffd400";
               ctx.lineWidth = 2 / scale;

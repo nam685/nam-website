@@ -1,9 +1,21 @@
-import type { GraphEdgeType, GraphNode, GraphPatch } from "./api";
+import type { GraphEdgeType, GraphNode, GraphNodeType, GraphPatch } from "./api";
 
 /** Node circle radius in px, scaled by play count and capped.
  * Deliberately small so dense patches stay legible rather than clumping into blobs. */
 export function nodeRadius(playCount: number): number {
-  return Math.min(3 + Math.sqrt(Math.max(playCount, 0)) * 1.2, 14);
+  // Log scale so heavy-rotation tracks don't dwarf everything; small overall.
+  return Math.min(2 + Math.log2(Math.max(playCount, 0) + 1) * 1.4, 10);
+}
+
+/** Node fill by type — orange-anchored palette (song = the page's primary orange). */
+export const NODE_COLORS: Record<GraphNodeType, string> = {
+  track: "#f97316", // song — primary orange
+  artist: "#fbbf24", // amber/gold
+  album: "#2dd4bf", // teal (cool complement)
+};
+
+export function nodeColor(type: GraphNodeType): string {
+  return NODE_COLORS[type] ?? "#f97316";
 }
 
 /** Accent for similarity edges, faint white for structural/co-listen. */
