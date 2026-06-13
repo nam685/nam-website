@@ -48,3 +48,14 @@ def test_dca_buys_fixed_dollars_on_interval():
     assert buy2.action == "buy" and buy2.dollars == 500.0
     buy3 = s.signal([1, 2, 3, 4, 5, 6], 3.0, params)
     assert buy3.action == "buy" and buy3.dollars == 500.0
+
+
+def test_macd_signal_actions_are_valid():
+    from website.strategies.macd import MACDStrategy
+
+    s = MACDStrategy()
+    params = {"fast": 12, "slow": 26, "signal": 9}
+    rising = [float(x) for x in range(1, 80)]
+    out = s.signal(rising, 0, params)
+    assert out.action in ("buy", "hold")
+    assert s.signal([1, 2, 3], 0, params).action == "hold"
