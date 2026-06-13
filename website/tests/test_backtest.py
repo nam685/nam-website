@@ -69,7 +69,7 @@ def test_no_lookahead_signal_only_sees_prefix():
         label = "spy"
         params: list = []
 
-        def signal(self, closes, position_shares, params):
+        def signal(self, closes, position_shares, params):  # noqa: ARG002
             seen_lengths.append(len(closes))
             from website.strategies.base import Signal
 
