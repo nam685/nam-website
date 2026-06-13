@@ -2,6 +2,7 @@ import logging
 import random
 import re
 import time
+from collections import defaultdict
 
 from django.db.models import Count, Max, Q
 from django.utils import timezone
@@ -145,6 +146,7 @@ def rebuild_nodes():
 
 
 COLISTEN_WINDOW_MINUTES = 30
+COLISTEN_TOP_K = 6  # keep only each track's 6 strongest co-listen partners (caps density)
 STRUCTURAL_WEIGHT = 0.5
 
 
@@ -207,10 +209,24 @@ def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
             pair = tuple(sorted((cur["video_id"], nxt["video_id"])))
             counts[pair] = counts.get(pair, 0) + 1
 
+    # Cap each track to its K strongest (most-repeated) co-listen partners. Without this,
+    # a large listening history pairs nearly everything within the window and every patch
+    # collapses into a hairball. Keeping only the top-K per node bounds density while
+    # preserving the genuinely-recurring pairings.
+    neighbors: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for (a_key, b_key), count in counts.items():
-        a, b = tracks.get(a_key), tracks.get(b_key)
+        neighbors[a_key].append((count, b_key))
+        neighbors[b_key].append((count, a_key))
+    keep: set[tuple[str, str]] = set()
+    for key, partners in neighbors.items():
+        partners.sort(reverse=True)
+        for _count, other in partners[:COLISTEN_TOP_K]:
+            keep.add(tuple(sorted((key, other))))
+
+    for pair in keep:
+        a, b = tracks.get(pair[0]), tracks.get(pair[1])
         if a and b:
-            _upsert_edge(a, b, "colisten", float(count))
+            _upsert_edge(a, b, "colisten", float(counts[pair]))
 
 
 LASTFM_REQUEST_DELAY = 0.25  # ~4 req/s, polite

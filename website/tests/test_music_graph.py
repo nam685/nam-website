@@ -310,3 +310,18 @@ def test_build_graph_preserves_flags_when_personalization_unavailable(plays):  #
     ):
         music_graph.build_graph(api_key="", ytm_headers=None)
     assert MusicNode.objects.get(node_type="artist", key="radiohead").is_subscribed
+
+
+@pytest.mark.django_db
+def test_colisten_density_is_capped(db):  # noqa: ARG001
+    now = timezone.now()
+    # 12 real-timestamp tracks all within one 30-min window → uncapped = C(12,2)=66 edges.
+    for i in range(12):
+        ListenTrack.objects.create(
+            video_id=f"c{i:02d}", title=f"T{i}", artist="A", played_at=now - timezone.timedelta(minutes=i)
+        )
+    music_graph.rebuild_nodes()
+    music_graph.rebuild_colisten_edges()
+    n = MusicEdge.objects.filter(edge_type="colisten").count()
+    # Top-K cap keeps it well below the fully-connected count, but not zero.
+    assert 0 < n < 66
