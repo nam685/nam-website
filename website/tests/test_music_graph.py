@@ -1,8 +1,10 @@
 import pytest
 from django.db import transaction
 from django.db.utils import IntegrityError
+from django.utils import timezone
 
-from website.models import LastfmCache, MusicEdge, MusicNode
+from website.models import LastfmCache, ListenTrack, MusicEdge, MusicNode
+from website.services import music_graph
 
 
 @pytest.mark.django_db
@@ -33,3 +35,41 @@ def test_lastfm_cache_roundtrip():
     LastfmCache.objects.create(cache_key="artist.getsimilar::radiohead", payload=[{"name": "Muse"}])
     row = LastfmCache.objects.get(cache_key="artist.getsimilar::radiohead")
     assert row.payload[0]["name"] == "Muse"
+
+
+@pytest.fixture()
+def plays(db):  # noqa: ARG001
+    now = timezone.now()
+    rows = [
+        # video_id, title, artist, album, minutes_ago
+        ("v1", "Let Down", "Radiohead", "OK Computer", 5),
+        ("v1", "Let Down", "Radiohead", "OK Computer", 60),  # second play of v1
+        ("v2", "Karma Police", "Radiohead", "OK Computer", 10),
+        ("v3", "Resistance", "Muse", "The Resistance", 90),
+    ]
+    for vid, title, artist, album, mins in rows:
+        ListenTrack.objects.create(
+            video_id=vid,
+            title=title,
+            artist=artist,
+            album=album,
+            thumbnail_url=f"https://img/{vid}.jpg",
+            duration="3:00",
+            played_at=now - timezone.timedelta(minutes=mins),
+        )
+
+
+@pytest.mark.django_db
+def test_rebuild_nodes_aggregates_tracks_artists_albums(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    tracks = MusicNode.objects.filter(node_type="track")
+    assert tracks.count() == 3  # v1, v2, v3
+    v1 = MusicNode.objects.get(node_type="track", key="v1")
+    assert v1.play_count == 2
+    assert v1.title == "Let Down"
+    # Artists are de-duplicated by normalized name
+    assert MusicNode.objects.filter(node_type="artist").count() == 2
+    radiohead = MusicNode.objects.get(node_type="artist", key="radiohead")
+    assert radiohead.play_count == 3  # 2x v1 + 1x v2
+    # Albums keyed by artist::album
+    assert MusicNode.objects.get(node_type="album", key="radiohead::ok computer").play_count == 3
