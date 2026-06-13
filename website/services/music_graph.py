@@ -1,5 +1,6 @@
 import logging
 import random
+import re
 import time
 
 from django.db.models import Count, Max, Q
@@ -21,6 +22,22 @@ def _report(progress, msg: str):
 def normalize(name: str) -> str:
     """Canonical identity key for artist/album names."""
     return name.strip().lower()
+
+
+_TITLE_BRACKETS_RE = re.compile(r"\([^)]*\)|\[[^\]]*\]")
+_TITLE_FEAT_RE = re.compile(r"\bfeat\.?.*$|\bft\.?.*$", re.IGNORECASE)
+
+
+def canonical_title(title: str) -> str:
+    """Loosened title key for Last.fm track matching: drop '(... Remix)', '[VIP]', 'feat. …'.
+
+    Last.fm returns canonical titles, but a remix-heavy library has suffixes that never
+    match exactly. Stripping them lets similar-track edges actually land (and harmlessly
+    treats a remix as similar to its original).
+    """
+    t = _TITLE_BRACKETS_RE.sub("", title)
+    t = _TITLE_FEAT_RE.sub("", t)
+    return t.strip().lower()
 
 
 def split_artists(field: str) -> list[str]:
@@ -176,7 +193,10 @@ def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
     tracks = {n.key: n for n in MusicNode.objects.filter(node_type="track")}
     window = timezone.timedelta(minutes=window_minutes)
 
-    ordered = list(ListenTrack.objects.order_by("played_at").values("video_id", "played_at"))
+    # Only real-timestamp plays (Takeout imports) represent genuine listening sessions.
+    # Sync-created rows (history/liked/frequent) have fabricated timestamps that all cluster
+    # at ~now, which would otherwise link every pair into one giant fake session.
+    ordered = list(ListenTrack.objects.filter(from_sync=False).order_by("played_at").values("video_id", "played_at"))
     counts: dict[tuple[str, str], int] = {}
     for i, cur in enumerate(ordered):
         for nxt in ordered[i + 1 :]:
@@ -223,10 +243,11 @@ def rebuild_similarity_edges(api_key: str, progress=None):
     MusicEdge.objects.filter(edge_type__in=["similar_artist", "similar_track"]).delete()
 
     artists = {n.key: n for n in MusicNode.objects.filter(node_type="artist")}
-    # Track lookup by (artist_norm, title_norm) so Last.fm name-based results map back to nodes.
+    # Track lookup by (artist_norm, canonical_title) so Last.fm name-based results map back
+    # to nodes despite remix/feat suffixes.
     tracks_by_name: dict[tuple[str, str], MusicNode] = {}
     for n in MusicNode.objects.filter(node_type="track"):
-        tracks_by_name[(normalize(n.subtitle.split(",")[0]), normalize(n.title))] = n
+        tracks_by_name.setdefault((normalize(n.subtitle.split(",")[0]), canonical_title(n.title)), n)
 
     # --- similar artists ---
     artist_items = list(artists.items())
@@ -253,7 +274,7 @@ def rebuild_similarity_edges(api_key: str, progress=None):
             lambda node=node, a=artist_primary: lastfm.fetch_similar_tracks(a, node.title, api_key),
         )
         for sim in payload:
-            target = tracks_by_name.get((normalize(sim["artist"]), normalize(sim["title"])))
+            target = tracks_by_name.get((normalize(sim["artist"]), canonical_title(sim["title"])))
             if target:
                 _upsert_edge(node, target, "similar_track", float(sim["match"]))
         if i % 25 == 0 or i == len(top_tracks):
