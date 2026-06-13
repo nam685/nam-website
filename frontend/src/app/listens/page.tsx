@@ -1,133 +1,255 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { API, type ListenTrack } from "@/lib/api";
+import dynamic from "next/dynamic";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  API,
+  type GraphPatch,
+  type GraphSearchResult,
+  type ListenStats,
+  type ListenTrack,
+} from "@/lib/api";
 import { store } from "@/lib/auth";
-import { timeAgo } from "@/lib/date";
+import { edgeColor, edgeDashed, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
 import { usePlayer } from "@/lib/player";
-import { useBreakpoint } from "@/lib/useBreakpoint";
+
+// Cast to permissive type at import boundary: react-force-graph-2d's callback
+// prop types expect its own internal NodeObject/LinkObject generics which are
+// incompatible with our strongly-typed ForceNode/ForceLink shapes. Casting
+// here avoids wholesale `as any` on every individual prop callback.
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
+  ssr: false,
+}) as React.ComponentType<Record<string, unknown>>;
 
 const ACCENT = "#f97316";
-const PANEL_BG = "transparent";
-const PAGE_SIZE = 20;
 
-export default function ListensHistoryPage() {
+export default function ListensGraphPage() {
   const player = usePlayer();
-  const bp = useBreakpoint();
-  const [tracks, setTracks] = useState<ListenTrack[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  const [patch, setPatch] = useState<GraphPatch | null>(null);
+  const [stats, setStats] = useState<ListenStats | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GraphSearchResult[]>([]);
+  const [selected, setSelected] = useState<ForceNode | null>(null);
 
-  const fetchTracks = useCallback(async (offset: number) => {
-    const resp = await fetch(`${API}/api/listens/?limit=${PAGE_SIZE}&offset=${offset}`);
-    return resp.json();
+  const loadPatch = useCallback(async (seed?: string, type?: string) => {
+    const qs = seed ? `?seed=${encodeURIComponent(seed)}&type=${type ?? ""}` : "";
+    const data: GraphPatch = await fetch(`${API}/api/listens/graph/patch/${qs}`).then((r) => r.json());
+    setPatch(data);
+    setSelected(null);
   }, []);
 
   useEffect(() => {
-    fetchTracks(0).then((data) => {
-      setTracks(data.tracks || []);
-      setTotal(data.total || 0);
-      setLoading(false);
-    });
-  }, [fetchTracks]);
+    loadPatch();
+    fetch(`${API}/api/listens/stats/`)
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {});
+  }, [loadPatch]);
 
-  // Handle OAuth callback error
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const err = params.get("error");
-    if (err) {
-      setError(err);
-      window.history.replaceState({}, "", "/listens");
+    if (!query.trim()) {
+      setResults([]);
+      return;
     }
-  }, []);
+    const t = setTimeout(() => {
+      fetch(`${API}/api/listens/graph/search/?q=${encodeURIComponent(query)}`)
+        .then((r) => r.json())
+        .then((d) => setResults(d.results || []))
+        .catch(() => setResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query]);
 
-  const loadMore = async () => {
-    setLoadingMore(true);
-    const data = await fetchTracks(tracks.length);
-    setTracks((prev) => [...prev, ...(data.tracks || [])]);
-    setLoadingMore(false);
+  const playNode = (node: ForceNode) => {
+    if (!isAdmin || !node.video_id) return;
+    const track: ListenTrack = {
+      id: 0,
+      video_id: node.video_id,
+      title: node.title,
+      artist: node.subtitle || node.title,
+      album: "",
+      thumbnail_url: node.thumbnail_url,
+      duration: "",
+      played_at: "",
+    };
+    player.play(track, [track]);
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
-        Loading...
-      </div>
-    );
-  }
-
-  if (tracks.length === 0) {
-    return (
-      <div style={{ padding: 40, textAlign: "center", color: "#888", fontFamily: "monospace", fontSize: 12 }}>
-        No listening history yet.
-      </div>
-    );
-  }
+  const data = patch ? toForceData(patch) : { nodes: [], links: [] };
 
   return (
-    <div style={{ background: PANEL_BG, borderRadius: "0 0 8px 8px", padding: 20 }}>
-      {error && (
-        <div
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 4px" }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="⌕ jump to artist / track / album…"
+            style={{
+              width: "100%", background: "#161616", border: `1px solid rgba(249,115,22,0.3)`,
+              borderRadius: 6, padding: "8px 12px", color: "#ddd", fontSize: 13,
+              fontFamily: "monospace", outline: "none",
+            }}
+          />
+          {results.length > 0 && (
+            <div
+              style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10, marginTop: 4,
+                background: "#141414", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 6,
+                overflow: "hidden",
+              }}
+            >
+              {results.map((r) => (
+                <div
+                  key={`${r.node_type}:${r.key}`}
+                  onClick={() => {
+                    setQuery("");
+                    setResults([]);
+                    loadPatch(r.key, r.node_type);
+                  }}
+                  style={{ padding: "8px 12px", cursor: "pointer", color: "#ddd", fontSize: 12 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(249,115,22,0.1)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <span style={{ color: ACCENT, fontSize: 9, fontFamily: "monospace" }}>
+                    {r.node_type.toUpperCase()}
+                  </span>{" "}
+                  {r.title}
+                  {r.subtitle ? <span style={{ color: "#666" }}> · {r.subtitle}</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => loadPatch()}
           style={{
-            padding: "10px 14px", marginBottom: 16,
-            background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
-            borderRadius: 6, color: "#f87171", fontSize: 12,
+            background: "rgba(249,115,22,0.12)", border: `1px solid ${ACCENT}`, borderRadius: 6,
+            padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
+            letterSpacing: 1, cursor: "pointer",
           }}
         >
-          {error}
-        </div>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: bp === "mobile" ? "1fr" : "1fr 1fr", gap: "4px 24px" }}>
-        {tracks.map((track, i) => (
-          <div
-            key={`${track.id}-${i}`}
-            style={{
-              display: "flex", gap: 10, alignItems: "center", padding: "8px 4px",
-              borderBottom: "1px solid rgba(255,255,255,0.03)", borderRadius: 4,
-              cursor: isAdmin ? "pointer" : "default", transition: "background 0.15s",
-            }}
-            onClick={() => { if (isAdmin) player.play(track, tracks); }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.03)"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
-          >
-            {track.thumbnail_url ? (
-              <img src={track.thumbnail_url} alt="" style={{ width: 36, height: 36, borderRadius: 3, objectFit: "cover", flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: 36, height: 36, borderRadius: 3, background: "#1a1a1a", flexShrink: 0 }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: "#ddd", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {track.title}
-              </div>
-              <div style={{ color: "#666", fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist}</div>
-            </div>
-            <div style={{ color: "#444", fontSize: 10, fontFamily: "monospace", flexShrink: 0 }}>
-              {timeAgo(track.played_at)}
-            </div>
-          </div>
-        ))}
+          ↻ NEW PATCH
+        </button>
       </div>
 
-      {tracks.length < total && (
-        <div style={{ textAlign: "center", padding: "16px 0 4px" }}>
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            style={{
-              background: "none", border: "none",
-              color: loadingMore ? "#444" : ACCENT,
-              fontSize: 10, letterSpacing: 1, fontFamily: "monospace",
-              cursor: loadingMore ? "default" : "pointer", padding: "8px 16px",
-            }}
-          >
-            {loadingMore ? "LOADING..." : "LOAD MORE"}
-          </button>
+      {stats && (
+        <div style={{ display: "flex", gap: 22, padding: "4px 4px 10px", fontFamily: "monospace" }}>
+          <span style={{ color: ACCENT, fontSize: 13 }}>
+            {stats.total.toLocaleString()}
+            <span style={{ color: "#666", fontSize: 8, letterSpacing: 1, marginLeft: 5 }}>TOTAL PLAYS</span>
+          </span>
+          <span style={{ color: ACCENT, fontSize: 13 }}>
+            {stats.today}
+            <span style={{ color: "#666", fontSize: 8, letterSpacing: 1, marginLeft: 5 }}>TODAY</span>
+          </span>
+          {patch?.seed && (
+            <span style={{ color: "#888", fontSize: 11, marginLeft: "auto" }}>
+              walking near · <span style={{ color: "#ccc" }}>{patch.seed}</span>
+            </span>
+          )}
         </div>
       )}
+
+      <div style={{ height: 540, border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, overflow: "hidden", background: "#0a0a0a" }}>
+        <ForceGraph2D
+          graphData={data}
+          backgroundColor="#0a0a0a"
+          nodeRelSize={1}
+          linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
+          linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
+          linkWidth={(l: { edge_type: string; weight: number }) =>
+            l.edge_type.startsWith("similar") ? 1 + l.weight * 1.5 : 0.8
+          }
+          onNodeClick={(node: ForceNode) => {
+            setSelected(node);
+          }}
+          nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
+            const r = nodeRadius(node.play_count);
+            const isSeed = patch?.seed === node.key;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+            ctx.fillStyle = isSeed ? ACCENT : "#a8480a";
+            ctx.fill();
+            if (node.is_liked) {
+              ctx.strokeStyle = "#ffd400";
+              ctx.lineWidth = 2 / scale;
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, r + 2, 0, 2 * Math.PI);
+              ctx.stroke();
+            }
+            if (node.is_subscribed) {
+              ctx.strokeStyle = ACCENT;
+              ctx.setLineDash([2, 2]);
+              ctx.lineWidth = 1.5 / scale;
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
+            ctx.font = `${10 / scale}px monospace`;
+            ctx.fillStyle = "#ccc";
+            ctx.textAlign = "center";
+            ctx.fillText(label, node.x, node.y + r + 9 / scale);
+          }}
+        />
+      </div>
+
+      {selected && (
+        <div
+          style={{
+            position: "absolute", right: 14, bottom: 14, width: 200, background: "#141414",
+            border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 8, padding: 10,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {selected.thumbnail_url ? (
+              <img src={selected.thumbnail_url} alt="" style={{ width: 40, height: 40, borderRadius: 4, objectFit: "cover" }} />
+            ) : (
+              <div style={{ width: 40, height: 40, borderRadius: 4, background: "#c2540a" }} />
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: "#eee", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {selected.title}
+              </div>
+              <div style={{ color: "#888", fontSize: 9 }}>
+                {selected.subtitle || selected.node_type} · {selected.play_count}×
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
+            {isAdmin && selected.video_id && (
+              <button
+                onClick={() => playNode(selected)}
+                style={{
+                  flex: 1, background: "rgba(249,115,22,0.15)", border: `1px solid ${ACCENT}`,
+                  borderRadius: 5, padding: 5, color: ACCENT, fontSize: 9, fontFamily: "monospace",
+                  letterSpacing: 1, cursor: "pointer",
+                }}
+              >
+                ▶ PLAY
+              </button>
+            )}
+            <button
+              onClick={() => loadPatch(selected.key, selected.node_type)}
+              style={{
+                flex: 1, background: "#1d1d1d", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 5, padding: 5, color: "#aaa", fontSize: 9, fontFamily: "monospace",
+                letterSpacing: 1, cursor: "pointer",
+              }}
+            >
+              ⊙ CENTER
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: "10px 4px", color: "#666", fontSize: 9, fontFamily: "monospace" }}>
+        ⬤ size = play count · <span style={{ color: "#ffd400" }}>◯</span> liked ·{" "}
+        <span style={{ color: ACCENT }}>◌</span> subscribed · ▬ similar (Last.fm) · ┄ structural / co-listen
+      </div>
     </div>
   );
 }
