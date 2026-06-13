@@ -280,9 +280,7 @@ def test_colisten_ignores_sync_rows(db):  # noqa: ARG001
     now = timezone.now()
     # Real-timestamp plays close together → should link.
     ListenTrack.objects.create(video_id="r1", title="R1", artist="A", played_at=now)
-    ListenTrack.objects.create(
-        video_id="r2", title="R2", artist="A", played_at=now - timezone.timedelta(minutes=5)
-    )
+    ListenTrack.objects.create(video_id="r2", title="R2", artist="A", played_at=now - timezone.timedelta(minutes=5))
     # Sync rows with fabricated timestamps → must NOT form a co-listen session.
     ListenTrack.objects.create(video_id="s1", title="S1", artist="B", played_at=now, from_sync=True)
     ListenTrack.objects.create(video_id="s2", title="S2", artist="B", played_at=now, from_sync=True)
