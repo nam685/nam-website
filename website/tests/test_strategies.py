@@ -77,3 +77,21 @@ def test_bollinger_sells_above_upper_band():
     params = {"window": 5, "width": 2.0}
     closes = [100, 100, 100, 100, 100, 110]
     assert s.signal(closes, 4.0, params).action == "sell"
+
+
+def test_rsi_buys_when_oversold():
+    from website.strategies.rsi import RSIStrategy
+
+    s = RSIStrategy()
+    params = {"period": 5, "low": 30, "high": 70}
+    falling = [100, 95, 90, 85, 80, 75]
+    assert s.signal(falling, 0, params).action == "buy"
+
+
+def test_rsi_sells_when_overbought():
+    from website.strategies.rsi import RSIStrategy
+
+    s = RSIStrategy()
+    params = {"period": 5, "low": 30, "high": 70}
+    rising = [80, 85, 90, 95, 100, 105]
+    assert s.signal(rising, 3.0, params).action == "sell"
