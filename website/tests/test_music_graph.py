@@ -172,3 +172,43 @@ def test_similarity_edges_noop_without_api_key(plays):  # noqa: ARG001
     music_graph.rebuild_nodes()
     music_graph.rebuild_similarity_edges(api_key="")
     assert not MusicEdge.objects.filter(edge_type="similar_artist").exists()
+
+
+@pytest.mark.django_db
+def test_recommend_score_boosts_personalized_nodes(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    fav = MusicNode.objects.get(node_type="artist", key="radiohead")
+
+    # Score the SAME node with and without a personalization flag so the assertion
+    # isolates the boost itself (independent of play counts differing between nodes).
+    fav.is_subscribed = True
+    fav.save()
+    music_graph.compute_recommend_scores()
+    fav.refresh_from_db()
+    boosted = fav.recommend_score
+
+    fav.is_subscribed = False
+    fav.save()
+    music_graph.compute_recommend_scores()
+    fav.refresh_from_db()
+    unboosted = fav.recommend_score
+
+    assert unboosted > 0
+    assert boosted == pytest.approx(unboosted * music_graph.PERSONALIZATION_BOOST)
+
+
+@pytest.mark.django_db
+def test_apply_personalization_sets_flags(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    music_graph.apply_personalization(
+        liked_video_ids={"v1"},
+        library_album_keys={"radiohead::ok computer"},
+        subscribed_artist_keys={"radiohead"},
+        library_video_ids=set(),
+    )
+    assert MusicNode.objects.get(node_type="track", key="v1").is_liked
+    assert MusicNode.objects.get(node_type="album", key="radiohead::ok computer").in_library
+    assert MusicNode.objects.get(node_type="artist", key="radiohead").is_subscribed
+    # Nodes not named in the input keep flags off (reset + scoping work).
+    assert not MusicNode.objects.get(node_type="artist", key="muse").is_subscribed
+    assert not MusicNode.objects.get(node_type="track", key="v2").is_liked

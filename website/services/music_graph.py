@@ -240,3 +240,36 @@ def rebuild_similarity_edges(api_key: str):
             target = tracks_by_name.get((normalize(sim["artist"]), normalize(sim["title"])))
             if target:
                 _upsert_edge(node, target, "similar_track", float(sim["match"]))
+
+
+PERSONALIZATION_BOOST = 1.5  # multiplier per active flag (liked/subscribed/in_library)
+
+
+def compute_recommend_scores():
+    """Rediscovery weighting (play_count x days_since_last_play) boosted by personalization."""
+    now = timezone.now()
+    for node in MusicNode.objects.all().iterator():
+        days_since = (now - node.last_played).days if node.last_played else 30
+        base = max(node.play_count, 1) * max(days_since, 1)
+        boost = 1.0
+        for flag in (node.is_liked, node.is_subscribed, node.in_library):
+            if flag:
+                boost *= PERSONALIZATION_BOOST
+        node.recommend_score = base * boost
+        node.save(update_fields=["recommend_score"])
+
+
+def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_artist_keys, library_video_ids):
+    """Set personalization flags on existing nodes from YTM library data (idempotent)."""
+    MusicNode.objects.filter(node_type="track").update(is_liked=False, in_library=False)
+    MusicNode.objects.filter(node_type="album").update(in_library=False)
+    MusicNode.objects.filter(node_type="artist").update(is_subscribed=False)
+
+    if liked_video_ids:
+        MusicNode.objects.filter(node_type="track", key__in=liked_video_ids).update(is_liked=True)
+    if library_video_ids:
+        MusicNode.objects.filter(node_type="track", key__in=library_video_ids).update(in_library=True)
+    if library_album_keys:
+        MusicNode.objects.filter(node_type="album", key__in=library_album_keys).update(in_library=True)
+    if subscribed_artist_keys:
+        MusicNode.objects.filter(node_type="artist", key__in=subscribed_artist_keys).update(is_subscribed=True)
