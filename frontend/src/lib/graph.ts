@@ -1,8 +1,9 @@
 import type { GraphEdgeType, GraphNode, GraphPatch } from "./api";
 
-/** Node circle radius in px, scaled by play count and capped. */
+/** Node circle radius in px, scaled by play count and capped.
+ * Deliberately small so dense patches stay legible rather than clumping into blobs. */
 export function nodeRadius(playCount: number): number {
-  return Math.min(6 + Math.sqrt(Math.max(playCount, 0)) * 2, 26);
+  return Math.min(3 + Math.sqrt(Math.max(playCount, 0)) * 1.2, 14);
 }
 
 /** Accent for similarity edges, faint white for structural/co-listen. */

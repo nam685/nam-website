@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   API,
   type GraphPatch,
@@ -9,7 +9,7 @@ import {
   type ListenStats,
   type ListenTrack,
 } from "@/lib/api";
-import { store } from "@/lib/auth";
+import { getAdminToken, store, storeDel } from "@/lib/auth";
 import { edgeColor, edgeDashed, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
 import { usePlayer } from "@/lib/player";
 
@@ -36,6 +36,16 @@ export default function ListensGraphPage() {
   const [reauthHeaders, setReauthHeaders] = useState("");
   const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [reauthError, setReauthError] = useState("");
+  const fgRef = useRef<{
+    zoomToFit?: (ms: number, px: number) => void;
+    d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
+  } | null>(null);
+
+  // Admin actions require a valid token; bounce expired/absent sessions to the login.
+  const handleAuthExpired = () => {
+    storeDel("adminToken");
+    if (typeof window !== "undefined") window.location.href = "/sudo?from=/listens";
+  };
 
   const loadPatch = useCallback(async (seed?: string, type?: string) => {
     const qs = seed ? `?seed=${encodeURIComponent(seed)}&type=${type ?? ""}` : "";
@@ -66,6 +76,13 @@ export default function ListensGraphPage() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Spread nodes apart so a dense patch doesn't collapse into one blob.
+  useEffect(() => {
+    if (!patch) return;
+    fgRef.current?.d3Force?.("charge")?.strength?.(-180);
+    fgRef.current?.d3Force?.("link")?.distance?.(50);
+  }, [patch]);
+
   const playNode = (node: ForceNode) => {
     if (!isAdmin || !node.video_id) return;
     const track: ListenTrack = {
@@ -82,7 +99,7 @@ export default function ListensGraphPage() {
   };
 
   const doSync = async () => {
-    const token = store("adminToken");
+    const token = getAdminToken(); // redirects to /sudo if no token
     if (!token) return;
     setSyncStatus("syncing");
     try {
@@ -90,6 +107,10 @@ export default function ListensGraphPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401) {
+        handleAuthExpired();
+        return;
+      }
       if (!res.ok) {
         setSyncStatus("error");
       } else {
@@ -105,7 +126,7 @@ export default function ListensGraphPage() {
   };
 
   const saveReauth = async () => {
-    const token = store("adminToken");
+    const token = getAdminToken(); // redirects to /sudo if no token
     if (!token) return;
     setReauthStatus("saving");
     setReauthError("");
@@ -115,6 +136,10 @@ export default function ListensGraphPage() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ headers: reauthHeaders }),
       });
+      if (res.status === 401) {
+        handleAuthExpired();
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         setReauthError(data.error || "Failed");
@@ -203,7 +228,10 @@ export default function ListensGraphPage() {
               {syncStatus === "syncing" ? "SYNCING..." : syncStatus === "done" ? "SYNCED!" : syncStatus === "error" ? "FAILED" : "SYNC"}
             </button>
             <button
-              onClick={() => setShowReauth(!showReauth)}
+              onClick={() => {
+                if (!getAdminToken()) return;
+                setShowReauth(!showReauth);
+              }}
               style={{
                 background: showReauth ? "rgba(249,115,22,0.15)" : "none",
                 border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
@@ -267,19 +295,27 @@ export default function ListensGraphPage() {
             {stats.today}
             <span style={{ color: "#666", fontSize: 8, letterSpacing: 1, marginLeft: 5 }}>TODAY</span>
           </span>
-          {patch?.seed && (
-            <span style={{ color: "#888", fontSize: 11, marginLeft: "auto" }}>
-              walking near · <span style={{ color: "#ccc" }}>{patch.seed}</span>
-            </span>
-          )}
+          {(() => {
+            const seedNode = patch?.nodes.find((n) => n.key === patch.seed);
+            if (!seedNode) return null;
+            return (
+              <span style={{ color: "#888", fontSize: 11, marginLeft: "auto" }}>
+                centered on · <span style={{ color: "#ccc" }}>{seedNode.title}</span>
+                {seedNode.subtitle ? <span style={{ color: "#666" }}> — {seedNode.subtitle}</span> : null}
+              </span>
+            );
+          })()}
         </div>
       )}
 
       <div style={{ height: 540, border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, overflow: "hidden", background: "#0a0a0a" }}>
         <ForceGraph2D
+          ref={fgRef as never}
           graphData={data}
           backgroundColor="#0a0a0a"
           nodeRelSize={1}
+          cooldownTicks={120}
+          onEngineStop={() => fgRef.current?.zoomToFit?.(400, 60)}
           linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
           linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
           linkWidth={(l: { edge_type: string; weight: number }) =>
@@ -311,11 +347,15 @@ export default function ListensGraphPage() {
               ctx.stroke();
               ctx.setLineDash([]);
             }
-            const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
-            ctx.font = `${10 / scale}px monospace`;
-            ctx.fillStyle = "#ccc";
-            ctx.textAlign = "center";
-            ctx.fillText(label, node.x, node.y + r + 9 / scale);
+            // Only label the seed and (when zoomed in) larger nodes, to avoid a
+            // wall of overlapping text at the default overview zoom.
+            if (isSeed || scale > 1.6) {
+              const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
+              ctx.font = `${10 / scale}px monospace`;
+              ctx.fillStyle = "#ccc";
+              ctx.textAlign = "center";
+              ctx.fillText(label, node.x, node.y + r + 9 / scale);
+            }
           }}
         />
       </div>

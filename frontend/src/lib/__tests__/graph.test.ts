@@ -6,7 +6,7 @@ describe("nodeRadius", () => {
   it("grows with play count and is capped", () => {
     expect(nodeRadius(0)).toBeGreaterThan(0);
     expect(nodeRadius(100)).toBeGreaterThan(nodeRadius(1));
-    expect(nodeRadius(1_000_000)).toBeLessThanOrEqual(26);
+    expect(nodeRadius(1_000_000)).toBeLessThanOrEqual(14);
   });
 });
 
