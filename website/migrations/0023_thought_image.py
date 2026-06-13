@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0022_add_is_liked_to_listentrack'),
+        ("website", "0022_add_is_liked_to_listentrack"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='thought',
-            name='image',
-            field=models.ImageField(blank=True, null=True, upload_to='thoughts/%Y/%m/'),
+            model_name="thought",
+            name="image",
+            field=models.ImageField(blank=True, null=True, upload_to="thoughts/%Y/%m/"),
         ),
         migrations.AlterField(
-            model_name='thought',
-            name='content',
+            model_name="thought",
+            name="content",
             field=models.TextField(blank=True),
         ),
     ]
