@@ -75,3 +75,72 @@ def compute_metrics(dates: list[date], curve: list[float], trades: list[Trade], 
         "num_trades": len(trades),
         "win_rate_pct": win_rate_pct,
     }
+
+
+@dataclass
+class BacktestResult:
+    dates: list[str]
+    equity_curve: list[float]
+    benchmark_curve: list[float]
+    trades: list[Trade]
+    metrics: dict
+    benchmark_metrics: dict
+
+
+def _simulate(prices, strategy, params, starting_cash, fee_pct):
+    """Core replay: returns (equity_curve, trades). Signal at day i fills at day i+1 close."""
+    cash = starting_cash
+    shares = 0.0
+    trades: list[Trade] = []
+    curve: list[float] = []
+    closes: list[float] = []
+    pending = None  # Signal decided on the previous day, filled today
+
+    for d, close in prices:
+        closes.append(close)
+
+        # 1. Fill yesterday's decision at today's close (T+1 rule).
+        if pending is not None and pending.action != "hold":
+            if pending.action == "buy":
+                if pending.dollars is None:
+                    spend = cash if shares <= 0 else 0.0  # all-in only if flat
+                else:
+                    spend = min(pending.dollars, cash)  # DCA partial buy
+                if spend > 0:
+                    fee = spend * fee_pct
+                    bought = (spend - fee) / close
+                    shares += bought
+                    cash -= spend
+                    trades.append(Trade(str(d), "buy", bought, close, cash, pending.reason))
+            elif pending.action == "sell" and shares > 0:
+                proceeds = shares * close
+                fee = proceeds * fee_pct
+                cash += proceeds - fee
+                trades.append(Trade(str(d), "sell", shares, close, cash, pending.reason))
+                shares = 0.0
+
+        # 2. Record equity at today's close, after any fill.
+        curve.append(cash + shares * close)
+
+        # 3. Decide today's signal from the prefix (becomes tomorrow's pending).
+        pending = strategy.signal(closes, shares, params)
+
+    return curve, trades
+
+
+def run_backtest(prices, strategy, params, starting_cash=10000.0, fee_pct=0.001) -> BacktestResult:
+    """Replay `prices` (sorted ascending [(date, close)]) through `strategy`. Benchmark = Buy & Hold."""
+    from website.strategies.buy_hold import BuyHoldStrategy
+
+    dates = [d for d, _ in prices]
+    curve, trades = _simulate(prices, strategy, params, starting_cash, fee_pct)
+    bench_curve, _ = _simulate(prices, BuyHoldStrategy(), {}, starting_cash, fee_pct)
+
+    return BacktestResult(
+        dates=[str(d) for d in dates],
+        equity_curve=curve,
+        benchmark_curve=bench_curve,
+        trades=trades,
+        metrics=compute_metrics(dates, curve, trades, starting_cash),
+        benchmark_metrics=compute_metrics(dates, bench_curve, [], starting_cash),
+    )
