@@ -222,6 +222,72 @@ export interface BetsSearchResult {
   match_score: number;
 }
 
+/* ── Bets: backtester + paper trading ──────────────────────── */
+
+export interface StrategyParam {
+  name: string;
+  label: string;
+  type: "int" | "float";
+  default: number;
+  min: number;
+  max: number;
+}
+
+export interface StrategyInfo {
+  key: string;
+  label: string;
+  params: StrategyParam[];
+}
+
+export interface BacktestMetrics {
+  total_return_pct: number;
+  cagr_pct: number;
+  max_drawdown_pct: number;
+  sharpe: number;
+  num_trades: number;
+  win_rate_pct: number | null;
+}
+
+export interface BacktestTrade {
+  date: string;
+  side: "buy" | "sell";
+  shares: number;
+  price: number;
+  cash_after: number;
+  reason: string;
+}
+
+export interface BacktestResult {
+  ticker: { id: number; symbol: string; name: string; currency: string };
+  strategy: string;
+  params: Record<string, number>;
+  dates: string[];
+  equity_curve: number[];
+  benchmark_curve: number[];
+  trades: BacktestTrade[];
+  metrics: BacktestMetrics;
+  benchmark_metrics: BacktestMetrics;
+}
+
+export interface PaperAccount {
+  id: number;
+  ticker: { id: number; symbol: string; name: string; currency: string };
+  strategy: string;
+  params: Record<string, number>;
+  starting_cash: number;
+  started_on: string;
+  is_active: boolean;
+  current_value: number | null;
+  in_position: boolean;
+  metrics: BacktestMetrics | null;
+}
+
+export interface PaperDetail extends PaperAccount {
+  dates: string[];
+  equity_curve: number[];
+  trades: BacktestTrade[];
+}
+
 /* ── Slops (Agent Showcase) ────────────────────────── */
 
 export type TurnStatus =
