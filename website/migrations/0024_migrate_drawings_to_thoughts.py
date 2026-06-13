@@ -1,7 +1,7 @@
 from django.db import migrations
 
 
-def migrate_drawings(apps, schema_editor):
+def migrate_drawings(apps, _schema_editor):
     Drawing = apps.get_model("website", "Drawing")
     Thought = apps.get_model("website", "Thought")
     for d in Drawing.objects.all().iterator():
@@ -10,7 +10,7 @@ def migrate_drawings(apps, schema_editor):
         Thought.objects.filter(pk=t.pk).update(image=d.image.name, created_at=d.created_at)
 
 
-def noop(apps, schema_editor):
+def noop(apps, _schema_editor):
     # Irreversible by design — migrated rows are indistinguishable from native thoughts.
     pass
 
