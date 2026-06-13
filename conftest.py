@@ -6,10 +6,21 @@ from website.auth import create_token
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    """Clear Django cache between tests to avoid stale cached values."""
-    cache.clear()
+    """Clear Django cache between tests to avoid stale cached values.
+
+    Silently skips when the cache backend is unavailable (e.g. Redis not running
+    in a pure-unit-test environment) so that I/O-free tests can run without
+    infrastructure.
+    """
+    try:
+        cache.clear()
+    except Exception:
+        pass
     yield
-    cache.clear()
+    try:
+        cache.clear()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)
