@@ -96,6 +96,45 @@ export interface ListenRecommended {
   last_played: string | null;
 }
 
+/* ── Listens graph ─────────────────────────────────────── */
+
+export type GraphNodeType = "artist" | "album" | "track";
+export type GraphEdgeType = "similar_artist" | "similar_track" | "colisten" | "structural";
+
+export interface GraphNode {
+  key: string;
+  node_type: GraphNodeType;
+  title: string;
+  subtitle: string;
+  thumbnail_url: string;
+  video_id: string;
+  play_count: number;
+  is_liked: boolean;
+  is_subscribed: boolean;
+  in_library: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  edge_type: GraphEdgeType;
+  weight: number;
+}
+
+export interface GraphPatch {
+  seed: string | null;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphSearchResult {
+  key: string;
+  node_type: GraphNodeType;
+  title: string;
+  subtitle: string;
+  thumbnail_url: string;
+}
+
 export interface WatchVideo {
   id: number;
   youtube_video_id: string;
