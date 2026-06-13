@@ -35,3 +35,16 @@ def test_coerce_params_clamps():
     p = coerce_params(s, {"short": 0, "long": 9999})
     assert p["short"] == 2  # clamped to min
     assert p["long"] == 400  # clamped to max
+
+
+def test_dca_buys_fixed_dollars_on_interval():
+    from website.strategies.dca import DCAStrategy
+
+    s = DCAStrategy()
+    params = {"amount": 500, "interval": 5}
+    buy = s.signal([1, 2, 3, 4, 5], 0, params)
+    assert buy.action == "hold"
+    buy2 = s.signal([1], 0, params)
+    assert buy2.action == "buy" and buy2.dollars == 500.0
+    buy3 = s.signal([1, 2, 3, 4, 5, 6], 3.0, params)
+    assert buy3.action == "buy" and buy3.dollars == 500.0
