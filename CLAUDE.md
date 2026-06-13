@@ -104,6 +104,12 @@ GET  /api/slops/attachments/<id>/preview/ auth required, UTF-8 text content (64 
 POST /api/slops/turns/<id>/approve/ auth required, approve turn + queue
 POST /api/slops/turns/<id>/reject/  auth required, reject turn
 GET  /api/slops/stats/              aggregate stats (from turns)
+GET  /api/audiobooks/<slug>/                  auth required, returns manifest.json
+GET  /api/audiobooks/<slug>/playback-token/   auth required, returns short-lived signed token
+GET  /api/audiobooks/<slug>/audio/<id>/?t=...   signed-token required, streams MP3 with Range
+GET  /api/audiobooks/<slug>/exists/<id>/      auth required, 200/404
+POST /api/audiobooks/<slug>/upload-chunk/     auth required, multipart {chunk_id, mp3}
+POST /api/audiobooks/<slug>/publish/          auth required, body = manifest JSON
 ```
 
 ## Auth

@@ -18,6 +18,11 @@ nam685.de {
         reverse_proxy localhost:8000
     }
 
+    # Audiobook audio files — served via Django with signed-token auth, NOT directly
+    handle /media/audiobooks/* {
+        respond "Forbidden" 403
+    }
+
     # Uploaded media files
     handle /media/* {
         root * /home/nam/nam-website-deploy

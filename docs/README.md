@@ -23,6 +23,14 @@ A public music listening dashboard that syncs with YouTube Music. Features a mag
 ### Reads
 A curated reading list (coming soon).
 
+### Audiobook player (admin-only)
+
+For books with a generated audiobook, an admin-visible "LISTEN" button on the
+read card opens `/reads/<slug>/listen` — a chapter-aware HTML5 audio player that
+plays Gemini-narrated chunks of the book. The player persists position in
+localStorage and minimizes to a floating pill on navigation. Audio files are
+gated behind admin auth via short-lived signed URLs.
+
 ### Plays — Chess Explorer & Live Games
 The plays page features a chess opening explorer powered by live data from the Lichess Opening Explorer API. Users can navigate opening lines and see move statistics (game count, win/draw/loss percentages) from both the Masters database and all rated Lichess games. Toggle between databases and filter by rating bracket.
 
