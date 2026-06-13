@@ -30,7 +30,6 @@ export default function ListensGraphPage() {
   const [stats, setStats] = useState<ListenStats | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphSearchResult[]>([]);
-  const [selected, setSelected] = useState<ForceNode | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
   const [showReauth, setShowReauth] = useState(false);
@@ -68,7 +67,6 @@ export default function ListensGraphPage() {
     const qs = seed ? `?seed=${encodeURIComponent(seed)}&type=${type ?? ""}` : "";
     const data: GraphPatch = await fetch(`${API}/api/listens/graph/patch/${qs}`).then((r) => r.json());
     setPatch(data);
-    setSelected(null);
   }, []);
 
   useEffect(() => {
@@ -320,16 +318,6 @@ export default function ListensGraphPage() {
             {stats.today}
             <span style={{ color: "#666", fontSize: 8, letterSpacing: 1, marginLeft: 5 }}>TODAY</span>
           </span>
-          {(() => {
-            const seedNode = patch?.nodes.find((n) => n.key === patch.seed);
-            if (!seedNode) return null;
-            return (
-              <span style={{ color: "#888", fontSize: 11, marginLeft: "auto" }}>
-                centered on · <span style={{ color: "#ccc" }}>{seedNode.title}</span>
-                {seedNode.subtitle ? <span style={{ color: "#666" }}> — {seedNode.subtitle}</span> : null}
-              </span>
-            );
-          })()}
         </div>
       )}
 
@@ -367,7 +355,9 @@ export default function ListensGraphPage() {
             l.edge_type.startsWith("similar") ? 1 + l.weight * 1.5 : 0.8
           }
           onNodeClick={(node: ForceNode) => {
-            setSelected(node);
+            // Click = walk the graph: play (admin) and re-center on this node.
+            if (isAdmin) playNode(node);
+            loadPatch(node.key, node.node_type);
           }}
           onNodeHover={(node: ForceNode | null) => setHovered(node ? node.key : null)}
           nodePointerAreaPaint={(
@@ -425,55 +415,6 @@ export default function ListensGraphPage() {
           }}
         />
       </div>
-
-      {selected && (
-        <div
-          style={{
-            position: "absolute", right: 14, bottom: 14, width: 200, background: "#141414",
-            border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 8, padding: 10,
-          }}
-        >
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {selected.thumbnail_url ? (
-              <img src={selected.thumbnail_url} alt="" style={{ width: 40, height: 40, borderRadius: 4, objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: 40, height: 40, borderRadius: 4, background: "#c2540a" }} />
-            )}
-            <div style={{ minWidth: 0 }}>
-              <div style={{ color: "#eee", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {selected.title}
-              </div>
-              <div style={{ color: "#888", fontSize: 9 }}>
-                {selected.subtitle || selected.node_type} · {selected.play_count}×
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
-            {isAdmin && selected.video_id && (
-              <button
-                onClick={() => playNode(selected)}
-                style={{
-                  flex: 1, background: "rgba(249,115,22,0.15)", border: `1px solid ${ACCENT}`,
-                  borderRadius: 5, padding: 5, color: ACCENT, fontSize: 9, fontFamily: "monospace",
-                  letterSpacing: 1, cursor: "pointer",
-                }}
-              >
-                ▶ PLAY
-              </button>
-            )}
-            <button
-              onClick={() => loadPatch(selected.key, selected.node_type)}
-              style={{
-                flex: 1, background: "#1d1d1d", border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 5, padding: 5, color: "#aaa", fontSize: 9, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
-              }}
-            >
-              ⊙ CENTER
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
