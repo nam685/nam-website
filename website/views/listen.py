@@ -109,16 +109,23 @@ def _parse_track_item(item):
     }
 
 
-def _do_sync():
+def _do_sync(progress=None):
     """Core sync logic shared by the view and Celery task.
 
+    `progress` is an optional callable(str) for live status output (e.g. a CLI writer).
     Returns {"synced_history": int, "synced_liked": int} or raises on auth failure.
     """
+
+    def report(msg):
+        if progress:
+            progress(msg)
+
     yt, err = _init_ytmusic()
     if err:
         raise RuntimeError(err)
 
     # --- Sync play history ---
+    report("Fetching YouTube Music play history…")
     history = yt.get_history()
 
     cutoff = timezone.now() - timezone.timedelta(hours=24)
@@ -142,6 +149,7 @@ def _do_sync():
         ListenTrack.objects.bulk_create(new_tracks)
 
     # --- Sync liked tracks ---
+    report("Fetching liked songs…")
     try:
         liked = yt.get_liked_songs(limit=200)
         liked_items = liked.get("tracks", [])
@@ -172,6 +180,8 @@ def _do_sync():
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
 
+    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked; rebuilding graph…")
+
     # Rebuild the listening graph from the freshly-synced data. Non-fatal: a graph
     # failure must not break the sync. Runs for both the view and the Celery task.
     try:
@@ -179,7 +189,7 @@ def _do_sync():
 
         from ..services import music_graph
 
-        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers())
+        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers(), progress=progress)
     except Exception:
         logger.exception("Graph rebuild after sync failed")
 
@@ -413,7 +423,12 @@ def listen_reauth(request):
     except Exception as e:
         return JsonResponse({"error": f"Headers invalid — YTMusic init failed: {e}"}, status=400)
 
-    # Write to browser.json
+    # Do NOT persist the computed `authorization` (SAPISIDHASH): it embeds a timestamp and
+    # expires within hours, so a stored value goes stale and later syncs fail. Strip it and
+    # store only the cookie/headers — `_load_browser_headers` recomputes a fresh hash on each
+    # use (matching what `ytmusicapi browser` writes).
+    parsed.pop("authorization", None)
+
     auth_path = _get_auth_path()
     with open(auth_path, "w") as f:
         json.dump(parsed, f, indent=2)

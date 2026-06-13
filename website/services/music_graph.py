@@ -11,6 +11,13 @@ from website.services import lastfm
 logger = logging.getLogger(__name__)
 
 
+def _report(progress, msg: str):
+    """Emit a progress line to an optional callback (CLI) and always to the log."""
+    if progress:
+        progress(msg)
+    logger.info(msg)
+
+
 def normalize(name: str) -> str:
     """Canonical identity key for artist/album names."""
     return name.strip().lower()
@@ -203,14 +210,14 @@ def _cached_lastfm(cache_key: str, fetch):
     return payload
 
 
-def rebuild_similarity_edges(api_key: str):
+def rebuild_similarity_edges(api_key: str, progress=None):
     """Create similar_artist / similar_track edges between nodes already in the universe.
 
     Last.fm responses are cached in LastfmCache. With no api_key, this is a no-op so the
     graph still builds from co-listen + structural edges (useful in dev).
     """
     if not api_key:
-        logger.info("LASTFM_API_KEY unset; skipping similarity enrichment")
+        _report(progress, "LASTFM_API_KEY unset; skipping Last.fm similarity")
         return
 
     MusicEdge.objects.filter(edge_type__in=["similar_artist", "similar_track"]).delete()
@@ -222,7 +229,9 @@ def rebuild_similarity_edges(api_key: str):
         tracks_by_name[(normalize(n.subtitle.split(",")[0]), normalize(n.title))] = n
 
     # --- similar artists ---
-    for key, node in artists.items():
+    artist_items = list(artists.items())
+    _report(progress, f"Last.fm: fetching similar artists for {len(artist_items)} artists (cached calls are instant)…")
+    for i, (key, node) in enumerate(artist_items, 1):
         payload = _cached_lastfm(
             f"artist.getsimilar::{key}",
             lambda node=node: lastfm.fetch_similar_artists(node.title, api_key),
@@ -231,10 +240,13 @@ def rebuild_similarity_edges(api_key: str):
             target = artists.get(normalize(sim["name"]))
             if target:
                 _upsert_edge(node, target, "similar_artist", float(sim["match"]))
+        if i % 25 == 0 or i == len(artist_items):
+            _report(progress, f"  similar artists: {i}/{len(artist_items)}")
 
     # --- similar tracks (only for the most-played tracks, to bound API calls) ---
-    top_tracks = MusicNode.objects.filter(node_type="track").order_by("-play_count")[:SIMILAR_TRACK_NODE_LIMIT]
-    for node in top_tracks:
+    top_tracks = list(MusicNode.objects.filter(node_type="track").order_by("-play_count")[:SIMILAR_TRACK_NODE_LIMIT])
+    _report(progress, f"Last.fm: fetching similar tracks for {len(top_tracks)} tracks…")
+    for i, node in enumerate(top_tracks, 1):
         artist_primary = node.subtitle.split(",")[0].strip()
         payload = _cached_lastfm(
             f"track.getsimilar::{normalize(artist_primary)}::{normalize(node.title)}",
@@ -244,6 +256,8 @@ def rebuild_similarity_edges(api_key: str):
             target = tracks_by_name.get((normalize(sim["artist"]), normalize(sim["title"])))
             if target:
                 _upsert_edge(node, target, "similar_track", float(sim["match"]))
+        if i % 25 == 0 or i == len(top_tracks):
+            _report(progress, f"  similar tracks: {i}/{len(top_tracks)}")
 
 
 PERSONALIZATION_BOOST = 1.5  # multiplier per active flag (liked/subscribed/in_library)
@@ -402,17 +416,28 @@ def _load_personalization_from_ytm(ytm_headers):
             "subscribed_artist_keys": subs,
             "library_video_ids": lib_songs,
         }
-    except Exception:
-        logger.warning("YTM personalization pull failed; building graph without flags", exc_info=True)
+    except Exception as e:
+        logger.warning(
+            "YTM personalization unavailable (%s) — building graph without liked/subscribed flags. "
+            "Re-auth via the /listens AUTH button if this persists.",
+            e.__class__.__name__,
+        )
         return empty
 
 
-def build_graph(api_key: str, ytm_headers=None):
-    """Full idempotent rebuild of the music graph from ListenTrack + YTM + Last.fm."""
+def build_graph(api_key: str, ytm_headers=None, progress=None):
+    """Full idempotent rebuild of the music graph from ListenTrack + YTM + Last.fm.
+
+    `progress` is an optional callable(str) for live status output (e.g. a CLI writer).
+    """
+    _report(progress, "Building nodes from play history…")
     rebuild_nodes()
+    _report(progress, "Applying YTM personalization (liked / library / subscriptions)…")
     apply_personalization(**_load_personalization_from_ytm(ytm_headers))
+    _report(progress, "Building structural + co-listen edges…")
     rebuild_structural_edges()
     rebuild_colisten_edges()
-    rebuild_similarity_edges(api_key=api_key)
+    rebuild_similarity_edges(api_key=api_key, progress=progress)
+    _report(progress, "Computing recommendation scores…")
     compute_recommend_scores()
-    logger.info("Graph rebuilt: %d nodes, %d edges", MusicNode.objects.count(), MusicEdge.objects.count())
+    _report(progress, f"Done: {MusicNode.objects.count()} nodes, {MusicEdge.objects.count()} edges")

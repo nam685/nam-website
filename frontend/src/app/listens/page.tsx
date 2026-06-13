@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   API,
   type GraphPatch,
@@ -158,7 +158,13 @@ export default function ListensGraphPage() {
     }
   };
 
-  const data = patch ? toForceData(patch) : { nodes: [], links: [] };
+  // Memoize on `patch` so the graphData reference stays stable across re-renders
+  // (e.g. the player ticking every second while a song plays). A fresh object each
+  // render would make react-force-graph reheat the simulation in an endless loop.
+  const data = useMemo(
+    () => (patch ? toForceData(patch) : { nodes: [], links: [] }),
+    [patch],
+  );
 
   return (
     <div style={{ position: "relative" }}>
@@ -327,10 +333,16 @@ export default function ListensGraphPage() {
           nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
             const r = nodeRadius(node.play_count);
             const isSeed = patch?.seed === node.key;
+            const fill = isSeed ? ACCENT : "#c2540a";
+            // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
+            ctx.save();
+            ctx.shadowColor = fill;
+            ctx.shadowBlur = r * (isSeed ? 2.2 : 1.5);
             ctx.beginPath();
             ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = isSeed ? ACCENT : "#a8480a";
+            ctx.fillStyle = fill;
             ctx.fill();
+            ctx.restore();
             if (node.is_liked) {
               ctx.strokeStyle = "#ffd400";
               ctx.lineWidth = 2 / scale;
