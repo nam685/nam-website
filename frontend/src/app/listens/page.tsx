@@ -368,11 +368,6 @@ export default function ListensGraphPage() {
           </div>
         </div>
       )}
-
-      <div style={{ padding: "10px 4px", color: "#666", fontSize: 9, fontFamily: "monospace" }}>
-        ⬤ size = play count · <span style={{ color: "#ffd400" }}>◯</span> liked ·{" "}
-        <span style={{ color: ACCENT }}>◌</span> subscribed · ▬ similar (Last.fm) · ┄ structural / co-listen
-      </div>
     </div>
   );
 }
