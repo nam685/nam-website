@@ -59,3 +59,21 @@ def test_macd_signal_actions_are_valid():
     out = s.signal(rising, 0, params)
     assert out.action in ("buy", "hold")
     assert s.signal([1, 2, 3], 0, params).action == "hold"
+
+
+def test_bollinger_buys_below_lower_band():
+    from website.strategies.bollinger import BollingerStrategy
+
+    s = BollingerStrategy()
+    params = {"window": 5, "width": 2.0}
+    closes = [100, 100, 100, 100, 100, 90]
+    assert s.signal(closes, 0, params).action == "buy"
+
+
+def test_bollinger_sells_above_upper_band():
+    from website.strategies.bollinger import BollingerStrategy
+
+    s = BollingerStrategy()
+    params = {"window": 5, "width": 2.0}
+    closes = [100, 100, 100, 100, 100, 110]
+    assert s.signal(closes, 4.0, params).action == "sell"
