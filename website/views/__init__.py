@@ -27,6 +27,7 @@ from .listen import (
     listen_top_artists,
     listen_top_tracks,
 )
+from .listen_graph import graph_patch, graph_search
 from .project import project_list
 from .slops import (
     slops_approve,
@@ -85,6 +86,8 @@ __all__ = [
     "lichess_explorer",
     "lichess_status",
     "lichess_token",
+    "graph_patch",
+    "graph_search",
     "listen_import",
     "listen_list",
     "listen_recommended",
