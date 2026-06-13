@@ -15,11 +15,10 @@ class MACrossoverStrategy:
         if short >= long:
             return Signal(action="hold")
         s_now, l_now = sma(closes, short), sma(closes, long)
-        s_prev, l_prev = sma(closes[:-1], short), sma(closes[:-1], long)
-        if None in (s_now, l_now, s_prev, l_prev):
+        if s_now is None or l_now is None:
             return Signal(action="hold")
         if s_now > l_now and position_shares <= 0:
-            return Signal(action="buy", reason=f"{short}d crossed above {long}d")
+            return Signal(action="buy", reason=f"{short}d above {long}d")
         if s_now < l_now and position_shares > 0:
-            return Signal(action="sell", reason=f"{short}d crossed below {long}d")
+            return Signal(action="sell", reason=f"{short}d below {long}d")
         return Signal(action="hold")
