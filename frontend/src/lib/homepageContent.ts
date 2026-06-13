@@ -98,7 +98,7 @@ export async function fetchRandomContent(): Promise<ContentItem> {
       const res = await fetch(`${API}/api/thoughts/?page=1`);
       if (!res.ok) throw new Error();
       const data: { thoughts: Thought[] } = await res.json();
-      const withImg = data.thoughts.filter((t) => t.image);
+      const withImg = data.thoughts.filter((t): t is Thought & { image: string } => !!t.image);
       if (withImg.length === 0) throw new Error();
       const t = withImg[Math.floor(Math.random() * withImg.length)];
       return { type: "drawing", src: `${API}${t.image}`, alt: t.content || "drawing" };

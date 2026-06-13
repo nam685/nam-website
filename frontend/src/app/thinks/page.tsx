@@ -57,15 +57,15 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
     };
   }, [preview]);
 
+  // The [preview] effect above is the single owner of revocation — it revokes the
+  // previous URL when preview changes or on unmount, so attach/removeImage don't.
   function attach(f: File | undefined | null) {
     if (!f || !f.type.startsWith("image/")) return;
-    if (preview) URL.revokeObjectURL(preview);
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
 
   function removeImage() {
-    if (preview) URL.revokeObjectURL(preview);
     setFile(null);
     setPreview(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -197,7 +197,9 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
         e.preventDefault();
         setDragOver(true);
       }}
-      onDragLeave={() => setDragOver(false)}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
         setDragOver(false);
@@ -283,7 +285,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
         type="file"
         accept="image/*"
         onChange={(e) => attach(e.target.files?.[0])}
-        style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0 }}
+        style={{ display: "none" }}
       />
 
       <style>{`
@@ -293,7 +295,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
   );
 }
 
-/* ── Lightbox (ported from draws, red-themed) ───────── */
+/* ── Lightbox ───────────────────────────────────────── */
 function Lightbox({
   images,
   index,
