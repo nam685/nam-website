@@ -4,6 +4,8 @@ from django.db import migrations
 def migrate_drawings(apps, _schema_editor):
     Drawing = apps.get_model("website", "Drawing")
     Thought = apps.get_model("website", "Thought")
+    # NOTE: d.category ("pencil"/"camera") is intentionally dropped — the merged
+    # Thought model has no category. The pencil/camera split is being removed.
     for d in Drawing.objects.all().iterator():
         t = Thought.objects.create(content=d.caption or "", is_published=d.is_published)
         # Reuse the existing file path and preserve the original timestamp.
