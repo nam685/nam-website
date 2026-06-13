@@ -32,23 +32,25 @@ def advance_account(account) -> None:
         return
 
     params = coerce_params(strategy, account.params or {})
-    curve, trades, cash_curve, shares_curve = _simulate(prices, strategy, params, float(account.starting_cash), FEE_PCT)
+    curve, trades, cash_curve, _ = _simulate(prices, strategy, params, float(account.starting_cash), FEE_PCT)
 
     existing_snap_dates = set(account.snapshots.values_list("date", flat=True))
     existing_trade_keys = {(t.date, t.side) for t in account.trades.all()}
 
     new_snaps = []
-    for i, (d, close) in enumerate(prices):
+    for i, (d, _close) in enumerate(prices):
         if d in existing_snap_dates:
             continue
-        position_value = shares_curve[i] * close
+        # Round portfolio + cash, then derive position so cash + position == portfolio exactly.
+        portfolio_value = Decimal(str(round(curve[i], 2)))
+        cash = Decimal(str(round(cash_curve[i], 2)))
         new_snaps.append(
             PaperSnapshot(
                 account=account,
                 date=d,
-                portfolio_value=Decimal(str(round(curve[i], 2))),
-                cash=Decimal(str(round(cash_curve[i], 2))),
-                position_value=Decimal(str(round(position_value, 2))),
+                portfolio_value=portfolio_value,
+                cash=cash,
+                position_value=portfolio_value - cash,
             )
         )
     if new_snaps:

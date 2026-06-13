@@ -19,7 +19,7 @@ class Trade:
 
 def compute_metrics(dates: list[date], curve: list[float], trades: list[Trade], starting_cash: float) -> dict:
     """Score an equity curve. Returns return %, CAGR %, max drawdown %, Sharpe, trades, win rate %."""
-    if not curve:
+    if not curve or starting_cash <= 0:
         return {
             "total_return_pct": 0.0,
             "cagr_pct": 0.0,

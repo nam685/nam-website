@@ -13,13 +13,14 @@ export default function EquityCurve({
   accent,
 }: {
   strategy: number[];
-  benchmark: number[];
+  benchmark?: number[];
   dates: string[];
   trades: BacktestTrade[];
   accent: string;
 }) {
   if (strategy.length < 2) return null;
-  const all = [...strategy, ...benchmark];
+  const hasBenchmark = !!benchmark && benchmark.length > 0;
+  const all = hasBenchmark ? [...strategy, ...benchmark] : strategy;
   const min = Math.min(...all);
   const max = Math.max(...all);
   const span = max - min || 1;
@@ -32,7 +33,9 @@ export default function EquityCurve({
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: H }} aria-label="Equity curve">
-      <polyline points={pts(benchmark)} fill="none" stroke="#888" strokeWidth={1.5} strokeDasharray="4 3" />
+      {hasBenchmark && (
+        <polyline points={pts(benchmark)} fill="none" stroke="#888" strokeWidth={1.5} strokeDasharray="4 3" />
+      )}
       <polyline points={pts(strategy)} fill="none" stroke={accent} strokeWidth={2} />
       {trades.map((t, i) => {
         const idx = dateIndex(t.date);

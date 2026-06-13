@@ -37,6 +37,13 @@ def test_win_rate_none_when_no_round_trips():
     assert m["win_rate_pct"] is None
 
 
+def test_compute_metrics_handles_zero_starting_cash():
+    """Zero starting cash must not raise ZeroDivisionError."""
+    m = compute_metrics([date(2020, 1, 1), date(2021, 1, 1)], [0.0, 0.0], [], 0.0)
+    assert m["total_return_pct"] == 0.0
+    assert m["cagr_pct"] == 0.0
+
+
 def test_run_backtest_buy_hold_fills_at_t_plus_1():
     from website.services.backtest import run_backtest
     from website.strategies.buy_hold import BuyHoldStrategy

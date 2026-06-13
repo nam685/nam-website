@@ -89,13 +89,7 @@ export default function PaperTrading({
               </button>
 
               {d && (
-                <EquityCurve
-                  strategy={d.equity_curve}
-                  benchmark={d.equity_curve}
-                  dates={d.dates}
-                  trades={d.trades}
-                  accent={accent}
-                />
+                <EquityCurve strategy={d.equity_curve} dates={d.dates} trades={d.trades} accent={accent} />
               )}
 
               {isAdmin && (

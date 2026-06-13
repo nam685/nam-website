@@ -26,6 +26,18 @@ def test_create_requires_admin(client):
 
 
 @pytest.mark.django_db
+def test_create_rejects_zero_starting_cash(client, auth_headers):
+    t = _ticker_with_prices()
+    resp = client.post(
+        "/api/bets/paper/create/",
+        data={"ticker_id": t.id, "strategy": "buy_hold", "params": {}, "starting_cash": 0},
+        content_type="application/json",
+        **auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
 def test_admin_can_create_and_list(client, auth_headers):
     t = _ticker_with_prices()
     resp = client.post(

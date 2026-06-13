@@ -423,11 +423,18 @@ def bets_paper_create(request):
     if first is None:
         return JsonResponse({"error": "No price history for this ticker"}, status=400)
 
+    try:
+        starting_cash = float(body.get("starting_cash", 10000))
+    except (TypeError, ValueError):
+        starting_cash = 0
+    if starting_cash <= 0:
+        return JsonResponse({"error": "starting_cash must be a positive number"}, status=400)
+
     acct = PaperAccount.objects.create(
         ticker=ticker,
         strategy=strategy.key,
         params=coerce_params(strategy, body.get("params") or {}),
-        starting_cash=body.get("starting_cash", 10000),
+        starting_cash=starting_cash,
         started_on=first,
     )
     advance_account(acct)
