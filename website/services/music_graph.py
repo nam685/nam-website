@@ -195,7 +195,10 @@ def _cached_lastfm(cache_key: str, fetch):
     if row is not None:
         return row.payload
     payload = fetch()
-    LastfmCache.objects.update_or_create(cache_key=cache_key, defaults={"payload": payload})
+    # Only cache non-empty results. fetch_similar_* swallow API errors and return [],
+    # so caching an empty payload would permanently memoize a transient failure.
+    if payload:
+        LastfmCache.objects.update_or_create(cache_key=cache_key, defaults={"payload": payload})
     time.sleep(LASTFM_REQUEST_DELAY)
     return payload
 
