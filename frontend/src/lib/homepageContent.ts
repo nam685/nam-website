@@ -89,8 +89,11 @@ export async function fetchRandomContent(): Promise<ContentItem> {
       const res = await fetch(`${API}/api/thoughts/?page=1`);
       if (!res.ok) throw new Error();
       const data: { thoughts: Thought[] } = await res.json();
-      if (data.thoughts.length === 0) throw new Error();
-      const t = data.thoughts[Math.floor(Math.random() * data.thoughts.length)];
+      // Only text-bearing thoughts — image-only posts have empty content and would
+      // render as blank quote marks in the orbit center.
+      const withText = data.thoughts.filter((t) => t.content.trim());
+      if (withText.length === 0) throw new Error();
+      const t = withText[Math.floor(Math.random() * withText.length)];
       return { type: "thought", text: t.content, date: t.created_at.slice(0, 10) };
     }
 
