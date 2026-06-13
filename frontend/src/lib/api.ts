@@ -10,14 +10,7 @@ export const API_INTERNAL =
 export interface Thought {
   id: number;
   content: string;
-  created_at: string;
-}
-
-export interface Drawing {
-  id: number;
-  image: string;
-  category: "pencil" | "camera";
-  caption: string;
+  image: string | null;
   created_at: string;
 }
 
