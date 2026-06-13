@@ -296,3 +296,17 @@ def test_colisten_ignores_sync_rows(db):  # noqa: ARG001
     assert not music_graph.edge_exists(s1, s2, "colisten")  # sync plays excluded
     # Sync rows are still nodes — just not co-listen-linked.
     assert MusicNode.objects.filter(node_type="track", key="s1").exists()
+
+
+@pytest.mark.django_db
+def test_build_graph_preserves_flags_when_personalization_unavailable(plays):  # noqa: ARG001
+    music_graph.rebuild_nodes()
+    MusicNode.objects.filter(node_type="artist", key="radiohead").update(is_subscribed=True)
+    # _load_personalization_from_ytm returns None on auth/API failure → flags must be kept.
+    with (
+        patch.object(music_graph, "_load_personalization_from_ytm", return_value=None),
+        patch.object(music_graph.lastfm, "fetch_similar_artists", return_value=[]),
+        patch.object(music_graph.lastfm, "fetch_similar_tracks", return_value=[]),
+    ):
+        music_graph.build_graph(api_key="", ytm_headers=None)
+    assert MusicNode.objects.get(node_type="artist", key="radiohead").is_subscribed

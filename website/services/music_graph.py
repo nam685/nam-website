@@ -408,16 +408,13 @@ def search_nodes(query: str, limit: int = 10) -> list[dict]:
 def _load_personalization_from_ytm(ytm_headers):
     """Pull liked/library/subscriptions from YTM. Returns kwargs for apply_personalization.
 
-    Any failure logs a warning and returns empty sets so the build still completes.
+    Returns None (not empty sets) when the pull can't run — no auth, or an API/parse
+    failure. None means "don't touch the flags" so a failed-auth rebuild preserves the
+    flags from the last good sync instead of wiping them. A genuine empty library still
+    returns a dict (empty sets) and is applied normally.
     """
-    empty = {
-        "liked_video_ids": set(),
-        "library_album_keys": set(),
-        "subscribed_artist_keys": set(),
-        "library_video_ids": set(),
-    }
     if not ytm_headers:
-        return empty
+        return None
     try:
         from ytmusicapi import YTMusic
 
@@ -439,11 +436,11 @@ def _load_personalization_from_ytm(ytm_headers):
         }
     except Exception as e:
         logger.warning(
-            "YTM personalization unavailable (%s) — building graph without liked/subscribed flags. "
+            "YTM personalization unavailable (%s) — keeping existing liked/subscribed flags. "
             "Re-auth via the /listens AUTH button if this persists.",
             e.__class__.__name__,
         )
-        return empty
+        return None
 
 
 def build_graph(api_key: str, ytm_headers=None, progress=None):
@@ -454,7 +451,11 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     _report(progress, "Building nodes from play history…")
     rebuild_nodes()
     _report(progress, "Applying YTM personalization (liked / library / subscriptions)…")
-    apply_personalization(**_load_personalization_from_ytm(ytm_headers))
+    personalization = _load_personalization_from_ytm(ytm_headers)
+    if personalization is not None:
+        apply_personalization(**personalization)
+    else:
+        _report(progress, "  no YTM auth — keeping existing liked/subscribed flags")
     _report(progress, "Building structural + co-listen edges…")
     rebuild_structural_edges()
     rebuild_colisten_edges()
