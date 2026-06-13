@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { store } from "@/lib/auth";
 import { API } from "@/lib/api";
-import type { BetsTicker, BetsHistory, BetsSearchResult } from "@/lib/api";
+import type { BetsTicker, BetsHistory, BetsSearchResult, StrategyInfo } from "@/lib/api";
+import Backtester from "./Backtester";
+import PaperTrading from "./PaperTrading";
 
 const ACCENT = "#db2777";
 const GREEN = "#22c55e";
@@ -310,6 +312,7 @@ export default function BetsPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
 
   useEffect(() => {
     setIsAdmin(!!store("adminToken"));
@@ -318,6 +321,9 @@ export default function BetsPage() {
       .then(setTickers)
       .catch(console.error)
       .finally(() => setLoading(false));
+    fetch(`${API}/api/bets/strategies/`)
+      .then((r) => r.json())
+      .then(setStrategies);
   }, []);
 
   useEffect(() => {
@@ -808,6 +814,10 @@ export default function BetsPage() {
           {isAdmin && " Click '+ Add Ticker' to get started."}
         </div>
       )}
+
+      {tickers.length > 0 && <Backtester tickers={tickers} accent="var(--accent)" />}
+
+      <PaperTrading tickers={tickers} strategies={strategies} accent="var(--accent)" isAdmin={isAdmin} />
 
       {/* Tagline */}
       <div style={{ textAlign: "center", marginTop: "3rem" }}>

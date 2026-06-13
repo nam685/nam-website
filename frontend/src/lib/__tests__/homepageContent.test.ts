@@ -30,8 +30,8 @@ describe("lerpDotColor", () => {
   });
 
   it("returns second dot color at its exact angle", () => {
-    // DOTS[1] is grinds at 36°, color #f59e0b = rgb(245, 158, 11)
-    expect(lerpDotColor(36)).toEqual([245, 158, 11]);
+    // DOTS[1] is grinds at 40°, color #f59e0b = rgb(245, 158, 11)
+    expect(lerpDotColor(40)).toEqual([245, 158, 11]);
   });
 
   it("returns interpolated color at midpoint between two dots", () => {
@@ -56,8 +56,8 @@ describe("lerpDotColor", () => {
 });
 
 describe("DOTS", () => {
-  it("has 10 entries", () => {
-    expect(DOTS).toHaveLength(10);
+  it("has 9 entries", () => {
+    expect(DOTS).toHaveLength(9);
   });
 
   it("each dot has required fields", () => {
@@ -73,9 +73,9 @@ describe("DOTS", () => {
     }
   });
 
-  it("dots are spaced 36° apart", () => {
+  it("dots are spaced 40° apart", () => {
     for (let i = 0; i < DOTS.length; i++) {
-      expect(DOTS[i].angle).toBe(i * 36);
+      expect(DOTS[i].angle).toBe(i * 40);
     }
   });
 });

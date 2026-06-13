@@ -1,0 +1,5 @@
+# Keep only the manifest in version control.
+*
+!.gitignore
+!*/
+!*/manifest.json
