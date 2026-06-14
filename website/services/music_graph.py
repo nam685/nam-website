@@ -149,6 +149,15 @@ COLISTEN_WINDOW_MINUTES = 30
 COLISTEN_TOP_K = 6  # keep only each track's 6 strongest co-listen partners (caps density)
 STRUCTURAL_WEIGHT = 0.5
 
+# --- Radio (endless auto-play) selection ---
+RADIO_EDGE_PRIORITY = {
+    "similar_track": 3.0,
+    "colisten": 2.5,
+    "similar_artist": 1.5,
+    "structural": 1.0,
+}
+RADIO_CANDIDATE_POOL = 12  # weighted-random pick from this many top-scored candidates
+
 
 def _canonical(a: MusicNode, b: MusicNode):
     """Return (source, target) ordered so source_id < target_id."""
@@ -479,3 +488,78 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     _report(progress, "Computing recommendation scores…")
     compute_recommend_scores()
     _report(progress, f"Done: {MusicNode.objects.count()} nodes, {MusicEdge.objects.count()} edges")
+
+
+def _node_to_track(node: MusicNode) -> dict:
+    """Shape a track MusicNode as a frontend ListenTrack dict.
+
+    Graph nodes store title/subtitle(artist)/thumbnail/video_id only; id, album,
+    duration and played_at come from the latest ListenTrack row for the video_id.
+    """
+    lt = ListenTrack.objects.filter(video_id=node.video_id).order_by("-played_at").first()
+    return {
+        "id": lt.id if lt else 0,
+        "video_id": node.video_id,
+        "title": node.title,
+        "artist": node.subtitle,
+        "album": lt.album if lt else "",
+        "thumbnail_url": node.thumbnail_url,
+        "duration": lt.duration if lt else "",
+        "played_at": lt.played_at.isoformat() if lt else "",
+    }
+
+
+def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
+    """Pick the next radio tracks related to `seed_video_id` via the music graph.
+
+    Pure graph-based: BFS (depth 2) from the seed track node over
+    similar_track / colisten / similar_artist / structural edges, scoring candidate
+    track nodes by edge weight x edge-type priority (decayed by hop depth). Returns up
+    to `limit` ListenTrack-shaped dicts chosen by weighted-random sampling (for variety).
+    Returns [] when the seed is unknown or yields no fresh, playable track neighbours.
+    """
+    exclude = set(exclude_video_ids or ())
+    exclude.add(seed_video_id)
+
+    seed = MusicNode.objects.filter(node_type="track", key=seed_video_id).first()
+    if seed is None:
+        return []
+
+    scores: dict[int, float] = {}
+    frontier = {seed.id}
+    visited = {seed.id}
+    for depth in range(2):
+        edges = _neighbors(frontier)
+        next_frontier: set[int] = set()
+        for e in edges:
+            for a, b in ((e.source_id, e.target_id), (e.target_id, e.source_id)):
+                if a in frontier and b not in visited:
+                    next_frontier.add(b)
+                    prio = RADIO_EDGE_PRIORITY.get(e.edge_type, 1.0)
+                    scores[b] = scores.get(b, 0.0) + e.weight * prio / (depth + 1)
+        visited |= next_frontier
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    if not scores:
+        return []
+
+    candidate_nodes = MusicNode.objects.filter(id__in=scores.keys(), node_type="track")
+    candidates = [(n, scores[n.id]) for n in candidate_nodes if n.video_id and n.video_id not in exclude]
+    if not candidates:
+        return []
+
+    candidates.sort(key=lambda c: c[1], reverse=True)
+    pool = candidates[:RADIO_CANDIDATE_POOL]
+
+    chosen: list[MusicNode] = []
+    available = list(pool)
+    for _ in range(min(limit, len(pool))):
+        nodes = [c[0] for c in available]
+        weights = [c[1] for c in available]
+        pick = random.choices(nodes, weights=weights, k=1)[0]
+        chosen.append(pick)
+        available = [c for c in available if c[0].id != pick.id]
+
+    return [_node_to_track(n) for n in chosen]
