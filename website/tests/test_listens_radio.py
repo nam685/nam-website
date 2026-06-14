@@ -137,3 +137,24 @@ def test_radio_next_caps_to_limit():
     assert len(set(vids)) == 3  # distinct, no repeats
     assert "c_seed" not in vids
     assert all(v in rels for v in vids)
+
+
+@pytest.mark.django_db
+def test_radio_endpoint_returns_tracks(client, graph):  # noqa: ARG001
+    resp = client.get("/api/listens/radio/", {"seed": "seed"})
+    assert resp.status_code == 200
+    vids = {t["video_id"] for t in resp.json()["tracks"]}
+    assert vids == {"rel1", "rel2"}
+
+
+@pytest.mark.django_db
+def test_radio_endpoint_honours_exclude(client, graph):  # noqa: ARG001
+    resp = client.get("/api/listens/radio/", {"seed": "seed", "exclude": "rel1"})
+    assert resp.status_code == 200
+    assert {t["video_id"] for t in resp.json()["tracks"]} == {"rel2"}
+
+
+@pytest.mark.django_db
+def test_radio_endpoint_requires_seed(client, graph):  # noqa: ARG001
+    resp = client.get("/api/listens/radio/")
+    assert resp.status_code == 400

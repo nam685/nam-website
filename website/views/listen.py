@@ -12,9 +12,11 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
+from ..services import music_graph
 from ..utils import parse_json_body, parse_pagination
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,8 @@ VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 # Rate limit: 1 sync per 5 minutes
 SYNC_COOLDOWN = 300
 _SYNC_KEY = "listens_last_sync_ts"
+
+RADIO_EXCLUDE_CAP = 40  # cap exclude list size to keep the URL sane
 
 
 def listen_list(request):
@@ -50,6 +54,18 @@ def listen_list(request):
     ]
     total = redis_cache.get_or_set("listen_total_count", ListenTrack.objects.count, 300)
     return JsonResponse({"tracks": data, "total": total})
+
+
+@require_GET
+def listen_radio(request):
+    """Return tracks related to a seed video for endless radio (public)."""
+    seed = request.GET.get("seed", "").strip()
+    if not seed:
+        return JsonResponse({"error": "seed required"}, status=400)
+    exclude_raw = request.GET.get("exclude", "")
+    exclude = [v for v in (s.strip() for s in exclude_raw.split(",")) if v][:RADIO_EXCLUDE_CAP]
+    tracks = music_graph.radio_next(seed, exclude_video_ids=exclude)
+    return JsonResponse({"tracks": tracks})
 
 
 def _get_auth_path():
