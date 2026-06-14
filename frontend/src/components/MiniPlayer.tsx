@@ -20,6 +20,7 @@ export default function MiniPlayer() {
     duration,
     shuffle,
     repeat,
+    radio,
     visible,
     minimized,
     pause,
@@ -29,6 +30,7 @@ export default function MiniPlayer() {
     seek,
     toggleShuffle,
     cycleRepeat,
+    toggleRadio,
     toggleMinimize,
     close,
   } = usePlayer();
@@ -274,6 +276,24 @@ export default function MiniPlayer() {
           gap: "12px",
         }}
       >
+        {/* Radio (endless auto-play) */}
+        <button
+          onClick={toggleRadio}
+          title={radio ? "Radio on — auto-plays related tracks" : "Radio off"}
+          style={{
+            background: "none",
+            border: "none",
+            color: radio ? "#f97316" : "#666",
+            fontSize: "15px",
+            cursor: "pointer",
+            padding: "4px",
+            lineHeight: 1,
+            transition: "color 0.15s",
+          }}
+        >
+          ∞
+        </button>
+
         {/* Shuffle */}
         <button
           onClick={toggleShuffle}
