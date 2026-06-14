@@ -18,16 +18,21 @@ export function nodeColor(type: GraphNodeType): string {
   return NODE_COLORS[type] ?? "#f97316";
 }
 
-/** Accent for similarity edges, prominent white for co-listen, faint white for structural. */
-export function edgeColor(edgeType: GraphEdgeType): string {
-  if (edgeType === "similar_artist" || edgeType === "similar_track") return "rgba(249,115,22,0.45)";
-  if (edgeType === "colisten") return "rgba(255,255,255,0.55)"; // co-listen: your own behavior, kept prominent
-  return "rgba(255,255,255,0.12)"; // structural scaffolding stays faint
+// Every edge is the same neutral gray, drawn at a fixed thin width. Prominence is
+// encoded by brightness alone: opacity scales with the log of the edge weight
+// (co-listen frequency), so a one-off pairing is barely visible while a heavily
+// co-listened pair is moderately visible — but always dimmer than the node labels.
+const EDGE_MIN_ALPHA = 0.05; // barely visible
+const EDGE_MAX_ALPHA = 0.4; // moderately visible, still dimmer than the #ccc label text
+
+/** Edge opacity from its weight, log-scaled and clamped to [barely, moderately] visible. */
+export function edgeOpacity(weight: number): number {
+  return Math.min(EDGE_MIN_ALPHA + Math.log2(Math.max(weight, 0) + 1) * 0.06, EDGE_MAX_ALPHA);
 }
 
-/** Only structural edges render dashed; similarity and (the now-prominent) co-listen edges are solid. */
-export function edgeDashed(edgeType: GraphEdgeType): boolean {
-  return edgeType === "structural";
+/** Uniform gray for all edges; only the alpha (brightness) varies, by weight. */
+export function edgeColor(weight: number): string {
+  return `rgba(200,200,200,${edgeOpacity(weight).toFixed(3)})`;
 }
 
 export interface ForceNode extends GraphNode {
