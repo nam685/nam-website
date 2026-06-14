@@ -18,16 +18,16 @@ export function nodeColor(type: GraphNodeType): string {
   return NODE_COLORS[type] ?? "#f97316";
 }
 
-/** Accent for similarity edges, faint white for structural/co-listen. */
+/** Accent for similarity edges, prominent white for co-listen, faint white for structural. */
 export function edgeColor(edgeType: GraphEdgeType): string {
-  return edgeType === "similar_artist" || edgeType === "similar_track"
-    ? "rgba(249,115,22,0.45)"
-    : "rgba(255,255,255,0.12)";
+  if (edgeType === "similar_artist" || edgeType === "similar_track") return "rgba(249,115,22,0.45)";
+  if (edgeType === "colisten") return "rgba(255,255,255,0.55)"; // co-listen: your own behavior, kept prominent
+  return "rgba(255,255,255,0.12)"; // structural scaffolding stays faint
 }
 
-/** Structural and co-listen edges render dashed; similarity edges solid. */
+/** Only structural edges render dashed; similarity and (the now-prominent) co-listen edges are solid. */
 export function edgeDashed(edgeType: GraphEdgeType): boolean {
-  return edgeType === "structural" || edgeType === "colisten";
+  return edgeType === "structural";
 }
 
 export interface ForceNode extends GraphNode {

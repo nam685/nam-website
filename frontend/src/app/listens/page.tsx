@@ -353,7 +353,11 @@ export default function ListensGraphPage() {
           linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
           linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
           linkWidth={(l: { edge_type: string; weight: number }) =>
-            l.edge_type.startsWith("similar") ? 1 + l.weight * 1.5 : 0.8
+            l.edge_type.startsWith("similar")
+              ? 1 + l.weight * 1.5
+              : l.edge_type === "colisten"
+                ? 1 + l.weight * 1.2
+                : 0.8
           }
           onNodeClick={(node: ForceNode) => {
             // Click = walk the graph: play (admin) and re-center on this node.
@@ -365,18 +369,20 @@ export default function ListensGraphPage() {
             node: ForceNode & { x: number; y: number },
             color: string,
             ctx: CanvasRenderingContext2D,
+            scale: number,
           ) => {
-            // Match the hover/click hit-area to the drawn dot (nodes are small).
+            // Match the hover/click hit-area to the drawn dot (scale-invariant, like the dot).
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(node.x, node.y, nodeRadius(node.play_count) + 2, 0, 2 * Math.PI);
+            ctx.arc(node.x, node.y, (nodeRadius(node.play_count) + 2) / scale, 0, 2 * Math.PI);
             ctx.fill();
           }}
           nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
             const isSeed = patch?.seed === node.key;
             const isHovered = hovered === node.key;
-            // Hover grows the dot ~1.6x, just like the home-page constellation.
-            const r = nodeRadius(node.play_count) * (isHovered ? 1.6 : 1);
+            // Divide by scale so the dot keeps a constant on-screen size at any zoom,
+            // matching the home-page constellation dots. Hover grows it ~1.6x.
+            const r = (nodeRadius(node.play_count) * (isHovered ? 1.6 : 1)) / scale;
             // Color-coded by type: song=orange, artist=amber, album=teal.
             const fill = nodeColor(node.node_type);
             // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
@@ -394,14 +400,14 @@ export default function ListensGraphPage() {
               ctx.strokeStyle = "rgba(255,255,255,0.9)";
               ctx.lineWidth = 1.5 / scale;
               ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
+              ctx.arc(node.x, node.y, r + 3 / scale, 0, 2 * Math.PI);
               ctx.stroke();
             }
             if (node.is_liked) {
               ctx.strokeStyle = "#ffd400";
               ctx.lineWidth = 2 / scale;
               ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 2, 0, 2 * Math.PI);
+              ctx.arc(node.x, node.y, r + 2 / scale, 0, 2 * Math.PI);
               ctx.stroke();
             }
             if (node.is_subscribed) {
@@ -409,7 +415,7 @@ export default function ListensGraphPage() {
               ctx.setLineDash([2, 2]);
               ctx.lineWidth = 1.5 / scale;
               ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
+              ctx.arc(node.x, node.y, r + 4 / scale, 0, 2 * Math.PI);
               ctx.stroke();
               ctx.setLineDash([]);
             }

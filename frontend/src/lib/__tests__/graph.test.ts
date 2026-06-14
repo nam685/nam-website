@@ -18,13 +18,15 @@ describe("nodeColor", () => {
 });
 
 describe("edge styling", () => {
-  it("colors similarity edges accent, structural faint", () => {
+  it("colors similarity edges accent, co-listen prominent white, structural faint", () => {
     expect(edgeColor("similar_artist")).toContain("249,115,22");
-    expect(edgeColor("structural")).toContain("255,255,255");
+    expect(edgeColor("structural")).toBe("rgba(255,255,255,0.12)");
+    // co-listen is the same hue as structural but far more opaque, so it reads as prominent.
+    expect(edgeColor("colisten")).toBe("rgba(255,255,255,0.55)");
   });
-  it("dashes structural and colisten edges only", () => {
+  it("dashes only structural edges; co-listen and similarity are solid", () => {
     expect(edgeDashed("structural")).toBe(true);
-    expect(edgeDashed("colisten")).toBe(true);
+    expect(edgeDashed("colisten")).toBe(false);
     expect(edgeDashed("similar_track")).toBe(false);
   });
 });
