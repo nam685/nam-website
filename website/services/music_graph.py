@@ -546,7 +546,9 @@ def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
         return []
 
     candidate_nodes = MusicNode.objects.filter(id__in=scores.keys(), node_type="track")
-    candidates = [(n, scores[n.id]) for n in candidate_nodes if n.video_id and n.video_id not in exclude]
+    candidates = [
+        (n, scores[n.id]) for n in candidate_nodes if n.video_id and n.video_id not in exclude and scores[n.id] > 0
+    ]
     if not candidates:
         return []
 

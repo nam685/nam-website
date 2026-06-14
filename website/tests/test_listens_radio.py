@@ -79,3 +79,61 @@ def test_radio_next_unknown_seed_returns_empty(graph):  # noqa: ARG001
 @pytest.mark.django_db
 def test_radio_next_isolated_node_returns_empty(graph):  # noqa: ARG001
     assert music_graph.radio_next("far", exclude_video_ids=[], limit=5) == []
+
+
+@pytest.mark.django_db
+def test_radio_next_skips_zero_weight_only_neighbours():
+    """A neighbour reachable only via a zero-weight edge is not a candidate."""
+    now = timezone.now()
+    for vid in ("z_seed", "z_rel"):
+        ListenTrack.objects.create(
+            video_id=vid,
+            title=vid,
+            artist="A",
+            album="Alb",
+            thumbnail_url=f"https://img/{vid}.jpg",
+            duration="3:00",
+            played_at=now,
+        )
+    seed = _track_node("z_seed", "Seed", "A")
+    rel = _track_node("z_rel", "Rel", "A")
+    MusicEdge.objects.create(source=seed, target=rel, edge_type="similar_track", weight=0.0)
+    # Only neighbour has score 0 -> no candidates, and no crash.
+    assert music_graph.radio_next("z_seed", exclude_video_ids=[], limit=5) == []
+
+
+@pytest.mark.django_db
+def test_radio_next_caps_to_limit():
+    """With many positive-weight neighbours, returns at most `limit` distinct tracks."""
+    now = timezone.now()
+    ListenTrack.objects.create(
+        video_id="c_seed",
+        title="Seed",
+        artist="A",
+        album="Alb",
+        thumbnail_url="https://img/c_seed.jpg",
+        duration="3:00",
+        played_at=now,
+    )
+    seed = _track_node("c_seed", "Seed", "A")
+    rels = []
+    for i in range(8):
+        vid = f"c_rel{i}"
+        ListenTrack.objects.create(
+            video_id=vid,
+            title=vid,
+            artist="A",
+            album="Alb",
+            thumbnail_url=f"https://img/{vid}.jpg",
+            duration="3:00",
+            played_at=now,
+        )
+        node = _track_node(vid, vid, "A")
+        MusicEdge.objects.create(source=seed, target=node, edge_type="similar_track", weight=0.5 + i)
+        rels.append(vid)
+    result = music_graph.radio_next("c_seed", exclude_video_ids=[], limit=3)
+    vids = [t["video_id"] for t in result]
+    assert len(vids) == 3
+    assert len(set(vids)) == 3  # distinct, no repeats
+    assert "c_seed" not in vids
+    assert all(v in rels for v in vids)
