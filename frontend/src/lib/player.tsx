@@ -318,12 +318,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /* ── Radio: proactively top up the queue as it nears the end ── */
 
   useEffect(() => {
-    if (!radio) return;
+    // Radio only extends the queue during straight-through playback. Shuffle and
+    // repeat-all already continue forever on the existing queue, and repeat-one
+    // replays in place — topping up in those modes would grow the queue unboundedly
+    // without ever consuming the appended tracks. This mirrors handleTrackEnd, whose
+    // radio branch is only reachable when shuffle is off and repeat is "off".
+    if (!radio || !playing || shuffle || repeat !== "off") return;
     if (shouldTopUp(queue.length, currentIndex, true)) {
       void fetchAndAppendRadio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, radio, queue.length]);
+  }, [currentIndex, radio, queue.length, playing, shuffle, repeat]);
 
   /* ── Radio: advance once freshly-fetched tracks land in the queue ── */
 
