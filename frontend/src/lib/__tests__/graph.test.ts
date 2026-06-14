@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { edgeColor, edgeDashed, nodeColor, nodeRadius, toForceData } from "../graph";
+import { edgeColor, edgeOpacity, nodeColor, nodeRadius, toForceData } from "../graph";
 import type { GraphPatch } from "../api";
 
 describe("nodeRadius", () => {
@@ -18,16 +18,17 @@ describe("nodeColor", () => {
 });
 
 describe("edge styling", () => {
-  it("colors similarity edges accent, co-listen prominent white, structural faint", () => {
-    expect(edgeColor("similar_artist")).toContain("249,115,22");
-    expect(edgeColor("structural")).toBe("rgba(255,255,255,0.12)");
-    // co-listen is the same hue as structural but far more opaque, so it reads as prominent.
-    expect(edgeColor("colisten")).toBe("rgba(255,255,255,0.55)");
+  it("uses one neutral gray for every edge, varying only alpha", () => {
+    expect(edgeColor(1)).toMatch(/^rgba\(200,200,200,/);
+    expect(edgeColor(50)).toMatch(/^rgba\(200,200,200,/);
   });
-  it("dashes only structural edges; co-listen and similarity are solid", () => {
-    expect(edgeDashed("structural")).toBe(true);
-    expect(edgeDashed("colisten")).toBe(false);
-    expect(edgeDashed("similar_track")).toBe(false);
+  it("encodes prominence as brightness that grows with log(weight), clamped", () => {
+    // Barely visible at the low end, brighter with more co-listens, never opaque.
+    expect(edgeOpacity(1)).toBeGreaterThanOrEqual(0.05);
+    expect(edgeOpacity(50)).toBeGreaterThan(edgeOpacity(1));
+    expect(edgeOpacity(1_000_000)).toBeLessThanOrEqual(0.4);
+    // Log scale: each doubling of weight adds a constant, diminishing-return step.
+    expect(edgeOpacity(3) - edgeOpacity(1)).toBeCloseTo(edgeOpacity(7) - edgeOpacity(3), 5);
   });
 });
 

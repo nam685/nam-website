@@ -10,7 +10,7 @@ import {
   type ListenTrack,
 } from "@/lib/api";
 import { getAdminToken, store, storeDel } from "@/lib/auth";
-import { edgeColor, edgeDashed, nodeColor, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
+import { edgeColor, nodeColor, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
 import { usePlayer } from "@/lib/player";
 
 // Cast to permissive type at import boundary: react-force-graph-2d's callback
@@ -350,15 +350,8 @@ export default function ListensGraphPage() {
               fittedRef.current = true;
             }
           }}
-          linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
-          linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
-          linkWidth={(l: { edge_type: string; weight: number }) =>
-            l.edge_type.startsWith("similar")
-              ? 1 + l.weight * 1.5
-              : l.edge_type === "colisten"
-                ? 1 + l.weight * 1.2
-                : 0.8
-          }
+          linkColor={(l: { weight: number }) => edgeColor(l.weight)}
+          linkWidth={0.5}
           onNodeClick={(node: ForceNode) => {
             // Click = walk the graph: play (admin) and re-center on this node.
             if (isAdmin) playNode(node);
