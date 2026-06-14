@@ -55,6 +55,22 @@ export interface ListenStats {
   daily: { date: string; count: number }[];
 }
 
+export async function fetchRadioTracks(
+  seed: string,
+  exclude: string[],
+): Promise<ListenTrack[]> {
+  const params = new URLSearchParams({ seed });
+  if (exclude.length) params.set("exclude", exclude.join(","));
+  try {
+    const res = await fetch(`${API}/api/listens/radio/?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.tracks ?? []) as ListenTrack[];
+  } catch {
+    return [];
+  }
+}
+
 /* ── Listens graph ─────────────────────────────────────── */
 
 export type GraphNodeType = "artist" | "album" | "track";
