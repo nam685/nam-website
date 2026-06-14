@@ -66,6 +66,7 @@ GET  /api/listens/tracks/       top tracks (?sort=weighted for shuffled)
 GET  /api/listens/artists/      top artists by play count
 GET  /api/listens/albums/       top albums by play count
 GET  /api/listens/recommended/   recommended track (rediscovery algorithm)
+GET  /api/listens/radio/?seed=<video_id>&exclude=<csv>   tracks related to seed for endless auto-play
 GET  /api/listens/stats/
 POST /api/listens/sync/         auth required, triggers YTM history + liked sync
 GET  /api/listens/sync-status/  auth required
