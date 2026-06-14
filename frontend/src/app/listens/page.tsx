@@ -350,7 +350,7 @@ export default function ListensGraphPage() {
               fittedRef.current = true;
             }
           }}
-          linkColor={(l: { weight: number }) => edgeColor(l.weight)}
+          linkColor={(l: { edge_type: string; weight: number }) => edgeColor(l.edge_type as never, l.weight)}
           linkWidth={0.5}
           onNodeClick={(node: ForceNode) => {
             // Click = walk the graph: play (admin) and re-center on this node.

@@ -5,11 +5,16 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+  # Manual fallback: deploy current main on demand (e.g. when GitHub drops the
+  # post-merge push event and the CI->deploy chain never fires). `gh workflow run Deploy`.
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     steps:
       - name: Deploy to server
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1

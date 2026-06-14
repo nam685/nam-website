@@ -19,16 +19,28 @@ describe("nodeColor", () => {
 
 describe("edge styling", () => {
   it("uses one neutral gray for every edge, varying only alpha", () => {
-    expect(edgeColor(1)).toMatch(/^rgba\(200,200,200,/);
-    expect(edgeColor(50)).toMatch(/^rgba\(200,200,200,/);
+    expect(edgeColor("colisten", 1)).toMatch(/^rgba\(200,200,200,/);
+    expect(edgeColor("structural", 1)).toMatch(/^rgba\(200,200,200,/);
   });
-  it("encodes prominence as brightness that grows with log(weight), clamped", () => {
+  it("scales co-listen brightness with log(count), clamped", () => {
     // Barely visible at the low end, brighter with more co-listens, never opaque.
-    expect(edgeOpacity(1)).toBeGreaterThanOrEqual(0.05);
-    expect(edgeOpacity(50)).toBeGreaterThan(edgeOpacity(1));
-    expect(edgeOpacity(1_000_000)).toBeLessThanOrEqual(0.4);
-    // Log scale: each doubling of weight adds a constant, diminishing-return step.
-    expect(edgeOpacity(3) - edgeOpacity(1)).toBeCloseTo(edgeOpacity(7) - edgeOpacity(3), 5);
+    expect(edgeOpacity("colisten", 1)).toBeGreaterThanOrEqual(0.05);
+    expect(edgeOpacity("colisten", 50)).toBeGreaterThan(edgeOpacity("colisten", 1));
+    expect(edgeOpacity("colisten", 1_000_000)).toBeLessThanOrEqual(0.4);
+    // Log scale: each doubling of count adds a constant, diminishing-return step.
+    expect(edgeOpacity("colisten", 3) - edgeOpacity("colisten", 1)).toBeCloseTo(
+      edgeOpacity("colisten", 7) - edgeOpacity("colisten", 3),
+      5,
+    );
+  });
+  it("shows edges with no co-listen concept at a fixed default prominence", () => {
+    const def = edgeOpacity("structural", 0.5);
+    // Same default regardless of the (non-frequency) weight or which non-co-listen type.
+    expect(edgeOpacity("similar_artist", 0.9)).toBe(def);
+    expect(edgeOpacity("similar_track", 0.1)).toBe(def);
+    // Default sits between barely-visible and the bright cap, not pinned to the floor.
+    expect(def).toBeGreaterThan(0.05);
+    expect(def).toBeLessThan(0.4);
   });
 });
 

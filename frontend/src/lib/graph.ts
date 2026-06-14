@@ -19,20 +19,23 @@ export function nodeColor(type: GraphNodeType): string {
 }
 
 // Every edge is the same neutral gray, drawn at a fixed thin width. Prominence is
-// encoded by brightness alone: opacity scales with the log of the edge weight
-// (co-listen frequency), so a one-off pairing is barely visible while a heavily
-// co-listened pair is moderately visible — but always dimmer than the node labels.
-const EDGE_MIN_ALPHA = 0.05; // barely visible
+// encoded by brightness alone. Only co-listen edges carry a frequency count, so only
+// they scale: opacity grows with the log of the co-listen count, from barely visible
+// to moderately visible (but always dimmer than the node labels). Edges with no
+// co-listen concept (structural, similarity) render at a fixed default prominence.
+const EDGE_MIN_ALPHA = 0.05; // barely visible — a one-off co-listen
 const EDGE_MAX_ALPHA = 0.4; // moderately visible, still dimmer than the #ccc label text
+const EDGE_DEFAULT_ALPHA = 0.15; // edges without a co-listen frequency (structural / similarity)
 
-/** Edge opacity from its weight, log-scaled and clamped to [barely, moderately] visible. */
-export function edgeOpacity(weight: number): number {
+/** Edge opacity. Co-listen edges scale with log(count); all others use a fixed default. */
+export function edgeOpacity(edgeType: GraphEdgeType, weight: number): number {
+  if (edgeType !== "colisten") return EDGE_DEFAULT_ALPHA;
   return Math.min(EDGE_MIN_ALPHA + Math.log2(Math.max(weight, 0) + 1) * 0.06, EDGE_MAX_ALPHA);
 }
 
-/** Uniform gray for all edges; only the alpha (brightness) varies, by weight. */
-export function edgeColor(weight: number): string {
-  return `rgba(200,200,200,${edgeOpacity(weight).toFixed(3)})`;
+/** Uniform gray for all edges; only the alpha (brightness) varies. */
+export function edgeColor(edgeType: GraphEdgeType, weight: number): string {
+  return `rgba(200,200,200,${edgeOpacity(edgeType, weight).toFixed(3)})`;
 }
 
 export interface ForceNode extends GraphNode {
