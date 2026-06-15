@@ -47,6 +47,7 @@ urlpatterns = [
     path("listens/graph/search/", views.graph_search),
     path("listens/import/", views.listen_import),
     path("listens/", views.listen_list),
+    path("listens/radio/", views.listen_radio),
     path("listens/sync/", views.listen_sync),
     path("listens/stats/", views.listen_stats),
     path("listens/sync-status/", views.listen_sync_status),
