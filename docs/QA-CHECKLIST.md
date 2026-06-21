@@ -174,7 +174,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Newest game is expanded by default on load.
 - [ ] Clicking a collapsed game expands it and collapses the previously expanded one (single-selection).
 - [ ] The optional highlight-clip `<iframe>` mounts only for the currently expanded game; collapsed rows render no iframe.
-- [ ] Expanded game shows metrics: Feudal/Castle/Imperial uptimes, APM, villagers at key ages, and game length.
+- [ ] Expanded game shows metrics: Feudal/Castle/Imperial uptimes, APM, a villager count, and match length.
 - [ ] No idle-TC stat appears anywhere in the UI (it was intentionally removed).
 - [ ] Opening classification label is present in the expanded game view.
 - [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
