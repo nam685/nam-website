@@ -264,6 +264,33 @@ function MatchDetail({ detail }: { detail: Detail }) {
           value={formatDuration(detail.duration_seconds)}
         />
       </div>
+      {detail.coach_analysis && (
+        <div style={{ marginTop: "1.5rem" }}>
+          <div
+            style={{
+              fontSize: "0.55rem",
+              color: "#666",
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Coach
+          </div>
+          <div
+            style={{
+              fontSize: "0.8rem",
+              color: "#bbb",
+              lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+              borderLeft: "2px solid var(--accent)",
+              paddingLeft: "0.75rem",
+            }}
+          >
+            {detail.coach_analysis}
+          </div>
+        </div>
+      )}
       {detail.clip_url && (
         <iframe
           src={detail.clip_url}
