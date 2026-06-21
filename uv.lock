@@ -734,6 +734,15 @@ redis = [
 ]
 
 [[package]]
+name = "mgz-fast"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/36/f338800447e64614b2abac883091098d9f2ac7fdcad7b47227e9d6ca4db6/mgz_fast-1.0.0.tar.gz", hash = "sha256:9d111dfe66a2306c161901546693be97b33d72334a6daa76f42d7a16c047b435", size = 20355831, upload-time = "2026-02-27T12:12:02.013Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/fe/5fb1da9950cd9c58f63a19e4e19c9893c25064570e5dbe41527a2ac6b979/mgz_fast-1.0.0-py3-none-any.whl", hash = "sha256:79489857034cce6ff4acd68fdb247241fa5ff5408cccdeb307996b609568257e", size = 30461, upload-time = "2026-02-27T12:12:04.893Z" },
+]
+
+[[package]]
 name = "mutagen"
 version = "1.47.0"
 source = { registry = "https://pypi.org/simple" }
@@ -754,6 +763,7 @@ dependencies = [
     { name = "django-redis" },
     { name = "gunicorn" },
     { name = "httpx" },
+    { name = "mgz-fast" },
     { name = "pillow" },
     { name = "pillow-heif" },
     { name = "psycopg", extra = ["binary"] },
@@ -783,6 +793,7 @@ requires-dist = [
     { name = "django-redis", specifier = ">=5.4.0" },
     { name = "gunicorn", specifier = ">=23.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mgz-fast", specifier = "==1.0.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pillow-heif", specifier = ">=1.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
