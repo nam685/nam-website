@@ -1,5 +1,3 @@
-import { API, type Thought } from "@/lib/api";
-
 /* ── Dot data ─────────────────────────────────────────── */
 
 export interface Dot {
@@ -60,56 +58,4 @@ export function lerpDotColor(angle: number): [number, number, number] {
     Math.round(g1 + (g2 - g1) * t),
     Math.round(b1 + (b2 - b1) * t),
   ];
-}
-
-/* ── Random center content ────────────────────────────── */
-
-export const GREETINGS = [
-  "hey",
-  "welcome back",
-  "you found me",
-  "nice to see you",
-  "come on in",
-  "hello, friend",
-  "what's up",
-  "good to see you",
-];
-
-export type ContentItem =
-  | { type: "thought"; text: string; date: string }
-  | { type: "drawing"; src: string; alt: string }
-  | { type: "greeting"; text: string };
-
-export async function fetchRandomContent(): Promise<ContentItem> {
-  const types = ["thought", "drawing", "greeting"] as const;
-  const chosen = types[Math.floor(Math.random() * types.length)];
-
-  try {
-    if (chosen === "thought") {
-      const res = await fetch(`${API}/api/thoughts/?page=1`);
-      if (!res.ok) throw new Error();
-      const data: { thoughts: Thought[] } = await res.json();
-      // Only text-bearing thoughts — image-only posts have empty content and would
-      // render as blank quote marks in the orbit center.
-      const withText = data.thoughts.filter((t) => t.content.trim());
-      if (withText.length === 0) throw new Error();
-      const t = withText[Math.floor(Math.random() * withText.length)];
-      return { type: "thought", text: t.content, date: t.created_at.slice(0, 10) };
-    }
-
-    if (chosen === "drawing") {
-      const res = await fetch(`${API}/api/thoughts/?page=1`);
-      if (!res.ok) throw new Error();
-      const data: { thoughts: Thought[] } = await res.json();
-      const withImg = data.thoughts.filter((t): t is Thought & { image: string } => !!t.image);
-      if (withImg.length === 0) throw new Error();
-      const t = withImg[Math.floor(Math.random() * withImg.length)];
-      return { type: "drawing", src: `${API}${t.image}`, alt: t.content || "drawing" };
-    }
-  } catch {
-    // fall through to greeting
-  }
-
-  const text = GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
-  return { type: "greeting", text };
 }
