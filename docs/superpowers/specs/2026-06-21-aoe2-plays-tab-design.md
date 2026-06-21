@@ -34,7 +34,10 @@ nav-wheel change** is required.
 - Hosting video on the server (clips are external embeds).
 - Public upload — ingestion is admin-only.
 - **Team games — out of scope entirely.** Only 1v1 games are ingested/analyzed.
-  Non-1v1 recs are skipped at upload time (recorded, marked `skipped`, not shown).
+- **Single-player / vs-AI games — out of scope.** Only human-vs-human 1v1
+  multiplayer is ingested. Recs that are not a two-human 1v1 (team games,
+  single-player, any AI/computer slot) are skipped at upload time (recorded, marked
+  `skipped`, not shown).
 
 ## Constraints / Realities
 
@@ -73,9 +76,10 @@ Celery beat (daily) ─────▶  enrich_ladder task    ◀─────
 no child player table):
 - `rec_file` (FileField → media), `file_hash` (unique, sha256, dedup)
 - `played_at`, `map_name`, `duration_seconds`, `game_version`
-- `my_civ`, `my_color`, `my_result` (`win`/`loss`/`unknown`), `my_elo` (nullable),
+- `my_civ`, `my_result` (`win`/`loss`/`unknown`), `my_elo` (nullable),
   `my_rating_change` (nullable)
-- `opponent_name`, `opponent_civ`, `opponent_color`, `opponent_elo` (nullable)
+- `opponent_civ`, `opponent_elo` (nullable) — opponent shown by civ + ELO only.
+  **No opponent name stored** (stripped in preprocess; not needed for display).
 - `relic_match_id` (nullable), `relic_enriched_at` (nullable)
 - `timeline` (JSON — salient event list), `metrics` (JSON — derived metrics)
 - `coach_analysis` (text), `coach_model` (char), `analyzed_at` (nullable)
@@ -101,8 +105,9 @@ Public:
 Admin (`require_admin`):
 - `POST /api/aoe2/upload/` — multipart `rec` file. Dedup by hash (409/200 on dup),
   store, create `Aoe2Match(status=pending)`, enqueue `analyze_match`. **Used by both
-  the watcher and the manual upload box.** A quick header parse rejects non-1v1
-  games (stored `status=skipped`, not analyzed, not shown publicly).
+  the watcher and the manual upload box.** A quick header parse rejects anything
+  that is not a two-human 1v1 multiplayer game — team games, single-player, or any
+  AI/computer slot (stored `status=skipped`, not analyzed, not shown publicly).
 - `GET  /api/aoe2/sync-status/` — recent matches + their `analysis_status`.
 - `POST /api/aoe2/matches/<id>/clip/` — body `{url, title?, note?, start_seconds?}`.
 - `POST /api/aoe2/matches/<id>/feature/` — toggle `featured` (only one featured at a time).
@@ -124,14 +129,18 @@ has indexed the match).
 
 1. **Parse & structure** — `aoc-mgz` → players, civs, map, winner, version,
    duration, and the full timestamped input stream. Identify "me" by matching IGN
-   `nom`; store my + opponent civ/color/result inline on `Aoe2Match`. Reject the rec
-   (`status=skipped`) if it is not a 2-player 1v1.
-2. **Preprocess: noisy log → salient timeline** — discard move/right-click spam;
-   keep meaningful events into `timeline`. **This stage also emits a grep-friendly
-   plain-text `salient.log`** — one timestamped, tagged event per line (e.g.
-   `08:32 AGE_UP feudal`, `10:15 BUILD barracks`, `12:40 TRAIN scout x3`,
-   `14:02 TECH loom`) — which is the artifact the klaude coach reads with its
-   grep/read tools in stage 4. Events captured:
+   `nom`; store my civ/result + opponent civ inline on `Aoe2Match`. Reject the rec
+   (`status=skipped`) if it is not a two-human 1v1 (team game, single-player, or any
+   AI/computer slot).
+2. **Preprocess: noisy log → salient timeline** — discard move/right-click spam
+   **and strip ALL free-text / non-mechanical data: in-game chat, player names, and
+   anything else irrelevant to gameplay**. The result is purely structured game
+   events, so **no untrusted free-text ever reaches klaude** (injection vector
+   eliminated at the source). Keep meaningful events into `timeline`. **This stage
+   emits a grep-friendly plain-text `salient.log`** — one timestamped, tagged event
+   per line (e.g. `08:32 AGE_UP feudal`, `10:15 BUILD barracks`,
+   `12:40 TRAIN scout x3`, `14:02 TECH loom`) — the artifact the klaude coach reads
+   with its grep/read tools in stage 4. Events captured:
    - age-up research → Feudal / Castle / Imperial **uptimes**
    - building placements → **build order**
    - eco techs (Loom, Wheelbarrow, Double-Bit Axe, Horse Collar, Hand Cart…) → eco timing
@@ -202,16 +211,29 @@ Pure helpers (clip URL → embed URL, duration formatting, opening-tag colors) g
 
 ## The watcher (`scripts/aoe2_watcher.py`)
 
-Standalone Python script the owner runs on their PC (Windows scheduled task or
-startup). Behaviour:
-- Watch the DE recorded-games folder (`REC_DIR`) for new `.aoe2record` files.
-- Wait until a file stops growing (write complete) before uploading.
+Standalone Python script the owner runs on the **laptop they play on** (the only
+place rec files exist). It needs a **local credential** (`ADMIN_SECRET` in a local
+config/env file beside the script — acceptable; it's the owner's own machine).
+
+**Trigger — event-driven folder watcher (default):** a lightweight persistent
+process, started at login, that watches the DE recorded-games folder (`REC_DIR`).
+DE auto-writes the rec **when a match ends**, so the watcher uploads it seconds
+later — "sync every time I finish a game", no polling, no cron. **On startup it
+also scans for un-uploaded recs (backlog catch-up)**, covering laptop-was-off /
+offline cases.
+
+**Trigger — cron / Scheduled Task (documented fallback):** if a persistent process
+is undesirable, a periodic scheduled task scans + uploads every N minutes. Simpler,
+but laggy.
+
+Behaviour (both modes):
+- Wait until a rec file stops growing (write complete) before uploading.
 - Log in once with `ADMIN_SECRET` → token; POST each new rec to
   `SERVER_URL/api/aoe2/upload/` with the bearer token; skip on 200/409 dup.
-- Config via env: `SERVER_URL`, `ADMIN_SECRET`, `REC_DIR`. Keeps a local set of
-  already-uploaded hashes to avoid re-posting.
-- Has a vitest-equivalent pytest (`scripts/` is in `testpaths`) for the pure bits
-  (file-stable detection, hash dedup) — no network in tests.
+- Config via local env: `SERVER_URL`, `ADMIN_SECRET`, `REC_DIR`. Keeps a local set
+  of already-uploaded hashes to avoid re-posting.
+- pytest (`scripts/` is in `testpaths`) for the pure bits (file-stable detection,
+  hash dedup) — no network in tests.
 
 ## Build order (phased, single spec)
 
@@ -248,9 +270,9 @@ startup). Behaviour:
 - **Security** — the klaude job is **admin-only triggered** (watcher with
   `ADMIN_SECRET` or admin upload box), so none of the `/slops` public-abuse machinery
   (rate limits, global cap, approval queue) is needed here. Two residual notes:
-  (1) opponent-controlled strings in the rec (username, in-game chat) are untrusted
-  input flowing into an `--auto-approve` agent — escape/label them as data when
-  building `salient.log`, never drop raw chat into the prompt; (2) containment still
-  relies on the existing sandboxed `klaude` user — don't loosen it. No LLM key in the
-  website env (klaude owns it). Display side is public read-only.
+  (1) **the preprocess step strips ALL free-text from the rec — chat and player
+  names — so no untrusted strings ever reach klaude** (injection vector removed at
+  the source, not merely escaped); (2) containment still relies on the existing
+  sandboxed `klaude` user — don't loosen it. No LLM key in the website env (klaude
+  owns it). Display side is public read-only.
 ```
