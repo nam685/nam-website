@@ -32,8 +32,8 @@ def get_personal_stat(profile_id: int) -> dict:
     resp.raise_for_status()
     data = resp.json()
 
-    # Response shape: {"result": {"leaderboard_stats": [{leaderboard_id, wins, losses, rating, rank, ...}]}}
-    stats_list = data.get("result", {}).get("leaderboard_stats", [])
+    # Response shape: {"leaderboardStats": [{leaderboard_id, wins, losses, rating, rank, ...}]}
+    stats_list = data.get("leaderboardStats", [])
     for entry in stats_list:
         if entry.get("leaderboard_id") == _LEADERBOARD_1V1_RM:
             return {
@@ -65,7 +65,7 @@ def get_recent_1v1_matches(profile_id: int) -> list[dict]:
     resp.raise_for_status()
     data = resp.json()
 
-    matches_raw = data.get("result", {}).get("matchhistorymatch", []) or []
+    matches_raw = data.get("matchHistoryStats", []) or []
     result = []
     for match in matches_raw:
         if match.get("matchtype_id") != _MATCHTYPE_1V1_RM:

@@ -37,7 +37,9 @@ def test_age_techs():
 
 
 def test_name_helpers_fallback():
-    assert const.civ_name(8) == "Celts"
+    assert const.civ_name(8) == "Persians"
+    assert const.civ_name(31) == "Vietnamese"
+    assert const.civ_name(21) == "Incas"
     assert const.civ_name(999) == "#999"
     assert const.unit_name(const.VILLAGER_ID) == "Villager"
     assert const.building_name(70) == "House"
@@ -381,51 +383,61 @@ def test_analyze_match_skips_unranked(settings, monkeypatch):
 
 
 def _make_relic_stat_response(rating=1087, rank=512, wins=85, losses=73):
-    """Build a minimal Relic getPersonalStat response body."""
+    """Build a minimal Relic getPersonalStat response body (real API shape: top-level camelCase)."""
     return {
-        "result": {
-            "leaderboard_stats": [
-                {
-                    "leaderboard_id": 3,  # 1v1 RM
-                    "rating": rating,
-                    "rank": rank,
-                    "wins": wins,
-                    "losses": losses,
-                }
-            ]
-        }
+        "leaderboardStats": [
+            {
+                "leaderboard_id": 3,  # 1v1 RM
+                "rating": rating,
+                "rank": rank,
+                "wins": wins,
+                "losses": losses,
+            },
+            {
+                "leaderboard_id": 4,  # team RM — should be filtered out
+                "rating": rating + 50,
+                "rank": rank + 1000,
+                "wins": wins + 10,
+                "losses": losses + 5,
+            },
+        ]
     }
 
 
 def _make_relic_history_response(profile_id, relic_match_id=99001, my_civ_id=8, opp_civ_id=1):
-    """Build a minimal Relic getRecentMatchHistory response body."""
+    """Build a minimal Relic getRecentMatchHistory response body (real API shape: top-level camelCase)."""
     return {
-        "result": {
-            "matchhistorymatch": [
-                {
-                    "id": relic_match_id,
-                    "mapname": "Arabia",
-                    "completiontime": 1750000000,
-                    "matchtype_id": 6,  # ranked 1v1 RM
-                    "matchhistorymember": [
-                        {
-                            "profile_id": profile_id,
-                            "civilization_id": my_civ_id,
-                            "outcome": 1,
-                            "oldrating": 1070,
-                            "newrating": 1087,
-                        },
-                        {
-                            "profile_id": profile_id + 1,  # opponent
-                            "civilization_id": opp_civ_id,
-                            "outcome": 0,
-                            "oldrating": 1090,
-                            "newrating": 1073,
-                        },
-                    ],
-                }
-            ]
-        }
+        "matchHistoryStats": [
+            {
+                "id": relic_match_id,
+                "mapname": "Arabia",
+                "completiontime": 1750000000,
+                "matchtype_id": 6,  # ranked 1v1 RM — keep
+                "matchhistorymember": [
+                    {
+                        "profile_id": profile_id,
+                        "civilization_id": my_civ_id,
+                        "outcome": 1,
+                        "oldrating": 1070,
+                        "newrating": 1087,
+                    },
+                    {
+                        "profile_id": profile_id + 1,  # opponent
+                        "civilization_id": opp_civ_id,
+                        "outcome": 0,
+                        "oldrating": 1090,
+                        "newrating": 1073,
+                    },
+                ],
+            },
+            {
+                "id": relic_match_id + 1,
+                "mapname": "Arena",
+                "completiontime": 1749000000,
+                "matchtype_id": 0,  # custom game — must be filtered out
+                "matchhistorymember": [],
+            },
+        ]
     }
 
 
@@ -452,7 +464,7 @@ def test_relic_get_personal_stat_missing_leaderboard():
     from website.aoe2.relic import get_personal_stat
 
     mock_resp = MagicMock()
-    mock_resp.json.return_value = {"result": {"leaderboard_stats": []}}
+    mock_resp.json.return_value = {"leaderboardStats": []}
     mock_resp.raise_for_status = MagicMock()
 
     with patch("website.aoe2.relic.httpx.get", return_value=mock_resp):
@@ -468,33 +480,31 @@ def test_relic_get_recent_1v1_matches_filters_matchtype():
 
     profile_id = 14697894
     resp_body = {
-        "result": {
-            "matchhistorymatch": [
-                {
-                    "id": 1,
-                    "mapname": "Arabia",
-                    "completiontime": 1750000000,
-                    "matchtype_id": 6,  # ranked 1v1 — keep
-                    "matchhistorymember": [
-                        {
-                            "profile_id": profile_id,
-                            "civilization_id": 8,
-                            "outcome": 1,
-                            "oldrating": 1070,
-                            "newrating": 1087,
-                        },
-                        {"profile_id": 9999, "civilization_id": 1, "outcome": 0, "oldrating": 1090, "newrating": 1073},
-                    ],
-                },
-                {
-                    "id": 2,
-                    "mapname": "Arena",
-                    "completiontime": 1749000000,
-                    "matchtype_id": 2,  # team game — skip
-                    "matchhistorymember": [],
-                },
-            ]
-        }
+        "matchHistoryStats": [
+            {
+                "id": 1,
+                "mapname": "Arabia",
+                "completiontime": 1750000000,
+                "matchtype_id": 6,  # ranked 1v1 — keep
+                "matchhistorymember": [
+                    {
+                        "profile_id": profile_id,
+                        "civilization_id": 8,
+                        "outcome": 1,
+                        "oldrating": 1070,
+                        "newrating": 1087,
+                    },
+                    {"profile_id": 9999, "civilization_id": 1, "outcome": 0, "oldrating": 1090, "newrating": 1073},
+                ],
+            },
+            {
+                "id": 2,
+                "mapname": "Arena",
+                "completiontime": 1749000000,
+                "matchtype_id": 0,  # custom game — must be filtered out
+                "matchhistorymember": [],
+            },
+        ]
     }
     mock_resp = MagicMock()
     mock_resp.json.return_value = resp_body
@@ -688,7 +698,7 @@ def test_enrich_ladder_caches_elo(settings):
     stat_resp.raise_for_status = MagicMock()
 
     history_resp = MagicMock()
-    history_resp.json.return_value = {"result": {"matchhistorymatch": []}}
+    history_resp.json.return_value = {"matchHistoryStats": []}
     history_resp.raise_for_status = MagicMock()
 
     def fake_get(url, **_kwargs):
