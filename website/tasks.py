@@ -289,8 +289,157 @@ def rebuild_listen_graph():
 
 
 @app.task(max_retries=0)
+def enrich_ladder():
+    """Daily task: fetch current ELO/rank from Relic and backfill per-match relic data.
+
+    Steps:
+    1. GET getPersonalStat → cache current ELO/rank in Redis under ``aoe2:ladder_stat``.
+    2. GET getRecentMatchHistory → for each 1v1 RM match not yet enriched, try to match
+       against a local Aoe2Match using played_at proximity + civ alignment.
+
+    Matching approach
+    -----------------
+    For rows where played_at is set (extracted from the rec filename at upload), we use
+    that for the ±2h window.  Rows without played_at fall back to created_at as a rough proxy.
+
+    Match-to-local-row algorithm (best-effort):
+    - For each relic match (with completiontime epoch) find unenriched Aoe2Match rows
+      whose effective_time (played_at if set, else created_at) is within 2 hours.
+    - Among those candidates, prefer the row whose my_civ matches the relic civ name.
+    - If exactly one candidate passes, enrich it.  If multiple pass, take the closest.
+    - If no match, log at DEBUG and skip (next daily run will retry once new recs arrive).
+
+    The task is idempotent: rows with relic_match_id already set are skipped.
+    """
+
+    from datetime import datetime as dt
+    from datetime import timedelta
+    from datetime import timezone as dt_tz
+
+    import django.db.models.functions as dbf
+    from django.core.cache import cache
+    from django.utils import timezone as tz
+
+    from website.aoe2.const import civ_name as civ_name_fn
+    from website.aoe2.relic import get_personal_stat, get_recent_1v1_matches
+
+    profile_id = dj_settings.AOE2_PROFILE_ID
+
+    # -- 1. Current ladder ELO/rank ------------------------------------------
+    try:
+        stat = get_personal_stat(profile_id)
+        cache.set("aoe2:ladder_stat", stat, timeout=None)  # persisted until next run
+        logger.info("enrich_ladder: current ELO=%s rank=%s", stat.get("rating"), stat.get("rank"))
+    except Exception:
+        logger.exception("enrich_ladder: failed to fetch personal stat")
+        # Non-fatal: continue to backfill existing rows.
+
+    # -- 2. Backfill per-match relic data ------------------------------------
+    try:
+        relic_matches = get_recent_1v1_matches(profile_id)
+    except Exception:
+        logger.exception("enrich_ladder: failed to fetch recent match history")
+        return
+
+    enriched = 0
+    skipped = 0
+
+    for rm in relic_matches:
+        # Skip already-matched matches (idempotent by relic_match_id uniqueness check).
+        if Aoe2Match.objects.filter(relic_match_id=rm["relic_match_id"]).exists():
+            skipped += 1
+            continue
+
+        if not rm.get("completiontime"):
+            logger.debug("enrich_ladder: relic match %s has no completiontime, skipping", rm["relic_match_id"])
+            continue
+
+        completion_dt = dt.fromtimestamp(rm["completiontime"], tz=dt_tz.utc)
+
+        # Candidate rows: unenriched done matches within ±2 hours of completiontime.
+        window = timedelta(hours=2)
+        # Use played_at when set; fall back to created_at.
+        candidates = (
+            Aoe2Match.objects.filter(
+                analysis_status=Aoe2Match.Status.DONE,
+                relic_match_id__isnull=True,
+            )
+            .annotate(
+                effective_time=dbf.Coalesce("played_at", "created_at"),
+            )
+            .filter(
+                effective_time__gte=completion_dt - window,
+                effective_time__lte=completion_dt + window,
+            )
+        )
+
+        if not candidates.exists():
+            logger.debug(
+                "enrich_ladder: no candidate rows within ±2h of relic match %s (completion=%s)",
+                rm["relic_match_id"],
+                completion_dt,
+            )
+            continue
+
+        my_civ_name = civ_name_fn(rm["my_civ_id"]) if rm.get("my_civ_id") else None
+
+        # Filter by civ if possible.
+        if my_civ_name:
+            civ_candidates = candidates.filter(my_civ=my_civ_name)
+            if civ_candidates.exists():
+                candidates = civ_candidates
+
+        # Take the row whose effective_time is closest to completiontime.
+        best = None
+        best_delta = None
+        for row in candidates:
+            eff = row.played_at or row.created_at
+            if eff is None:
+                continue
+            delta = abs((eff - completion_dt).total_seconds())
+            if best_delta is None or delta < best_delta:
+                best = row
+                best_delta = delta
+
+        if best is None:
+            continue
+
+        best.relic_match_id = rm["relic_match_id"]
+        best.relic_enriched_at = tz.now()
+        if rm.get("my_new") is not None:
+            best.my_elo = rm["my_new"]
+        if rm.get("my_old") is not None and rm.get("my_new") is not None:
+            best.my_rating_change = rm["my_new"] - rm["my_old"]
+        if rm.get("opp_new") is not None:
+            best.opponent_elo = rm["opp_new"]
+        if rm.get("my_outcome") in ("win", "loss"):
+            best.my_result = rm["my_outcome"]
+        best.save(
+            update_fields=[
+                "relic_match_id",
+                "relic_enriched_at",
+                "my_elo",
+                "my_rating_change",
+                "opponent_elo",
+                "my_result",
+            ]
+        )
+        enriched += 1
+        logger.info("enrich_ladder: enriched match id=%s relic_match_id=%s", best.id, rm["relic_match_id"])
+
+    logger.info("enrich_ladder: done — enriched=%d skipped_already_done=%d", enriched, skipped)
+
+
+@app.task(max_retries=0)
 def analyze_match(match_id):
-    """Parse a stored rec into metrics. 1v1-only; non-1v1 -> skipped; failures -> error."""
+    """Parse a stored rec into metrics.
+
+    Gates:
+    - ranked 1v1 only: non-ranked or non-1v1 → analysis_status="skipped" (not shown publicly).
+    - ranked detection: header["de"]["rated"] boolean, verified reliable across all DE recs.
+
+    Failures → status="error" with error_detail stored.
+    """
     try:
         match = Aoe2Match.objects.get(id=match_id)
     except Aoe2Match.DoesNotExist:
@@ -302,7 +451,8 @@ def analyze_match(match_id):
     try:
         rec = parse_rec(match.rec_file.path, dj_settings.AOE2_PROFILE_ID)
 
-        if not rec.is_1v1 or rec.me is None or rec.opponent is None:
+        # Gate: ranked 1v1 only. Non-ranked or non-1v1 games are silently skipped.
+        if not rec.is_ranked or not rec.is_1v1 or rec.me is None or rec.opponent is None:
             match.analysis_status = Aoe2Match.Status.SKIPPED
             match.save(update_fields=["analysis_status"])
             return

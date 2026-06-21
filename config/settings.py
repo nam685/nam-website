@@ -86,6 +86,7 @@ LASTFM_API_KEY = env("LASTFM_API_KEY", default="")
 
 AOE2_PROFILE_ID = env.int("AOE2_PROFILE_ID", default=14697894)
 AOE2_IGN = env("AOE2_IGN", default="nom")
+AOE2_RELIC_HOST = env("AOE2_RELIC_HOST", default="https://aoe-api.worldsedgelink.com")
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -116,6 +117,10 @@ CELERY_BEAT_SCHEDULE = {
     "sync-listens-daily": {
         "task": "website.tasks.sync_listens",
         "schedule": crontab(hour=4, minute=0),
+    },
+    "enrich-aoe2-ladder-daily": {
+        "task": "website.tasks.enrich_ladder",
+        "schedule": crontab(hour=5, minute=0),
     },
 }
 

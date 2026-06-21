@@ -1,6 +1,8 @@
 from .aoe2 import (
+    aoe2_clip,
     aoe2_delete,
     aoe2_detail,
+    aoe2_feature,
     aoe2_list,
     aoe2_reanalyze,
     aoe2_stats,
@@ -87,8 +89,10 @@ from .watch import (
 )
 
 __all__ = [
+    "aoe2_clip",
     "aoe2_delete",
     "aoe2_detail",
+    "aoe2_feature",
     "aoe2_list",
     "aoe2_reanalyze",
     "aoe2_stats",
