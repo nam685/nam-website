@@ -4,25 +4,6 @@ from mgz.fast import Action
 
 from . import const
 
-# Eco building names excluded from OPP key-strategic filter.
-_OPP_ECO_BUILDINGS = {
-    "Farm",
-    "Mill",
-    "Lumber Camp",
-    "Mining Camp",
-    "House",
-    "Palisade Wall",
-    "Stone Wall",
-    "Fortified Wall",
-    "Gate",
-    "Palisade Gate",
-    "Gate (variant)",
-    "Fish Trap",
-    "Dock",
-    "Outpost",
-    "Market",
-}
-
 
 def _fmt(ms):
     s = ms // 1000
@@ -76,16 +57,19 @@ def _collapse_spam(lines, window_ms=10_000):
 
     result = []
     run_t, run_role, run_tag, run_name, run_count = lines[0]
+    last_t = run_t  # sliding-window anchor: most recent event in the current run
 
-    for t, role, tag, name, _ in lines[1:]:
+    for t, role, tag, name, amount in lines[1:]:
         same_event = role == run_role and tag == run_tag and name == run_name
-        within_window = (t - run_t) <= window_ms
+        within_window = (t - last_t) <= window_ms
         if same_event and within_window:
-            run_count += 1
+            run_count += amount  # accumulate the event's amount (trains can be >1), not 1
+            last_t = t
         else:
             display = f"{run_name} x{run_count}" if run_count > 1 else run_name
             result.append((run_t, run_role, run_tag, display))
-            run_t, run_role, run_tag, run_name, run_count = t, role, tag, name, 1
+            run_t, run_role, run_tag, run_name, run_count = t, role, tag, name, amount
+            last_t = t
 
     display = f"{run_name} x{run_count}" if run_count > 1 else run_name
     result.append((run_t, run_role, run_tag, display))
