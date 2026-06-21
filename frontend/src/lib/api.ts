@@ -11,6 +11,7 @@ export interface Thought {
   id: number;
   content: string;
   image: string | null;
+  video: string | null;
   created_at: string;
 }
 
