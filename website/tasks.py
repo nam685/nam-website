@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.utils import timezone as dj_timezone
 
 from config.celery import app
+from website.aoe2.coach import build_coach_prompt, run_claude_coach
 from website.aoe2.metrics import compute_metrics
 from website.aoe2.parser import parse_rec
 from website.aoe2.timeline import build_timeline, render_salient_log
@@ -311,6 +312,15 @@ def analyze_match(match_id):
         timeline_payload = {k: v for k, v in timeline.items()}
         timeline_payload["salient_log"] = render_salient_log(timeline)
 
+        # Stage 4: LLM coach — graceful; failure must not block metrics being saved.
+        coach_analysis = ""
+        coach_model = ""
+        try:
+            prompt = build_coach_prompt(timeline_payload["salient_log"], metrics)
+            coach_analysis, coach_model = run_claude_coach(prompt)
+        except Exception:  # noqa: BLE001
+            logger.warning("Coach stage failed for match %s — storing empty coach_analysis", match_id)
+
         match.map_name = rec.map_name
         match.duration_seconds = rec.duration_ms // 1000
         match.game_version = rec.version
@@ -319,6 +329,8 @@ def analyze_match(match_id):
         match.my_result = rec.my_result
         match.timeline = timeline_payload
         match.metrics = metrics
+        match.coach_analysis = coach_analysis
+        match.coach_model = coach_model
         match.analyzed_at = dj_timezone.now()
         match.analysis_status = Aoe2Match.Status.DONE
         match.save()

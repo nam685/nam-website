@@ -1,9 +1,12 @@
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import mgz.fast.header
 import pytest
 
 from website.aoe2 import const
+from website.aoe2.coach import build_coach_prompt, run_claude_coach
 from website.aoe2.metrics import classify_opening, compute_metrics
 from website.aoe2.parser import parse_rec
 from website.aoe2.timeline import build_timeline, render_salient_log
@@ -96,6 +99,184 @@ def test_classify_opening_archers():
         "action_count": 50,
     }
     assert classify_opening(tl) == "Archers"
+
+
+# ---------------------------------------------------------------------------
+# Coach unit tests (no fixture needed — subprocess is monkeypatched)
+# ---------------------------------------------------------------------------
+
+_SAMPLE_SALIENT_LOG = """\
+09:45 AGE_UP feudal
+10:02 BUILD Archery Range
+10:45 TRAIN Archer x2
+12:30 TECH Double-Bit Axe
+18:20 AGE_UP castle
+00:00 APM total_actions=320
+"""
+
+_SAMPLE_METRICS = {
+    "feudal_uptime_s": 585,
+    "castle_uptime_s": 1100,
+    "imperial_uptime_s": None,
+    "apm": 53,
+    "villager_count": 22,
+    "opening": "Archers",
+    "army": [{"name": "Archer", "amount": 12}, {"name": "Skirmisher", "amount": 4}],
+    "eco_tech_timings": [{"name": "Double-Bit Axe", "t_s": 750}],
+}
+
+
+def test_build_coach_prompt_contains_salient_log():
+    prompt = build_coach_prompt(_SAMPLE_SALIENT_LOG, _SAMPLE_METRICS)
+    assert "AGE_UP feudal" in prompt
+    assert "SALIENT LOG" in prompt
+
+
+def test_build_coach_prompt_contains_metric_values():
+    prompt = build_coach_prompt(_SAMPLE_SALIENT_LOG, _SAMPLE_METRICS)
+    assert "585" in prompt  # feudal_uptime_s
+    assert "1100" in prompt  # castle_uptime_s
+    assert "Archers" in prompt  # opening tag
+    assert "53" in prompt  # apm
+
+
+def test_run_claude_coach_success():
+    fake_json = json.dumps(
+        {
+            "result": "Good feudal uptime. Focus on villager production in Castle Age.",
+            "model": "claude-opus-4-5",
+            "is_error": False,
+        }
+    )
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    fake_proc.stdout = fake_json
+    fake_proc.stderr = ""
+
+    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+        text, model = run_claude_coach("some prompt")
+
+    assert "villager production" in text
+    assert model == "claude-opus-4-5"
+
+
+def test_run_claude_coach_nonzero_exit_raises():
+    fake_proc = MagicMock()
+    fake_proc.returncode = 1
+    fake_proc.stdout = ""
+    fake_proc.stderr = "permission denied"
+
+    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+        with pytest.raises(RuntimeError, match="exited 1"):
+            run_claude_coach("some prompt")
+
+
+def test_run_claude_coach_missing_result_raises():
+    fake_json = json.dumps({"model": "claude-opus-4-5", "is_error": False})
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    fake_proc.stdout = fake_json
+
+    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+        with pytest.raises(RuntimeError, match="missing 'result'"):
+            run_claude_coach("some prompt")
+
+
+def _make_match_with_dummy_file(file_hash):
+    """Create an Aoe2Match with a tiny dummy rec_file so .path resolves."""
+    from django.core.files.base import ContentFile
+
+    from website.models import Aoe2Match
+
+    m = Aoe2Match.objects.create(file_hash=file_hash)
+    m.rec_file.save("dummy.aoe2record", ContentFile(b"dummy"), save=True)
+    return m
+
+
+def _fake_pipeline():
+    """Return (fake_rec, fake_timeline, fake_metrics, fake_salient) stubs."""
+    fake_rec = MagicMock()
+    fake_rec.is_1v1 = True
+    fake_rec.me = {"number": 1, "civ_name": "Celts", "is_me": True}
+    fake_rec.opponent = {"civ_name": "Franks", "is_me": False}
+    fake_rec.map_name = "Arabia"
+    fake_rec.duration_ms = 1_200_000
+    fake_rec.version = "Version.DE"
+    fake_rec.my_result = "win"
+    fake_rec.ops = []
+
+    fake_timeline = {
+        "uptimes": {"feudal": 585_000, "castle": 1_100_000, "imperial": None},
+        "builds": [],
+        "eco_techs": [],
+        "units": [],
+        "villager_queue_times": [],
+        "action_count": 320,
+    }
+    fake_metrics = {
+        "feudal_uptime_s": 585,
+        "castle_uptime_s": 1100,
+        "imperial_uptime_s": None,
+        "apm": 53,
+        "villager_count": 22,
+        "opening": "Archers",
+        "army": [],
+        "eco_tech_timings": [],
+        "estimates": [],
+    }
+    fake_salient = "09:45 AGE_UP feudal\n00:00 APM total_actions=320"
+    return fake_rec, fake_timeline, fake_metrics, fake_salient
+
+
+@pytest.mark.django_db
+def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
+    """Coach succeeds → coach_analysis + coach_model are stored on the match."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_salient = _fake_pipeline()
+
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_salient_log", lambda *_a, **_kw: fake_salient)
+    monkeypatch.setattr(
+        "website.tasks.run_claude_coach",
+        lambda *_a, **_kw: ("Great game. Work on villager production.", "claude-opus-4-5"),
+    )
+
+    m = _make_match_with_dummy_file("coach-success-hash")
+    analyze_match(m.id)
+    m.refresh_from_db()
+
+    assert m.analysis_status == "done"
+    assert "villager production" in m.coach_analysis
+    assert m.coach_model == "claude-opus-4-5"
+
+
+@pytest.mark.django_db
+def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
+    """Coach raises → status is still 'done', coach_analysis is empty string."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_salient = _fake_pipeline()
+
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_salient_log", lambda *_a, **_kw: fake_salient)
+    monkeypatch.setattr(
+        "website.tasks.run_claude_coach",
+        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("claude not found")),
+    )
+
+    m = _make_match_with_dummy_file("coach-fail-hash")
+    analyze_match(m.id)
+    m.refresh_from_db()
+
+    assert m.analysis_status == "done"
+    assert m.coach_analysis == ""
 
 
 @pytest.mark.django_db
