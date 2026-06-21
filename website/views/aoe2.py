@@ -1,6 +1,7 @@
 import hashlib
 import logging
 
+from django.core.cache import cache
 from django.db.models import Count
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -8,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from ..auth import require_admin
 from ..models import Aoe2Match
 from ..tasks import analyze_match
-from ..utils import parse_pagination
+from ..utils import parse_json_body, parse_pagination
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +62,26 @@ def aoe2_stats(_request):
     wins = qs.filter(my_result="win").count()
     losses = qs.filter(my_result="loss").count()
     fav = qs.values("my_civ").annotate(n=Count("my_civ")).order_by("-n").first()
-    latest_elo = qs.exclude(my_elo=None).order_by("-played_at").values_list("my_elo", flat=True).first()
+
+    # Prefer the Relic-cached live ELO/rank (written by enrich_ladder daily task).
+    ladder_stat = cache.get("aoe2:ladder_stat") or {}
+    current_elo = ladder_stat.get("rating")
+    current_rank = ladder_stat.get("rank")
+
+    # Fallback: derive from the most recently played enriched match.
+    if current_elo is None:
+        current_elo = (
+            qs.exclude(my_elo=None).order_by("-played_at", "-created_at").values_list("my_elo", flat=True).first()
+        )
+
     return JsonResponse(
         {
             "total": qs.count(),
             "wins": wins,
             "losses": losses,
             "favourite_civ": fav["my_civ"] if fav and fav["my_civ"] else None,
-            "current_elo": latest_elo,
+            "current_elo": current_elo,
+            "current_rank": current_rank,
         }
     )
 
@@ -126,3 +139,72 @@ def aoe2_reanalyze(request, match_id):
         return JsonResponse({"error": "Not found"}, status=404)
     analyze_match.delay(match_id)
     return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_admin
+def aoe2_clip(request, match_id):
+    """Attach (or update) a highlight clip to a match.
+
+    Body JSON: {url, title?, note?, start_seconds?}.
+    Accepts YouTube watch URLs and Twitch VOD/clip URLs; stores the raw watch
+    URL (not the embed form — embedding is done client-side via clipEmbedUrl()).
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+    url = (body.get("url") or "").strip()
+    if not url:
+        return JsonResponse({"error": "url required"}, status=400)
+
+    match.clip_url = url
+    match.clip_title = (body.get("title") or "")[:120]
+    match.clip_note = (body.get("note") or "")[:300]
+    raw_start = body.get("start_seconds")
+    if raw_start is not None:
+        try:
+            match.clip_start_seconds = int(raw_start)
+        except (TypeError, ValueError):
+            pass
+    match.save(update_fields=["clip_url", "clip_title", "clip_note", "clip_start_seconds"])
+    return JsonResponse(
+        {
+            "ok": True,
+            "clip_url": match.clip_url,
+            "clip_title": match.clip_title,
+            "clip_note": match.clip_note,
+            "clip_start_seconds": match.clip_start_seconds,
+        }
+    )
+
+
+@csrf_exempt
+@require_admin
+def aoe2_feature(request, match_id):
+    """Toggle the featured flag on a match.
+
+    Only one match can be featured at a time.  POSTing to an already-featured
+    match un-features it (toggle).  Clearing other featured rows is atomic via a
+    single UPDATE.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return JsonResponse({"error": "Not found"}, status=404)
+
+    new_state = not match.featured
+    if new_state:
+        # Clear any other featured rows first (only one at a time).
+        Aoe2Match.objects.exclude(id=match_id).filter(featured=True).update(featured=False)
+    match.featured = new_state
+    match.save(update_fields=["featured"])
+    return JsonResponse({"ok": True, "featured": match.featured})

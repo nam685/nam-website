@@ -19,6 +19,7 @@ class ParsedRec:
     map_name: str
     duration_ms: int
     is_1v1: bool
+    is_ranked: bool
     me: dict | None
     opponent: dict | None
     my_result: str
@@ -90,12 +91,17 @@ def parse_rec(path, owner_profile_id):
     if is_1v1 and me and opponent:
         my_result = _result_from_ops(ops, me["number"], opponent["number"])
 
+    # header["de"]["rated"] is True for ranked matches, False for unranked/custom.
+    # This field is present in all DE recs (verified across 327 samples).
+    is_ranked = bool(header["de"].get("rated", False))
+
     return ParsedRec(
         version=str(header["version"]),
         save_version=float(header["save_version"]),
         map_name=map_name,
         duration_ms=duration_ms,
         is_1v1=is_1v1,
+        is_ranked=is_ranked,
         me=me,
         opponent=opponent,
         my_result=my_result,
