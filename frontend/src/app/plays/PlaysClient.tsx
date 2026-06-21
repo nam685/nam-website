@@ -16,10 +16,11 @@ const LichessGameCreator = dynamic(
   () => import("@/components/LichessGameCreator"),
   { ssr: false },
 );
+const Aoe2Tab = dynamic(() => import("@/components/Aoe2Tab"), { ssr: false });
 
 const ACCENT = "var(--accent)";
 
-type Tab = "explorer" | "play";
+type Tab = "explorer" | "play" | "empires";
 
 export default function PlaysClient() {
   const [tab, setTab] = useState<Tab>("explorer");
@@ -126,6 +127,16 @@ export default function PlaysClient() {
         >
           Explorer
         </button>
+        <button
+          onClick={() => setTab("empires")}
+          style={{
+            ...tabBtnStyle,
+            borderBottomColor: tab === "empires" ? ACCENT : "transparent",
+            color: tab === "empires" ? ACCENT : "#555",
+          }}
+        >
+          Empires
+        </button>
         {isAdmin && (
           <button
             onClick={() => setTab("play")}
@@ -154,6 +165,9 @@ export default function PlaysClient() {
 
       {/* Explorer tab */}
       {tab === "explorer" && <OpeningExplorer />}
+
+      {/* Empires tab */}
+      {tab === "empires" && <Aoe2Tab />}
 
       {/* Play tab */}
       {tab === "play" && isAdmin && (
