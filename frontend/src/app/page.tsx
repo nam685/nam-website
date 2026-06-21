@@ -6,22 +6,27 @@ import {
   DOTS,
   angleFromCenter,
   lerpDotColor,
-  fetchRandomContent,
-  type ContentItem,
+  dotHueCss,
 } from "@/lib/homepageContent";
+import { API } from "@/lib/api";
 
 export default function Home() {
-  const [content, setContent] = useState<ContentItem | null>(null);
+  // Pick one photo per page load (1..5), stable for the session.
+  // Start null to avoid hydration mismatch; choose client-side in effect.
+  const [photo, setPhoto] = useState<number | null>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
+  const photoRef = useRef<HTMLDivElement>(null);
 
+  // Choose photo index client-side only (after hydration).
   useEffect(() => {
-    fetchRandomContent().then(setContent);
+    setPhoto(1 + Math.floor(Math.random() * 5));
   }, []);
 
   useEffect(() => {
     const orbit = orbitRef.current;
     const ambient = ambientRef.current;
+    const photoWrap = photoRef.current;
     if (!orbit || !ambient) return;
 
     function onMove(e: MouseEvent) {
@@ -33,6 +38,7 @@ export default function Home() {
       const angle = angleFromCenter(dx, dy);
       const [r, g, b] = lerpDotColor(angle);
       ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.12) 0%, transparent 70%)`;
+      photoWrap?.style.setProperty("--hue", `rgb(${r},${g},${b})`);
     }
 
     document.addEventListener("mousemove", onMove);
@@ -94,79 +100,69 @@ export default function Home() {
           }}
         />
 
-        {/* Center content */}
+        {/* Center profile photo — diameter = 75% of center→dot distance */}
         <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            maxWidth: "65%",
-            textAlign: "center",
-            zIndex: 2,
-          }}
+          ref={photoRef}
+          style={
+            {
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "75%",
+              height: "75%",
+              borderRadius: "50%",
+              zIndex: 2,
+              "--hue": dotHueCss(0),
+              boxShadow: "0 0 24px var(--hue)",
+              border: "2px solid var(--hue)",
+              transition: "box-shadow 0.2s, border-color 0.2s",
+              animation: "fadeIn 0.8s ease-out",
+            } as React.CSSProperties
+          }
         >
-          {content?.type === "thought" && (
-            <div style={{ animation: "fadeIn 0.8s ease-out" }}>
-              <p
-                style={{
-                  fontSize: "clamp(0.9rem, 2.5vw, 1.1rem)",
-                  lineHeight: 1.7,
-                  color: "#e5e2e1",
-                  fontWeight: 300,
-                  fontStyle: "italic",
-                }}
-              >
-                &ldquo;{content.text}&rdquo;
-              </p>
-              <span
-                style={{
-                  fontFamily: "var(--font-headline)",
-                  fontSize: "0.6rem",
-                  color: "#333",
-                  marginTop: "0.75rem",
-                  display: "block",
-                  letterSpacing: "0.15em",
-                }}
-              >
-                {content.date}
-              </span>
-            </div>
-          )}
-          {content?.type === "drawing" && (
-            <div style={{ animation: "fadeIn 0.8s ease-out" }}>
-              <img
-                src={content.src}
-                alt={content.alt}
-                style={{
-                  maxHeight: 200,
-                  maxWidth: "100%",
-                  borderRadius: 6,
-                  border: "1px solid #1a1a1a",
-                  objectFit: "contain",
-                }}
-              />
-            </div>
-          )}
-          {content?.type === "greeting" && (
-            <p
-              style={{
-                fontSize: "clamp(1.2rem, 3vw, 1.6rem)",
-                fontWeight: 300,
-                color: "#e5e2e1",
-                animation: "fadeIn 0.8s ease-out",
+          {photo !== null && (
+            <img
+              src={`${API}/media/profile/profile-${photo}.webp`}
+              alt="Nam"
+              onError={(e) => {
+                // Photos live on the server media root (outside git/CI); if one is
+                // missing, hide the img and let the tinted rim stand on its own.
+                e.currentTarget.style.display = "none";
               }}
-            >
-              {content.text}
-            </p>
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                borderRadius: "50%",
+                display: "block",
+              }}
+            />
           )}
+          {/* Edge tint — recolors the photo's outer ring toward the hue */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle, transparent 58%, var(--hue) 100%)",
+              mixBlendMode: "overlay",
+              transition: "background 0.2s",
+              pointerEvents: "none",
+            }}
+          />
         </div>
 
         {/* Dots */}
         {DOTS.map((dot) => {
           const rad = (dot.angle * Math.PI) / 180;
-          const x = Math.sin(rad) * 50;
-          const y = -Math.cos(rad) * 50;
+          // Round to a fixed precision and emit a plain percentage (not calc())
+          // so the SSR and client strings are byte-identical — Math.sin/cos are
+          // implementation-defined and differ in their last bit between Node and
+          // the browser, which otherwise trips a hydration mismatch.
+          const x = (50 + Math.sin(rad) * 50).toFixed(4);
+          const y = (50 - Math.cos(rad) * 50).toFixed(4);
 
           return (
             <Link
@@ -176,8 +172,8 @@ export default function Home() {
               style={
                 {
                   position: "absolute",
-                  top: `calc(50% + ${y}%)`,
-                  left: `calc(50% + ${x}%)`,
+                  top: `${y}%`,
+                  left: `${x}%`,
                   transform: "translate(-50%, -50%)",
                   zIndex: 10,
                   "--pill-color": dot.color,

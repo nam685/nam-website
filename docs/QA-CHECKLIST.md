@@ -18,6 +18,13 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Site works over HTTPS (Caddy auto-TLS)
 - [ ] `/api/health/` returns 200
 
+## Home
+
+- [ ] Landing orbit renders: center profile photo + section dots, no console errors (no hydration warning)
+- [ ] Profile photo is circular, served from `/media/profile/profile-N.webp`, and varies between reloads (random per load)
+- [ ] Photo rim + edge tint track the mouse, matching the ambient glow hue (e.g. red near `thinks`, cyan near `plays`)
+- [ ] Photo sized ~75% of the center→dot distance; layout holds on mobile (orbit goes 85vw)
+
 ## Auth (/sudo)
 
 - [ ] Login form appears at `/sudo`
