@@ -151,8 +151,12 @@ export default function Home() {
         {/* Dots */}
         {DOTS.map((dot) => {
           const rad = (dot.angle * Math.PI) / 180;
-          const x = Math.sin(rad) * 50;
-          const y = -Math.cos(rad) * 50;
+          // Round to a fixed precision and emit a plain percentage (not calc())
+          // so the SSR and client strings are byte-identical — Math.sin/cos are
+          // implementation-defined and differ in their last bit between Node and
+          // the browser, which otherwise trips a hydration mismatch.
+          const x = (50 + Math.sin(rad) * 50).toFixed(4);
+          const y = (50 - Math.cos(rad) * 50).toFixed(4);
 
           return (
             <Link
@@ -162,8 +166,8 @@ export default function Home() {
               style={
                 {
                   position: "absolute",
-                  top: `calc(50% + ${y}%)`,
-                  left: `calc(50% + ${x}%)`,
+                  top: `${y}%`,
+                  left: `${x}%`,
                   transform: "translate(-50%, -50%)",
                   zIndex: 10,
                   "--pill-color": dot.color,
