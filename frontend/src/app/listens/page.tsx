@@ -32,6 +32,7 @@ export default function ListensGraphPage() {
   const [results, setResults] = useState<GraphSearchResult[]>([]);
   const [hovered, setHovered] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [syncMessage, setSyncMessage] = useState("");
   const [showReauth, setShowReauth] = useState(false);
   const [reauthHeaders, setReauthHeaders] = useState("");
   const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
@@ -119,27 +120,41 @@ export default function ListensGraphPage() {
     const token = getAdminToken(); // redirects to /sudo if no token
     if (!token) return;
     setSyncStatus("syncing");
+    setSyncMessage("");
     try {
       const res = await fetch(`${API}/api/listens/sync/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      // 401 = admin token expired (bounce to login). YTM-cookie expiry is 409 — handled below
+      // so it doesn't get mistaken for admin-token expiry and log the user out.
       if (res.status === 401) {
         handleAuthExpired();
         return;
       }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.auth_expired) {
+        setSyncStatus("error");
+        setSyncMessage("YouTube Music session expired — re-authenticate below, then sync again.");
+        setShowReauth(true);
+        return; // leave the message + panel up; don't auto-clear
+      }
       if (!res.ok) {
         setSyncStatus("error");
+        setSyncMessage(data.error || "Sync failed.");
       } else {
-        const data = await res.json();
         setSyncStatus("done");
         // Sync rebuilds the graph server-side; refresh the current patch.
         if (data.synced > 0 || data.synced_liked > 0) loadPatch();
       }
     } catch {
       setSyncStatus("error");
+      setSyncMessage("Network error.");
     }
-    setTimeout(() => setSyncStatus("idle"), 3000);
+    setTimeout(() => {
+      setSyncStatus("idle");
+      setSyncMessage("");
+    }, 4000);
   };
 
   const saveReauth = async () => {
@@ -154,7 +169,11 @@ export default function ListensGraphPage() {
         body: JSON.stringify({ headers: reauthHeaders }),
       });
       if (res.status === 401) {
-        handleAuthExpired();
+        // Admin token expired. Do NOT redirect/clear — that discards the pasted headers and is
+        // exactly how this silently failed before. Keep the textarea; the user can re-login in a
+        // new tab and click Save again (getAdminToken reads the refreshed token from storage).
+        setReauthError("Admin login expired. Open /sudo in another tab, log in, then click SAVE again — your pasted headers are kept.");
+        setReauthStatus("error");
         return;
       }
       const data = await res.json();
@@ -267,6 +286,12 @@ export default function ListensGraphPage() {
           </>
         )}
       </div>
+
+      {isAdmin && syncMessage && (
+        <div style={{ color: "#f87171", fontSize: 11, fontFamily: "monospace", padding: "0 4px 8px", lineHeight: 1.5 }}>
+          {syncMessage}
+        </div>
+      )}
 
       {isAdmin && showReauth && (
         <div style={{ background: "rgba(20,20,20,0.8)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 8, padding: 16, marginBottom: 8 }}>

@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 BROWSER_JSON_PATH = "browser.json"
 VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
+# Hop-by-hop / request-specific headers that must not be forwarded when we probe YTM ourselves.
+_PROBE_SKIP_HEADERS = {"content-length", "host", "connection", "te", "accept-encoding"}
+# The browse response embeds {"key": "logged_in", "value": "0|1"} in its serviceTrackingParams.
+_LOGGED_IN_RE = re.compile(r'logged_in"[^}]*?"value":\s*"(\d)"', re.DOTALL)
+
+
+class YTMAuthError(RuntimeError):
+    """Raised when YouTube Music credentials are missing or the session is logged out.
+
+    Distinct from generic errors so callers can surface a clear "re-authenticate" message
+    instead of an opaque 502 — the cookie silently expiring is the #1 cause of sync no-ops.
+    """
+
+
 # Rate limit: 1 sync per 5 minutes
 SYNC_COOLDOWN = 300
 _SYNC_KEY = "listens_last_sync_ts"
@@ -81,6 +95,41 @@ def _init_ytmusic():
     if headers is None:
         return None, "Browser auth not configured. Run: ytmusicapi browser"
     return YTMusic(headers), None
+
+
+def _is_logged_in(headers):
+    """Probe YTM to confirm `headers` is an *authenticated* session, not just structurally valid.
+
+    `YTMusic(headers)` construction never hits the network, so a logged-out cookie passes it
+    silently — then every sync returns zero. We hit the history browse endpoint and read the
+    `logged_in` flag YouTube echoes back. Returns False on any error (treat as not-logged-in).
+    """
+    import requests
+    from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
+
+    cookie = (headers or {}).get("cookie", "")
+    if not cookie:
+        return False
+    try:
+        origin = headers.get("origin", "https://music.youtube.com")
+        probe_headers = {k: v for k, v in headers.items() if k.lower() not in _PROBE_SKIP_HEADERS}
+        probe_headers["authorization"] = get_authorization(sapisid_from_cookie(cookie) + " " + origin)
+        body = {
+            "browseId": "FEmusic_history",
+            "context": {"client": {"clientName": "WEB_REMIX", "clientVersion": "1.20240101.00.00", "hl": "en"}},
+        }
+        resp = requests.post(
+            "https://music.youtube.com/youtubei/v1/browse",
+            params={"alt": "json"},
+            json=body,
+            headers=probe_headers,
+            timeout=20,
+        )
+        match = _LOGGED_IN_RE.search(resp.text)
+        return bool(match) and match.group(1) == "1"
+    except Exception:
+        logger.warning("YTM login probe failed", exc_info=True)
+        return False
 
 
 def _parse_track_item(item):
@@ -157,6 +206,12 @@ def _do_sync(progress=None):
     yt, err = _init_ytmusic()
     if err:
         raise RuntimeError(err)
+
+    # Verify the session is actually logged in before doing any work. A stale/expired cookie
+    # still constructs a valid YTMusic client but returns a logged-out (empty/non-JSON) history,
+    # which otherwise surfaces as an opaque 502 and silently syncs nothing.
+    if not _is_logged_in(_load_browser_headers()):
+        raise YTMAuthError("YouTube Music session is logged out — re-authenticate on /listens.")
 
     # --- Sync play history ---
     report("Fetching YouTube Music play history…")
@@ -265,6 +320,11 @@ def listen_sync(request):
 
     try:
         result = _do_sync()
+    except YTMAuthError as e:
+        # 409 (not 401) — the admin token is fine; it's the YTM cookie that's stale. A 401 would
+        # trip the frontend's admin-token-expiry path and bounce the user to /sudo. `auth_expired`
+        # lets the listens page show a "re-authenticate YTM" prompt instead.
+        return JsonResponse({"error": str(e), "auth_expired": True}, status=409)
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
     except Exception:
@@ -468,24 +528,28 @@ def listen_reauth(request):
     if "user-agent" not in parsed:
         parsed["user-agent"] = "Mozilla/5.0"
 
-    # Validate by trying to init YTMusic
+    # Validate that the headers parse into a usable YTMusic client (catches malformed cookies).
     try:
         from ytmusicapi import YTMusic
-        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
-        if "authorization" not in parsed and "cookie" in parsed:
-            sapisid = sapisid_from_cookie(parsed["cookie"])
-            origin = parsed.get("origin", "https://music.youtube.com")
-            parsed["authorization"] = get_authorization(sapisid + " " + origin)
-
-        YTMusic(parsed)
+        YTMusic(dict(parsed))
     except Exception as e:
         return JsonResponse({"error": f"Headers invalid — YTMusic init failed: {e}"}, status=400)
 
-    # Do NOT persist the computed `authorization` (SAPISIDHASH): it embeds a timestamp and
-    # expires within hours, so a stored value goes stale and later syncs fail. Strip it and
-    # store only the cookie/headers — `_load_browser_headers` recomputes a fresh hash on each
-    # use (matching what `ytmusicapi browser` writes).
+    # Crucially, verify the session is actually *logged in*. YTMusic() construction never hits
+    # the network, so a logged-out cookie passes validation and then silently syncs nothing —
+    # exactly the failure mode this guards against. Probe before persisting.
+    if not _is_logged_in(parsed):
+        return JsonResponse(
+            {
+                "error": "Those headers are not a logged-in session. Copy them from a tab where you're signed into YouTube Music."
+            },
+            status=400,
+        )
+
+    # Never persist a computed `authorization` (SAPISIDHASH): it embeds a timestamp and expires
+    # within hours, so a stored value goes stale and later syncs fail. `_load_browser_headers`
+    # recomputes a fresh hash on each use (matching what `ytmusicapi browser` writes).
     parsed.pop("authorization", None)
 
     auth_path = _get_auth_path()
