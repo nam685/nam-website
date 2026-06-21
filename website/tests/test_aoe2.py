@@ -9,13 +9,19 @@ from website.aoe2.parser import parse_rec
 from website.aoe2.timeline import build_timeline, render_salient_log
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_1v1.aoe2record"
+requires_fixture = pytest.mark.skipif(
+    not FIXTURE.exists(),
+    reason="real .aoe2record fixture not present (gitignored; see website/tests/fixtures/)",
+)
 OWNER_PROFILE_ID = 14697894
 
 
+@requires_fixture
 def test_fixture_exists():
     assert FIXTURE.exists(), "place a real .aoe2record at website/tests/fixtures/sample_1v1.aoe2record"
 
 
+@requires_fixture
 def test_mgz_fast_parses_fixture_header():
     with FIXTURE.open("rb") as f:
         header = mgz.fast.header.parse(f)
@@ -34,6 +40,7 @@ def test_name_helpers_fallback():
     assert const.building_name(70) == "House"
 
 
+@requires_fixture
 def test_parse_rec_basic():
     rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
     assert rec.version == "Version.DE" or "DE" in rec.version
@@ -46,6 +53,7 @@ def test_parse_rec_basic():
     assert rec.my_result in ("win", "loss", "unknown")
 
 
+@requires_fixture
 def test_build_timeline_and_log():
     rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
     tl = build_timeline(rec.ops, rec.me["number"])
@@ -59,6 +67,7 @@ def test_build_timeline_and_log():
         assert line.split(" ", 2)[1] in {"AGE_UP", "BUILD", "TECH", "TRAIN", "APM"}
 
 
+@requires_fixture
 def test_compute_metrics():
     rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
     tl = build_timeline(rec.ops, rec.me["number"])
@@ -99,6 +108,7 @@ def test_aoe2_match_model_defaults():
     assert m.timeline == {} and m.metrics == {}
 
 
+@requires_fixture
 @pytest.mark.django_db
 def test_analyze_match_done(settings):
     from django.core.files import File
@@ -126,6 +136,7 @@ def test_upload_requires_admin(client):
     assert resp.status_code == 401
 
 
+@requires_fixture
 @pytest.mark.django_db
 def test_upload_then_list_and_detail(client, auth_headers, settings):
     settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
@@ -148,6 +159,7 @@ def test_upload_then_list_and_detail(client, auth_headers, settings):
     assert "metrics" in detail and "timeline" in detail
 
 
+@requires_fixture
 @pytest.mark.django_db
 def test_upload_dedup(client, auth_headers, settings):
     settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
