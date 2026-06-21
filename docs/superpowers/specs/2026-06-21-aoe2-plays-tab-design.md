@@ -245,5 +245,12 @@ startup). Behaviour:
   prompt carries the benchmark knowledge so the model mostly reports, not reasons.
 - **klaude queue contention** — the coach shares the klaude/Celery queue with
   `/slops`; once-per-game and async, so acceptable. Reuses one `run_klaude` helper.
-- **Security** — upload is admin-only; no LLM key in the website env (klaude owns it).
+- **Security** — the klaude job is **admin-only triggered** (watcher with
+  `ADMIN_SECRET` or admin upload box), so none of the `/slops` public-abuse machinery
+  (rate limits, global cap, approval queue) is needed here. Two residual notes:
+  (1) opponent-controlled strings in the rec (username, in-game chat) are untrusted
+  input flowing into an `--auto-approve` agent — escape/label them as data when
+  building `salient.log`, never drop raw chat into the prompt; (2) containment still
+  relies on the existing sandboxed `klaude` user — don't loosen it. No LLM key in the
+  website env (klaude owns it). Display side is public read-only.
 ```
