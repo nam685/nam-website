@@ -99,3 +99,24 @@ def test_aoe2_match_model_defaults():
     assert m.analysis_status == "pending"
     assert m.featured is False
     assert m.timeline == {} and m.metrics == {}
+
+
+@pytest.mark.django_db
+def test_analyze_match_done(settings):
+    from django.core.files import File
+
+    from website.models import Aoe2Match
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    m = Aoe2Match.objects.create(file_hash="hash-done")
+    with FIXTURE.open("rb") as fh:
+        m.rec_file.save("sample.aoe2record", File(fh), save=True)
+
+    analyze_match(m.id)
+    m.refresh_from_db()
+    assert m.analysis_status == "done"
+    assert m.my_civ and m.opponent_civ
+    assert m.duration_seconds > 0
+    assert "salient_log" in m.timeline
+    assert "opening" in m.metrics
