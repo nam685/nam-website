@@ -45,9 +45,10 @@ nav-wheel change** is required.
   is no public API to pull one's own rec files. → a PC-side watcher must push them.
 - The relic-link API (`aoe-api.reliclink.com`) gives match metadata + ELO/rank by
   IGN, but **not** the rec binary → it enriches, it does not replace, the rec.
-- `aoc-mgz` parses inputs, not simulated state. → metrics derived from inputs only;
+- `mgz-fast` parses inputs, not simulated state. → metrics derived from inputs only;
   the rest approximated and flagged.
-- `aoc-mgz` parsing can break on new DE patch versions. → **always store the raw
+- DE patch versions can outrun the parser (stock `mgz` already does — we use the
+  `mgz-fast` fork). → **always store the raw
   rec file** so re-parsing after a library update is possible.
 
 ## Architecture / Data flow
@@ -130,7 +131,8 @@ arriving and Relic indexing the match. Base host + `profile_id` are config value
 
 ### Analysis pipeline (stages)
 
-1. **Parse & structure** — `aoc-mgz` → players, civs, map, winner, version,
+1. **Parse & structure** — `mgz-fast` (`fast.header.parse` + body loop) → players,
+   civs, map, winner, version,
    duration, and the full timestamped input stream. Identify "me" by matching IGN
    `nom`; store my civ/result + opponent civ inline on `Aoe2Match`. Reject the rec
    (`status=skipped`) if it is not a two-human 1v1 (team game, single-player, or any
@@ -179,10 +181,10 @@ arriving and Relic indexing the match. Base host + `profile_id` are config value
      (the metrics/timeline tab is still useful without the narrative).
 
 ### Dependencies
-- Add **`mgz`** to `[project] dependencies` in `pyproject.toml` (PyPI package is
-  `mgz`; `aoc-mgz` is only the GitHub repo name). **See the parser blocker in
-  Verified Findings — current DE builds need a patched/forked `mgz`, likely pinned to
-  a git ref, not plain PyPI.**
+- Add **`mgz-fast==1.0.0`** to `[project] dependencies` (the AoEInsights fork that
+  parses the current DE build; stock PyPI `mgz` does NOT — see Verified Findings).
+  Optionally pin to the commit for immutability:
+  `mgz-fast @ git+https://github.com/AoEInsights/mgz-fast.git@6fd28520…`.
 - **No `anthropic`/API-key dependency** — the coach goes through the existing klaude
   subprocess, which owns its own (free OpenRouter) model config.
 
@@ -243,11 +245,8 @@ Behaviour (both modes):
 
 ## Build order (phased, single spec)
 
-0. **🔴 Parser support for the current DE build (gates everything).** Get `mgz`
-   parsing a real `101.103.48086.0` rec — find a working fork or patch the DE
-   `ai_type` header field and pin the dep to that git ref. No other phase starts
-   until a current rec parses end-to-end. (See Verified Findings blocker.)
-1. **Ingestion + extraction + display** — models, `upload`, `analyze_match` stages
+1. **Ingestion + extraction + display** — adopt `mgz-fast` and write the fast-parser
+   adapter (~2–4h; no `Summary` API), then models, `upload`, `analyze_match` stages
    1–3, public list/detail/stats endpoints, `Aoe2Tab` (no coach, no clips). Proves
    rec parsing + metrics are correct on real games.
 2. **klaude coach** — `run_klaude` refactor, stage 4 workspace + coaching prompt,
@@ -271,32 +270,41 @@ Behaviour (both modes):
 Three subagents validated the external dependencies and the local rec files. Sources
 were the live Relic API, the `mgz` source/GitHub, and the user's actual machine.
 
-### 🔴 BLOCKER — `mgz` does not parse the current DE build
-- The user's live build is `101.103.48086.0`. **Both PyPI `mgz` 1.8.51 and
-  `aoc-mgz` GitHub HEAD fail on every build ≥ `38580` (March 2026+)** with
-  `RuntimeError: invalid mgz file ... de -> players -> ai_type` — a DE header
-  layout change unfixed upstream for ~3 months (issue #138 region).
-- Of 327 local recs, 205 parse (builds ≤ Oct 2025), **122 fail — and all NEW games
-  going forward fail.** The pipeline parses nothing live until this is resolved.
-- **Resolution (new Phase 0, gates everything):** either find/track a fork that
-  parses build ≥38580, or patch `mgz`'s DE `ai_type` header field ourselves and pin
-  the dependency to that git ref (contribute upstream). Must be proven on a real
-  `48086` rec before any other phase starts.
+### ✅ RESOLVED — parser blocker fixed by the `mgz-fast` fork
+- Stock `mgz` 1.8.51 / aoc-mgz HEAD only support save_version ≤ 66.3 (build 24904).
+  The Last Chieftains DLC (Feb 2026) bumped DE replays to sv 67/68, so the user's
+  current build `101.103.48086.0` (**save_version 68.0**) failed at the DE
+  `players -> ai_type` header field.
+- **Fix: use `mgz-fast` (AoEInsights fork that powers aoe2insights.com), PyPI
+  `mgz-fast==1.0.0`.** Proven on the user's real build-48086/sv68.0 recs end-to-end:
+  7/7 files (6 current-build, 119k–380k ops each, + 1 old build) parse with header,
+  players, civs, map, and full action stream. No DIY work needed.
+- **DIY fallback (these are local files — fully in our control):** if a *future* DE
+  patch ever outruns mgz-fast, stock mgz can be patched directly — the investigation
+  confirmed the sv≥67 player struct just gained one trailing `de_string` after
+  `unknown_de_64_3` in `mgz/header/de.py` (plus minor `map_info`/`initial` drift).
+  So worst case we pin our own patched fork; no hard reverse-engineering.
 
-### mgz API (confirmed feasible once parsing works)
+### mgz-fast API (note: NO `Summary` class — write a thin adapter)
+- mgz-fast is stripped down: **`mgz.summary.Summary` / `get_players()` / `get_map()`
+  do not exist.** Extraction is built on the lower-level fast parser:
+  - Header: `mgz.fast.header.parse(file_handle)` (takes an OPEN FILE, not bytes) →
+    dict with `version, save_version, players, map, de, lobby, metadata, …`. Rich
+    per-player metadata (civ, color, team, profile_id, name, **`type`**) is under
+    `result['de']['players']`.
+  - Body: `mgz.fast.meta(f)` then loop `mgz.fast.operation(f)` until `EOFError`.
+- **Human-vs-AI / 1v1 detection:** a real human slot has `type == 2`; count
+  `type==2` players → require exactly 2 for 1v1 (empty slots detected, no AI slot).
+  Ranked inferred from rating presence, NOT filename.
+- **Chat (to strip):** chat is a distinct op in the body loop (`Operation.CHAT`) —
+  skip it; never emit names/chat into `salient.log`.
 - Inputs-only (no state simulation) — our approximation stance is correct.
-- Player metadata via `Summary(...).get_players()`: `human` (bool — AI filter),
-  `civilization` (int id), `color_id`, `team_id`, `winner`, `name`, `user_id`,
-  `eapm`, `rate_snapshot` (ranked rating). `get_diplomacy()` → `'1v1'|'TG'|...`.
-- 1v1 = `get_diplomacy()` type `1v1` AND both slots `human`. Ranked is inferred from
-  non-null `rate_snapshot` (NOT from filename).
-- Chat via `get_chat()` / `Operation.CHAT` (op 4) — isolatable to strip.
-- Action stream via `mgz.fast`: `RESEARCH`(101, incl. age-ups), `BUILD`(102),
+- Action stream (body loop): `RESEARCH`(101, incl. age-ups), `BUILD`(102),
   `QUEUE`(119)/`DE_QUEUE`(129)/`MAKE`(100) trains. **Actions carry NO timestamp** —
-  accumulate ms from `Operation.SYNC` (`fast.sync`) to time events (DE sync payload
-  has `current_time`). Age-up = a RESEARCH op with the age's technology_id. IDs
-  resolve via `mgz.const`. DE build ≥71094 uses a newer action path that includes
-  `player_id`; older path may need object→player mapping.
+  accumulate ms from `SYNC` ops to time events (DE sync payload has `current_time`).
+  Age-up = a RESEARCH op with the age's technology_id. IDs resolve via `mgz.const`.
+- **Adapter effort: ~2–4h** to write our extraction layer over `parse()` + the body
+  loop (vs. assuming the old `Summary` API). No reverse-engineering.
 
 ### Relic ladder API (confirmed feasible; spec corrected)
 - Base host: **`aoe-api.worldsedgelink.com`** (NOT `reliclink.com` — TLS cert SAN
@@ -310,10 +318,13 @@ were the live Relic API, the `mgz` source/GitHub, and the user's actual machine.
   `completiontime` (epoch), per-player `civilization_id`, `profile_id` (join
   `profiles[]`), `outcome` (1 win/0 loss), `oldrating`/`newrating`. **No delta field
   → compute `newrating − oldrating`.** Need civ-id→name + map→name lookup tables.
-- **IGN `nom` is NOT unique — 8 accounts.** Resolve ONCE via
-  `getPersonalStat?aliases=["nom"]`, disambiguate (likely VN `profile_id=14697894`,
-  has ranked 1v1 history — confirm), then **store `profile_id` and use it forever**.
-  Indexing lags minutes–hours, fine for the daily backfill.
+- **IGN `nom` resolved & verified live: relic `profile_id = 14697894`** (alias `nom`,
+  `/steam/76561198829134149` — matches the local savegame Steam ID exactly, VN, 1v1 RM
+  rating ~1087, 85/73). Hard-code/config this id; do NOT alias-lookup at runtime (the
+  alias "nom" is shared by 8 accounts). ⚠️ **The aoe2insights URL `/user/13196220/`
+  uses aoe2insights' OWN internal user id — a different namespace; relic profile_id
+  13196220 is an unrelated Xbox account. Use 14697894 for the Relic API.** Indexing
+  lags minutes–hours, fine for the daily backfill.
 
 ### Local recs (confirmed on the user's machine)
 - REC_DIR (watcher, Windows): `C:\Users\lehai\Games\Age of Empires 2 DE\<steamid>\savegame\`
@@ -327,7 +338,9 @@ were the live Relic API, the `mgz` source/GitHub, and the user's actual machine.
   `rate_snapshot`.
 
 ## Risks
-- **mgz version fragility** — store raw rec; `reanalyze` endpoint to re-run.
+- **Parser/patch fragility** — `mgz-fast` tracks DE currently; a future patch could
+  outrun it. Mitigated: store raw rec, `reanalyze` endpoint to re-run, and the DIY
+  patch path (local files, in our control) as last resort.
 - **Estimates vs. truth** — idle-TC, floats, vill counts are input-cadence
   estimates; UI badges them as such.
 - **relic-link indexing lag / unofficial API** — enrichment is best-effort and
