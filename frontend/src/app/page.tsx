@@ -12,10 +12,16 @@ import { API } from "@/lib/api";
 
 export default function Home() {
   // Pick one photo per page load (1..5), stable for the session.
-  const [photo] = useState(() => 1 + Math.floor(Math.random() * 5));
+  // Start null to avoid hydration mismatch; choose client-side in effect.
+  const [photo, setPhoto] = useState<number | null>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
   const photoRef = useRef<HTMLDivElement>(null);
+
+  // Choose photo index client-side only (after hydration).
+  useEffect(() => {
+    setPhoto(1 + Math.floor(Math.random() * 5));
+  }, []);
 
   useEffect(() => {
     const orbit = orbitRef.current;
@@ -115,17 +121,19 @@ export default function Home() {
             } as React.CSSProperties
           }
         >
-          <img
-            src={`${API}/media/profile/profile-${photo}.webp`}
-            alt="Nam"
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              borderRadius: "50%",
-              display: "block",
-            }}
-          />
+          {photo !== null && (
+            <img
+              src={`${API}/media/profile/profile-${photo}.webp`}
+              alt="Nam"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                borderRadius: "50%",
+                display: "block",
+              }}
+            />
+          )}
           {/* Edge tint — recolors the photo's outer ring toward the hue */}
           <div
             style={{
