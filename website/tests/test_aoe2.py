@@ -120,3 +120,41 @@ def test_analyze_match_done(settings):
     assert m.duration_seconds > 0
     assert "salient_log" in m.timeline
     assert "opening" in m.metrics
+
+
+@pytest.mark.django_db
+def test_upload_requires_admin(client):
+    resp = client.post("/api/aoe2/upload/")
+    assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+def test_upload_then_list_and_detail(client, auth_headers, settings):
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    with FIXTURE.open("rb") as fh:
+        resp = client.post("/api/aoe2/upload/", {"rec": fh}, **auth_headers)
+    assert resp.status_code in (200, 201)
+    mid = resp.json()["id"]
+
+    # analyze synchronously for the test (CELERY_TASK_ALWAYS_EAGER in test settings,
+    # or call the task directly if not configured):
+    from website.models import Aoe2Match
+    from website.tasks import analyze_match
+
+    if Aoe2Match.objects.get(id=mid).analysis_status == "pending":
+        analyze_match(mid)
+
+    lst = client.get("/api/aoe2/").json()
+    assert lst["total"] >= 1
+    detail = client.get(f"/api/aoe2/{mid}/").json()
+    assert "metrics" in detail and "timeline" in detail
+
+
+@pytest.mark.django_db
+def test_upload_dedup(client, auth_headers, settings):
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    with FIXTURE.open("rb") as fh:
+        client.post("/api/aoe2/upload/", {"rec": fh}, **auth_headers)
+    with FIXTURE.open("rb") as fh:
+        resp2 = client.post("/api/aoe2/upload/", {"rec": fh}, **auth_headers)
+    assert resp2.status_code == 200  # dup -> 200 with existing id

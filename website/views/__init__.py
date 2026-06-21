@@ -1,3 +1,12 @@
+from .aoe2 import (
+    aoe2_delete,
+    aoe2_detail,
+    aoe2_list,
+    aoe2_reanalyze,
+    aoe2_stats,
+    aoe2_sync_status,
+    aoe2_upload,
+)
 from .audiobook import (
     audiobook_audio,
     audiobook_chunk_exists,
@@ -78,6 +87,13 @@ from .watch import (
 )
 
 __all__ = [
+    "aoe2_delete",
+    "aoe2_detail",
+    "aoe2_list",
+    "aoe2_reanalyze",
+    "aoe2_stats",
+    "aoe2_sync_status",
+    "aoe2_upload",
     "audiobook_audio",
     "audiobook_chunk_exists",
     "audiobook_manifest",
