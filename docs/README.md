@@ -8,6 +8,9 @@ A personal website and digital garden by Nam.
 
 ## Sections
 
+### Home
+The landing page is a constellation: each section is a glowing dot orbiting a center, with a pill tooltip on hover. Moving the mouse sweeps an ambient background glow through the dots' rainbow of hues. At the center sits a circular profile photo of Nam — one of a small rotating set, chosen at random on each visit — whose rim and outer edge are tinted live with the same hue the cursor is pointing toward, so the portrait picks up the color of whichever section you're drifting toward.
+
 ### Thinks
 A unified public feed of short-form thoughts and images, displayed as a single-column timeline. Each post can carry text, an image, or both. Images are centered in the feed — large images fill the column width, small images render at natural size. Clicking an image opens a full-screen lightbox with left/right navigation between image posts and Esc to close. New posts are composed inline with drag-and-drop / paste / click image attachment; text drafts survive a login redirect and are restored on return. An 18-hour cooldown is enforced between posts. The `/draws` URL redirects here.
 
