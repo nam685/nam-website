@@ -4,6 +4,8 @@ import json
 import logging
 import subprocess
 
+from django.conf import settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -91,8 +93,9 @@ def run_claude_coach(prompt: str, timeout: int = 120) -> tuple[str, str]:
     Raises RuntimeError on non-zero exit or missing 'result' key so the caller
     can decide how to handle (graceful fallback expected in tasks.py).
     """
+    claude_bin = getattr(settings, "AOE2_CLAUDE_BIN", "claude")
     result = subprocess.run(
-        ["claude", "-p", prompt, "--output-format", "json"],
+        [claude_bin, "-p", prompt, "--output-format", "json"],
         capture_output=True,
         text=True,
         timeout=timeout,
