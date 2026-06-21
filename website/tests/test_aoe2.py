@@ -37,7 +37,9 @@ def test_age_techs():
 
 
 def test_name_helpers_fallback():
-    assert const.civ_name(8) == "Celts"
+    assert const.civ_name(8) == "Persians"
+    assert const.civ_name(31) == "Vietnamese"
+    assert const.civ_name(21) == "Incas"
     assert const.civ_name(999) == "#999"
     assert const.unit_name(const.VILLAGER_ID) == "Villager"
     assert const.building_name(70) == "House"
