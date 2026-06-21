@@ -1,8 +1,21 @@
 from pathlib import Path
 
+import mgz.fast.header
+
 from website.aoe2 import const
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_1v1.aoe2record"
+
+
+def test_fixture_exists():
+    assert FIXTURE.exists(), "place a real .aoe2record at website/tests/fixtures/sample_1v1.aoe2record"
+
+
+def test_mgz_fast_parses_fixture_header():
+    with FIXTURE.open("rb") as f:
+        header = mgz.fast.header.parse(f)
+    assert header["version"].value == 21  # Version.DE
+    assert "de" in header and "players" in header["de"]
 
 
 def test_age_techs():
