@@ -254,7 +254,8 @@ def _register_downloads(turn):
 
 @app.task(max_retries=0)
 def sync_listens():
-    """Daily sync of YouTube Music history + liked tracks."""
+    """Daily sync of YouTube Music history + liked tracks (rebuilds the graph inline — no
+    request timeout to worry about on the beat schedule)."""
     from website.views.listen import _do_sync
 
     try:
@@ -267,3 +268,15 @@ def sync_listens():
         )
     except Exception:
         logger.exception("Automated listens sync failed (likely expired browser auth)")
+
+
+@app.task(max_retries=0)
+def rebuild_listen_graph():
+    """Rebuild the listening graph off the request path.
+
+    The Last.fm similarity pass takes minutes; the web sync view dispatches this so it doesn't
+    exceed gunicorn's request timeout. Non-fatal by construction (`_rebuild_graph` never raises).
+    """
+    from website.views.listen import _rebuild_graph
+
+    _rebuild_graph()

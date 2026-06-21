@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -146,13 +146,24 @@ FAKE_BROWSER_JSON = json.dumps({"cookie": "SAPISID=abc; __Secure-3PAPISID=abc", 
 
 def _mock_open_browser():
     """Return a mock for builtins.open that returns fake browser.json content."""
-    from unittest.mock import mock_open
 
     return mock_open(read_data=FAKE_BROWSER_JSON)
 
 
 @pytest.mark.django_db
 class TestListenSync:
+    @pytest.fixture(autouse=True)
+    def _assume_logged_in(self):
+        # Default the YTM login probe to "logged in" so sync tests exercise the happy path
+        # without a real network call, and stub the async graph-rebuild dispatch so tests don't
+        # touch the broker or run the (slow, networked) rebuild. Tests override these as needed.
+        with (
+            patch("website.views.listen._is_logged_in", return_value=True),
+            patch("website.tasks.rebuild_listen_graph.delay") as mock_delay,
+        ):
+            self.mock_delay = mock_delay
+            yield
+
     def test_get_not_allowed(self, client, auth_headers):
         resp = client.get("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 405
@@ -243,6 +254,104 @@ class TestListenSync:
         assert resp.json()["synced"] == 2
         assert ListenTrack.objects.get(video_id="grissini1").artist == "Grissini Project"
         assert ListenTrack.objects.get(video_id="grissini2").artist == "Grissini Project"
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_logged_out_session_fails_loud(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        # A stale cookie constructs a valid client but is logged out — sync must surface a clear
+        # 409 + auth_expired flag (not a silent 0-synced or an opaque 502) and write nothing.
+        mock_ytmusic_cls.return_value = MagicMock()
+        with (
+            patch("builtins.open", _mock_open_browser()),
+            patch("website.views.listen._is_logged_in", return_value=False),
+        ):
+            resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 409
+        body = resp.json()
+        assert body["auth_expired"] is True
+        assert "logged out" in body["error"].lower()
+        assert ListenTrack.objects.count() == 0
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_graph_rebuild_dispatched_async_not_inline(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        # The slow Last.fm graph rebuild must run off the request path (Celery), not inline —
+        # otherwise it blows gunicorn's timeout and a real success looks like a 502.
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
+
+        with patch("builtins.open", _mock_open_browser()), patch("website.views.listen._rebuild_graph") as inline:
+            resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["graph_rebuilding"] is True
+        self.mock_delay.assert_called_once()  # queued for Celery
+        inline.assert_not_called()  # never run synchronously in the request
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
+    def test_graph_rebuild_falls_back_inline_if_broker_down(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        # If the broker is unreachable, degrade to the old inline rebuild rather than skip it.
+        mock_yt = MagicMock()
+        mock_yt.get_history.return_value = MOCK_HISTORY
+        mock_ytmusic_cls.return_value = mock_yt
+        self.mock_delay.side_effect = OSError("broker down")
+
+        with patch("builtins.open", _mock_open_browser()), patch("website.views.listen._rebuild_graph") as inline:
+            resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["graph_rebuilding"] is False
+        inline.assert_called_once()
+
+
+# ── Reauth ────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestListenReauth:
+    RAW = "Cookie: SAPISID=abc; __Secure-3PSID=xyz\nOrigin: https://music.youtube.com\nUser-Agent: TestUA"
+
+    def _post(self, client, headers_text, auth_headers):
+        return client.post(
+            "/api/listens/reauth/",
+            data=json.dumps({"headers": headers_text}),
+            content_type="application/json",
+            **auth_headers,
+        )
+
+    def test_requires_auth(self, client):
+        resp = client.post(
+            "/api/listens/reauth/", data=json.dumps({"headers": self.RAW}), content_type="application/json"
+        )
+        assert resp.status_code == 401
+
+    def test_missing_cookie_rejected(self, client, auth_headers):
+        resp = self._post(client, "Origin: https://music.youtube.com", auth_headers)
+        assert resp.status_code == 400
+        assert "cookie" in resp.json()["error"].lower()
+
+    @patch("ytmusicapi.YTMusic")
+    def test_rejects_logged_out_session(self, _mock_yt, client, auth_headers):
+        # The whole point: logged-out cookies pass YTMusic() construction but must NOT be saved.
+        m = mock_open()
+        with patch("website.views.listen._is_logged_in", return_value=False), patch("builtins.open", m):
+            resp = self._post(client, self.RAW, auth_headers)
+        assert resp.status_code == 400
+        assert "logged-in" in resp.json()["error"].lower()
+        m().write.assert_not_called()
+
+    @patch("ytmusicapi.YTMusic")
+    def test_accepts_logged_in_and_strips_authorization(self, _mock_yt, client, auth_headers):
+        m = mock_open()
+        with patch("website.views.listen._is_logged_in", return_value=True), patch("builtins.open", m):
+            resp = self._post(client, self.RAW, auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        written = "".join(call.args[0] for call in m().write.call_args_list)
+        saved = json.loads(written)
+        assert "cookie" in saved
+        # The SAPISIDHASH expires in hours; persisting it would re-break sync. Must not be stored.
+        assert "authorization" not in saved
 
 
 # ── Sync status ───────────────────────────────────────
