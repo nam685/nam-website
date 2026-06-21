@@ -120,10 +120,13 @@ Admin (`require_admin`):
 `analysis_status` as it progresses; on exception stores `error_detail` and
 `status=error` (fail loud, matching the listens sync philosophy).
 
-`enrich_ladder()` — new beat task (daily, alongside `sync-listens-daily`). Polls
-relic-link for the IGN's recent ladder state and backfills ELO/rank/rating-change
-on matches missing relic data (covers races where the rec arrives before relic
-has indexed the match).
+`enrich_ladder()` — new beat task (daily, alongside `sync-listens-daily`). Polls the
+Relic API (`aoe-api.worldsedgelink.com`, `getRecentMatchHistory` +
+`getPersonalStat`, filtered to `matchtype_id=6`) for the stored `profile_id`'s recent
+ladder state and backfills ELO/rank/rating-change (`newrating − oldrating`) on
+matches missing relic data. Covers the indexing lag (minutes–hours) between a rec
+arriving and Relic indexing the match. Base host + `profile_id` are config values
+(see Verified Findings for the `nom`-is-ambiguous resolution).
 
 ### Analysis pipeline (stages)
 
@@ -176,7 +179,10 @@ has indexed the match).
      (the metrics/timeline tab is still useful without the narrative).
 
 ### Dependencies
-- Add `aoc-mgz` to `[project] dependencies` in `pyproject.toml`.
+- Add **`mgz`** to `[project] dependencies` in `pyproject.toml` (PyPI package is
+  `mgz`; `aoc-mgz` is only the GitHub repo name). **See the parser blocker in
+  Verified Findings — current DE builds need a patched/forked `mgz`, likely pinned to
+  a git ref, not plain PyPI.**
 - **No `anthropic`/API-key dependency** — the coach goes through the existing klaude
   subprocess, which owns its own (free OpenRouter) model config.
 
@@ -237,6 +243,10 @@ Behaviour (both modes):
 
 ## Build order (phased, single spec)
 
+0. **🔴 Parser support for the current DE build (gates everything).** Get `mgz`
+   parsing a real `101.103.48086.0` rec — find a working fork or patch the DE
+   `ai_type` header field and pin the dep to that git ref. No other phase starts
+   until a current rec parses end-to-end. (See Verified Findings blocker.)
 1. **Ingestion + extraction + display** — models, `upload`, `analyze_match` stages
    1–3, public list/detail/stats endpoints, `Aoe2Tab` (no coach, no clips). Proves
    rec parsing + metrics are correct on real games.
@@ -255,6 +265,66 @@ Behaviour (both modes):
 ## Docs (required by project conventions)
 - Update `docs/README.md` with the Empires tab description.
 - Add QA items to `docs/QA-CHECKLIST.md` for the tab + upload + analysis.
+
+## Verified findings (2026-06-21, parallel subagent fact-check)
+
+Three subagents validated the external dependencies and the local rec files. Sources
+were the live Relic API, the `mgz` source/GitHub, and the user's actual machine.
+
+### 🔴 BLOCKER — `mgz` does not parse the current DE build
+- The user's live build is `101.103.48086.0`. **Both PyPI `mgz` 1.8.51 and
+  `aoc-mgz` GitHub HEAD fail on every build ≥ `38580` (March 2026+)** with
+  `RuntimeError: invalid mgz file ... de -> players -> ai_type` — a DE header
+  layout change unfixed upstream for ~3 months (issue #138 region).
+- Of 327 local recs, 205 parse (builds ≤ Oct 2025), **122 fail — and all NEW games
+  going forward fail.** The pipeline parses nothing live until this is resolved.
+- **Resolution (new Phase 0, gates everything):** either find/track a fork that
+  parses build ≥38580, or patch `mgz`'s DE `ai_type` header field ourselves and pin
+  the dependency to that git ref (contribute upstream). Must be proven on a real
+  `48086` rec before any other phase starts.
+
+### mgz API (confirmed feasible once parsing works)
+- Inputs-only (no state simulation) — our approximation stance is correct.
+- Player metadata via `Summary(...).get_players()`: `human` (bool — AI filter),
+  `civilization` (int id), `color_id`, `team_id`, `winner`, `name`, `user_id`,
+  `eapm`, `rate_snapshot` (ranked rating). `get_diplomacy()` → `'1v1'|'TG'|...`.
+- 1v1 = `get_diplomacy()` type `1v1` AND both slots `human`. Ranked is inferred from
+  non-null `rate_snapshot` (NOT from filename).
+- Chat via `get_chat()` / `Operation.CHAT` (op 4) — isolatable to strip.
+- Action stream via `mgz.fast`: `RESEARCH`(101, incl. age-ups), `BUILD`(102),
+  `QUEUE`(119)/`DE_QUEUE`(129)/`MAKE`(100) trains. **Actions carry NO timestamp** —
+  accumulate ms from `Operation.SYNC` (`fast.sync`) to time events (DE sync payload
+  has `current_time`). Age-up = a RESEARCH op with the age's technology_id. IDs
+  resolve via `mgz.const`. DE build ≥71094 uses a newer action path that includes
+  `player_id`; older path may need object→player mapping.
+
+### Relic ladder API (confirmed feasible; spec corrected)
+- Base host: **`aoe-api.worldsedgelink.com`** (NOT `reliclink.com` — TLS cert SAN
+  mismatch). Make it a config value. No auth, no documented rate limits; daily
+  polling is safe. Old `aoe2.net` API is dead. Call directly with `httpx`.
+- Personal stat (ELO/rank): `GET /community/leaderboard/getPersonalStat?title=age2&profile_ids=[<id>]`
+- Recent matches: `GET /community/leaderboard/getRecentMatchHistory?title=age2&profile_ids=[<id>]`
+  (note: under `/leaderboard/`, `get…History`). `leaderboard_id=3` = 1v1 RM;
+  `matchtype_id=6` = ranked 1v1 RM (filter on it).
+- Match fields present: `id`, `mapname` (.rms — needs id→name map), `startgametime`/
+  `completiontime` (epoch), per-player `civilization_id`, `profile_id` (join
+  `profiles[]`), `outcome` (1 win/0 loss), `oldrating`/`newrating`. **No delta field
+  → compute `newrating − oldrating`.** Need civ-id→name + map→name lookup tables.
+- **IGN `nom` is NOT unique — 8 accounts.** Resolve ONCE via
+  `getPersonalStat?aliases=["nom"]`, disambiguate (likely VN `profile_id=14697894`,
+  has ranked 1v1 history — confirm), then **store `profile_id` and use it forever**.
+  Indexing lags minutes–hours, fine for the daily backfill.
+
+### Local recs (confirmed on the user's machine)
+- REC_DIR (watcher, Windows): `C:\Users\lehai\Games\Age of Empires 2 DE\<steamid>\savegame\`
+  — glob `…\*\savegame\*.aoe2record` to survive a Steam-ID change.
+- **`.aoe2record` only** (exclude `.aoe2spgame`/`.aoe2mpgame` = saved games).
+- Naming `MP Replay v<build> @<date> <time> (N).aoe2record`; file finalized at match
+  end (mtime ≈ end, ~30-40 min after the start-time in the name) → **trigger on
+  stable file size, not on create**.
+- DE never auto-records single-player as `.aoe2record` (only MP), so SP filtering is
+  mostly free; still verify human-vs-AI + 1v1 from the parse, and ranked via
+  `rate_snapshot`.
 
 ## Risks
 - **mgz version fragility** — store raw rec; `reanalyze` endpoint to re-run.
