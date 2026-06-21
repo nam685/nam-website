@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { angleFromCenter, lerpDotColor, DOTS } from "../homepageContent";
+import { angleFromCenter, lerpDotColor, DOTS, dotHueCss } from "../homepageContent";
 
 describe("angleFromCenter", () => {
   it("returns 0 for directly above center", () => {
@@ -77,5 +77,16 @@ describe("DOTS", () => {
     for (let i = 0; i < DOTS.length; i++) {
       expect(DOTS[i].angle).toBe(i * 40);
     }
+  });
+});
+
+describe("dotHueCss", () => {
+  it("formats the first dot color as an rgb() string", () => {
+    // lerpDotColor(0) === [249, 115, 22]
+    expect(dotHueCss(0)).toBe("rgb(249,115,22)");
+  });
+
+  it("returns a valid rgb() string for an interpolated angle", () => {
+    expect(dotHueCss(18)).toMatch(/^rgb\(\d{1,3},\d{1,3},\d{1,3}\)$/);
   });
 });

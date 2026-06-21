@@ -59,3 +59,9 @@ export function lerpDotColor(angle: number): [number, number, number] {
     Math.round(b1 + (b2 - b1) * t),
   ];
 }
+
+/** Interpolated dot color at `angle` as a CSS `rgb(...)` string. */
+export function dotHueCss(angle: number): string {
+  const [r, g, b] = lerpDotColor(angle);
+  return `rgb(${r},${g},${b})`;
+}
