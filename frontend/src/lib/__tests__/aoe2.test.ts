@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatDuration,
   formatUptime,
+  gameSharePath,
   openingColor,
   resultLabel,
 } from "../aoe2";
@@ -23,5 +24,8 @@ describe("aoe2 helpers", () => {
   it("returns a hex color for openings", () => {
     expect(openingColor("Archers")).toMatch(/^#/);
     expect(openingColor("anything")).toMatch(/^#/);
+  });
+  it("builds a game share path", () => {
+    expect(gameSharePath(42)).toBe("/plays?game=42");
   });
 });

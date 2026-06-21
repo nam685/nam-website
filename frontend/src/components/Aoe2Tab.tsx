@@ -7,6 +7,7 @@ import {
   Aoe2MatchSummary,
   formatDuration,
   formatUptime,
+  gameSharePath,
   openingColor,
   resultLabel,
 } from "@/lib/aoe2";
@@ -38,8 +39,15 @@ export default function Aoe2Tab() {
     fetch(`${API}/api/aoe2/`)
       .then((r) => r.json())
       .then((d) => {
-        setMatches(d.matches || []);
-        if (d.matches?.length) setSelectedId(d.matches[0].id); // newest selected by default
+        const list: Aoe2MatchSummary[] = d.matches || [];
+        setMatches(list);
+        if (list.length) {
+          const param = Number(
+            new URLSearchParams(window.location.search).get("game"),
+          );
+          const target = list.find((m) => m.id === param);
+          setSelectedId(target ? target.id : list[0].id); // shared game if valid, else newest
+        }
       })
       .catch(() => {});
     fetch(`${API}/api/aoe2/stats/`)
@@ -189,11 +197,28 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function MatchDetail({ detail }: { detail: Detail }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyShare() {
+    try {
+      await navigator.clipboard.writeText(
+        window.location.origin + gameSharePath(detail.id),
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable — ignore
+    }
+  }
+
   const m = detail.metrics as Record<string, number | null | string>;
   const estimates: string[] =
     ((detail.metrics as Record<string, unknown>).estimates as string[]) || [];
   return (
     <div style={{ padding: "1rem 0 1.5rem" }}>
+      <button onClick={copyShare} style={shareBtnStyle}>
+        {copied ? "Copied!" : "Share"}
+      </button>
       <div
         style={{
           display: "flex",
@@ -302,4 +327,18 @@ const taglineStyle: React.CSSProperties = {
   color: "#2a2a2a",
   letterSpacing: "0.2em",
   textTransform: "lowercase",
+};
+
+const shareBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-headline)",
+  fontSize: "0.6rem",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  padding: "0.25rem 0.6rem",
+  background: "transparent",
+  color: "var(--accent)",
+  border: "1px solid var(--accent)",
+  borderRadius: "3px",
+  cursor: "pointer",
+  marginBottom: "0.75rem",
 };

@@ -44,3 +44,7 @@ const OPENING_COLORS: Record<string, string> = {
 export function openingColor(opening: string): string {
   return OPENING_COLORS[opening] ?? "#64748b";
 }
+
+export function gameSharePath(id: number): string {
+  return `/plays?game=${id}`;
+}

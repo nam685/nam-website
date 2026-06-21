@@ -32,6 +32,12 @@ export default function PlaysClient() {
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [myColor, setMyColor] = useState<"white" | "black">("white");
 
+  // Open Empires tab when ?game= param is present
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("game"))
+      setTab("empires");
+  }, []);
+
   // Check admin status
   useEffect(() => {
     const token = store("adminToken");
