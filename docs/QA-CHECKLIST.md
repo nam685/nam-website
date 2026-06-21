@@ -92,6 +92,10 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek
 - [ ] Mini player persists when navigating to other pages (/watches, /thinks, etc.)
 - [ ] Mini player minimize/close work
+- [ ] Listens: the ∞ (radio) toggle in the player turns orange when enabled
+- [ ] Listens: with radio on, playing a single track keeps auto-playing related tracks (queue never ends)
+- [ ] Listens: with radio off, playback stops at the end of the queue
+- [ ] Listens: radio state survives a page reload (persisted in session)
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
