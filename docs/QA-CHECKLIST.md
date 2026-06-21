@@ -35,9 +35,13 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Admin can submit a text-only post (succeeds)
 - [ ] Admin can submit an image-only post (succeeds)
 - [ ] Admin can submit a post with both text and image (succeeds)
+- [ ] Admin can submit a video-only post (succeeds) and it plays inline with controls
+- [ ] Admin can submit a post with text + video (succeeds)
+- [ ] Submitting both an image and a video together is rejected
+- [ ] Oversized video (>50 MB) or non-mp4/webm file is rejected
 - [ ] 18-hour cooldown is enforced — rapid reposts are blocked
 - [ ] Content length limit (2000 chars) is enforced
-- [ ] Image attach works via drag-and-drop, paste, and click-to-browse
+- [ ] Image/video attach works via click-to-browse (and image via drag-and-drop / paste)
 - [ ] Large image fills the column width; small image renders at natural size (not stretched)
 - [ ] Clicking an image opens the full-screen lightbox
 - [ ] Lightbox: ← / → navigate only between image posts (text-only posts skipped)
