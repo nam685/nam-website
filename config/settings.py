@@ -84,6 +84,9 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localho
 ADMIN_SECRET = env("ADMIN_SECRET")
 LASTFM_API_KEY = env("LASTFM_API_KEY", default="")
 
+AOE2_PROFILE_ID = env.int("AOE2_PROFILE_ID", default=14697894)
+AOE2_IGN = env("AOE2_IGN", default="nom")
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 FILE_UPLOAD_PERMISSIONS = 0o644

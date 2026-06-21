@@ -88,3 +88,16 @@ def test_classify_opening_archers():
         "action_count": 50,
     }
     assert classify_opening(tl) == "Archers"
+
+
+import pytest
+
+
+@pytest.mark.django_db
+def test_aoe2_match_model_defaults():
+    from website.models import Aoe2Match
+
+    m = Aoe2Match.objects.create(file_hash="abc123", my_civ="Celts", opponent_civ="Franks")
+    assert m.analysis_status == "pending"
+    assert m.featured is False
+    assert m.timeline == {} and m.metrics == {}
