@@ -136,6 +136,14 @@ Merge settings (repo → Settings → General):
 
 ---
 
+## Server-only media assets
+
+Some media is served from the deploy media root (`/home/nam/nam-website-deploy/media/`, exposed at `/media/*` by Caddy) but is **not** stored in git — it's uploaded out-of-band.
+
+- **Homepage profile photos** (`/media/profile/profile-1..5.webp`): the rotating circular portrait on the landing page. Produced locally from source images with ImageMagick (`-auto-orient -resize 700x -gravity North -crop 700x700+0+220`, webp q82) and uploaded with `scp media/profile/*.webp hetzner:/home/nam/nam-website-deploy/media/profile/`. To change the photos, regenerate and re-scp; the frontend just expects `profile-1..5.webp` to exist.
+
+---
+
 ## Firewall (ufw)
 
 - SSH (22), HTTP (80), HTTPS (443), Mosh (60000-61000/udp)

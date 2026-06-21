@@ -125,6 +125,11 @@ export default function Home() {
             <img
               src={`${API}/media/profile/profile-${photo}.webp`}
               alt="Nam"
+              onError={(e) => {
+                // Photos live on the server media root (outside git/CI); if one is
+                // missing, hide the img and let the tinted rim stand on its own.
+                e.currentTarget.style.display = "none";
+              }}
               style={{
                 width: "100%",
                 height: "100%",
@@ -143,6 +148,7 @@ export default function Home() {
               background:
                 "radial-gradient(circle, transparent 58%, var(--hue) 100%)",
               mixBlendMode: "overlay",
+              transition: "background 0.2s",
               pointerEvents: "none",
             }}
           />
