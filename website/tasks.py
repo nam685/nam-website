@@ -4,10 +4,15 @@ import os
 import re
 import subprocess
 
+from django.conf import settings as dj_settings
 from django.utils import timezone
+from django.utils import timezone as dj_timezone
 
 from config.celery import app
-from website.models import Download, Turn
+from website.aoe2.metrics import compute_metrics
+from website.aoe2.parser import parse_rec
+from website.aoe2.timeline import build_timeline, render_salient_log
+from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 logger = logging.getLogger(__name__)
@@ -280,3 +285,45 @@ def rebuild_listen_graph():
     from website.views.listen import _rebuild_graph
 
     _rebuild_graph()
+
+
+@app.task(max_retries=0)
+def analyze_match(match_id):
+    """Parse a stored rec into metrics. 1v1-only; non-1v1 -> skipped; failures -> error."""
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return
+
+    match.analysis_status = Aoe2Match.Status.PARSING
+    match.save(update_fields=["analysis_status"])
+
+    try:
+        rec = parse_rec(match.rec_file.path, dj_settings.AOE2_PROFILE_ID)
+
+        if not rec.is_1v1 or rec.me is None or rec.opponent is None:
+            match.analysis_status = Aoe2Match.Status.SKIPPED
+            match.save(update_fields=["analysis_status"])
+            return
+
+        timeline = build_timeline(rec.ops, rec.me["number"])
+        metrics = compute_metrics(timeline, rec.duration_ms)
+        timeline_payload = {k: v for k, v in timeline.items()}
+        timeline_payload["salient_log"] = render_salient_log(timeline)
+
+        match.map_name = rec.map_name
+        match.duration_seconds = rec.duration_ms // 1000
+        match.game_version = rec.version
+        match.my_civ = rec.me["civ_name"]
+        match.opponent_civ = rec.opponent["civ_name"]
+        match.my_result = rec.my_result
+        match.timeline = timeline_payload
+        match.metrics = metrics
+        match.analyzed_at = dj_timezone.now()
+        match.analysis_status = Aoe2Match.Status.DONE
+        match.save()
+    except Exception as exc:  # noqa: BLE001 — fail loud, store the reason
+        logger.exception("analyze_match failed for %s", match_id)
+        match.analysis_status = Aoe2Match.Status.ERROR
+        match.error_detail = str(exc)[:2000]
+        match.save(update_fields=["analysis_status", "error_detail"])

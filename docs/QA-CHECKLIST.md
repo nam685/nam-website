@@ -154,7 +154,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] `/feed.xml` returns valid RSS XML
 - [ ] Feed contains thought entries with correct titles and dates
 
-## Plays — Lichess Integration
+## Plays — Chess tab (Lichess)
 
 - [ ] Explorer tab loads with starting position and Chessground board
 - [ ] Making moves on the board fetches explorer data from Lichess
@@ -173,6 +173,24 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Game actions: abort, resign, offer draw
 - [ ] Game end: result displayed, "New Game" returns to creator
 - [ ] Mobile: board and panels stack vertically
+
+## Plays — AoE 2 tab
+
+- [ ] `/plays` → "Chess" and "AoE 2" tabs both render; clicking each switches the content.
+- [ ] AoE 2 tab: stats header shows current ELO, W/L record, total games, and top civilization.
+- [ ] Newest game is expanded by default on load.
+- [ ] Clicking a collapsed game expands it and collapses the previously expanded one (single-selection).
+- [ ] The optional highlight-clip `<iframe>` mounts only for the currently expanded game; collapsed rows render no iframe.
+- [ ] Expanded game shows metrics: Feudal/Castle/Imperial uptimes, APM, a villager count, and match length.
+- [ ] No idle-TC stat appears anywhere in the UI (it was intentionally removed).
+- [ ] Opening classification label is present in the expanded game view.
+- [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
+- [ ] No chat text appears anywhere in the UI or in raw API responses (`/api/aoe2/` and `/api/aoe2/<id>/`).
+- [ ] Visiting `/plays?game=<id>` deep-links to the AoE 2 tab with that game expanded.
+- [ ] ⋮ menu on the expanded game copies a share link (`/plays?game=<id>`) to the clipboard.
+- [ ] Admin: file upload box is visible; uploading a valid `.aoe2record` processes and shows the game.
+- [ ] Non-admin: upload box is not visible.
+- [ ] Uploading a non-1v1 recording (team game, single-player, vs-AI) results in a "skipped" response and no new game appears publicly.
 
 ## Performance
 

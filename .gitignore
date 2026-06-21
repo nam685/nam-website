@@ -50,3 +50,7 @@ oauth.json
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Real AoE2 recorded games used as local test fixtures contain third-party
+# player names + chat — never commit them to this public repo.
+website/tests/fixtures/*.aoe2record
