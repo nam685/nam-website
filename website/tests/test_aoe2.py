@@ -62,11 +62,20 @@ def test_compute_metrics():
     rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
     tl = build_timeline(rec.ops, rec.me["number"])
     m = compute_metrics(tl, rec.duration_ms)
-    assert m["feudal_uptime_s"] is None or m["feudal_uptime_s"] > 0
-    assert m["apm"] >= 0
-    assert m["villager_count"] == len([u for u in tl["units"] if u["name"] == "Villager"]) or m["villager_count"] >= 0
-    assert isinstance(m["opening"], str) and m["opening"]
+    # fixture reaches all three ages, in chronological order
+    assert m["feudal_uptime_s"] is not None and m["feudal_uptime_s"] > 0
+    assert m["castle_uptime_s"] > m["feudal_uptime_s"]
+    assert m["imperial_uptime_s"] > m["castle_uptime_s"]
+    assert m["apm"] > 0
+    # villager_count equals the summed Villager train amounts
+    assert m["villager_count"] == sum(u["amount"] for u in tl["units"] if u["name"] == "Villager")
+    # fixture is an archery-range (Archers) opening
+    assert m["opening"] == "Archers"
+    # the idle-TC estimate is labelled as an estimate
     assert "idle_tc_est_s" in m["estimates"]
+    # output shapes
+    assert all({"name", "amount"} <= a.keys() for a in m["army"])
+    assert all({"name", "t_s"} <= e.keys() for e in m["eco_tech_timings"])
 
 
 def test_classify_opening_archers():
