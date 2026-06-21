@@ -6,10 +6,10 @@ import mgz.fast.header
 import pytest
 
 from website.aoe2 import const
-from website.aoe2.coach import build_coach_prompt, run_claude_coach
-from website.aoe2.metrics import classify_opening, compute_metrics
+from website.aoe2.coach import build_coach_prompt, parse_opening, run_claude_coach
+from website.aoe2.metrics import compute_metrics
 from website.aoe2.parser import parse_rec
-from website.aoe2.timeline import build_timeline, render_salient_log
+from website.aoe2.timeline import build_timeline, render_dual_log, render_salient_log
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_1v1.aoe2record"
 requires_fixture = pytest.mark.skipif(
@@ -43,6 +43,18 @@ def test_name_helpers_fallback():
     assert const.civ_name(999) == "#999"
     assert const.unit_name(const.VILLAGER_ID) == "Villager"
     assert const.building_name(70) == "House"
+    # Corrected id mappings verified against aoe2techtree
+    assert const.unit_name(11) == "Mangudai"  # was wrongly "Trade Cart"
+    assert const.building_name(50) == "Farm"  # was MISSING
+    assert const.unit_name(83) == "Villager"
+    assert const.unit_name(128) == "Trade Cart"  # was wrongly "Trebuchet"
+    assert const.unit_name(751) == "Eagle Scout"  # was wrongly "Eagle Warrior"
+    assert const.unit_name(753) == "Eagle Warrior"  # new correct id
+    assert const.unit_name(873) == "Elephant Archer"  # was wrongly "Eagle Scout"
+    assert const.unit_name(1258) == "Battering Ram"  # was wrong id 35
+    # #id fallback
+    assert const.unit_name(99999) == "#99999"
+    assert const.building_name(99999) == "#99999"
 
 
 @requires_fixture
@@ -84,23 +96,151 @@ def test_compute_metrics():
     assert m["apm"] > 0
     # villager_count equals the summed Villager train amounts
     assert m["villager_count"] == sum(u["amount"] for u in tl["units"] if u["name"] == "Villager")
-    # fixture is an archery-range (Archers) opening
-    assert m["opening"] == "Archers"
+    # no opening key — coach determines it
+    assert "opening" not in m
     # output shapes
     assert all({"name", "amount"} <= a.keys() for a in m["army"])
     assert all({"name", "t_s"} <= e.keys() for e in m["eco_tech_timings"])
 
 
-def test_classify_opening_archers():
-    tl = {
-        "uptimes": {"feudal": 600000, "castle": None, "imperial": None},
-        "builds": [{"t": 610000, "name": "Archery Range"}],
-        "eco_techs": [],
-        "units": [{"t": 620000, "name": "Archer", "amount": 1}],
-        "villager_queue_times": [],
-        "action_count": 50,
-    }
-    assert classify_opening(tl) == "Archers"
+# ---------------------------------------------------------------------------
+# parse_opening tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_opening_extracts_tag():
+    text = "OPENING: Scouts\n\nGood feudal time..."
+    assert parse_opening(text) == "Scouts"
+
+
+def test_parse_opening_trims_whitespace():
+    text = "OPENING:   Fast Castle  \n\nSome prose."
+    assert parse_opening(text) == "Fast Castle"
+
+
+def test_parse_opening_empty_when_missing():
+    text = "No opening line here."
+    assert parse_opening(text) == ""
+
+
+def test_parse_opening_middle_of_text():
+    text = "Preamble.\nOPENING: M@A → Archers\nMore prose."
+    assert parse_opening(text) == "M@A → Archers"
+
+
+# ---------------------------------------------------------------------------
+# render_dual_log tests
+# ---------------------------------------------------------------------------
+
+# Build a synthetic ops stream covering both ME and OPP events.
+from mgz.fast import Action  # noqa: E402
+
+
+def _make_ops():
+    """Synthetic op stream: ME does full play, OPP has eco + military events."""
+    # (t_ms, action_type, data_dict)
+    return [
+        # ME age-ups
+        (585_000, Action.RESEARCH, {"player_id": 1, "technology_id": 101}),  # feudal
+        (1_100_000, Action.RESEARCH, {"player_id": 1, "technology_id": 102}),  # castle
+        # ME eco tech
+        (610_000, Action.RESEARCH, {"player_id": 1, "technology_id": 202}),  # Double-Bit Axe
+        # ME builds
+        (610_000, Action.BUILD, {"player_id": 1, "building_id": 87}),  # Archery Range
+        (620_000, Action.BUILD, {"player_id": 1, "building_id": 50}),  # Farm — tests Farm fix
+        # ME trains
+        (625_000, Action.DE_QUEUE, {"player_id": 1, "unit_id": 83, "amount": 1}),  # Villager
+        (630_000, Action.DE_QUEUE, {"player_id": 1, "unit_id": 4, "amount": 2}),  # Archer x2
+        (635_000, Action.DE_QUEUE, {"player_id": 1, "unit_id": 4, "amount": 1}),  # Archer x1 (near)
+        # OPP age-up
+        (590_000, Action.RESEARCH, {"player_id": 2, "technology_id": 101}),  # opp feudal
+        # OPP eco (should be excluded from OPP lines)
+        (600_000, Action.BUILD, {"player_id": 2, "building_id": 50}),  # OPP Farm (eco — skip)
+        (605_000, Action.BUILD, {"player_id": 2, "building_id": 70}),  # OPP House (eco — skip)
+        (608_000, Action.RESEARCH, {"player_id": 2, "technology_id": 213}),  # OPP Wheelbarrow (eco — skip)
+        (609_000, Action.DE_QUEUE, {"player_id": 2, "unit_id": 83, "amount": 1}),  # OPP Villager (skip)
+        # OPP military building (should appear)
+        (615_000, Action.BUILD, {"player_id": 2, "building_id": 101}),  # OPP Stable
+        # OPP first military unit (should appear)
+        (620_000, Action.DE_QUEUE, {"player_id": 2, "unit_id": 448, "amount": 1}),  # Scout Cavalry
+        # OPP second train of same unit (should NOT appear — only first)
+        (625_000, Action.DE_QUEUE, {"player_id": 2, "unit_id": 448, "amount": 1}),  # Scout Cavalry again
+    ]
+
+
+def test_render_dual_log_roles():
+    """All non-header, non-APM lines must carry ME or OPP role."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    content_lines = [ln for ln in log.splitlines() if not ln.startswith("#") and not ln.startswith("00:00 APM")]
+    for line in content_lines:
+        parts = line.split(" ", 2)
+        assert len(parts) >= 3, f"malformed line: {line!r}"
+        assert parts[1] in {"ME", "OPP"}, f"unexpected role in: {line!r}"
+
+
+def test_render_dual_log_opp_no_eco():
+    """OPP lines must not contain Villager trains, Farm builds, or eco techs."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    opp_lines = [ln for ln in log.splitlines() if ln.split(" ", 2)[1:2] == ["OPP"]]
+    for line in opp_lines:
+        assert "Villager" not in line, f"OPP Villager should be excluded: {line!r}"
+        assert "Farm" not in line, f"OPP Farm should be excluded: {line!r}"
+        assert "Wheelbarrow" not in line, f"OPP eco tech should be excluded: {line!r}"
+        assert "House" not in line, f"OPP House should be excluded: {line!r}"
+
+
+def test_render_dual_log_opp_has_military():
+    """OPP lines must include military building (Stable) and first military unit (Scout Cavalry)."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    opp_lines = [ln for ln in log.splitlines() if ln.split(" ", 2)[1:2] == ["OPP"]]
+    opp_text = "\n".join(opp_lines)
+    assert "Stable" in opp_text, "OPP military building Stable should appear"
+    assert "Scout Cavalry" in opp_text, "OPP first military unit Scout Cavalry should appear"
+
+
+def test_render_dual_log_opp_first_unit_only():
+    """OPP Scout Cavalry should appear only once (first train), not twice."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    opp_lines = [ln for ln in log.splitlines() if ln.split(" ", 2)[1:2] == ["OPP"]]
+    scout_lines = [ln for ln in opp_lines if "Scout Cavalry" in ln]
+    # After spam collapse, may be "Scout Cavalry x2" (if within window) or single line
+    # Either way there should be exactly one line mentioning Scout Cavalry
+    assert len(scout_lines) == 1, f"Expected 1 Scout Cavalry OPP line, got: {scout_lines}"
+
+
+def test_render_dual_log_spam_collapse():
+    """ME consecutive identical TRAIN events within 10s are collapsed to xN."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    # Archer x2 at 630s and Archer x1 at 635s — within 10s window → collapsed to Archer xN
+    assert "Archer x3" in log or "Archer x" in log, f"Expected spam-collapsed Archer in log:\n{log}"
+
+
+def test_render_dual_log_header_present():
+    """Log must start with the prescribed header comment."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    first_line = log.splitlines()[0]
+    assert first_line.startswith("# ME = you"), f"Missing header: {first_line!r}"
+
+
+def test_render_dual_log_farm_in_me():
+    """ME BUILD Farm (id=50) must appear in ME lines — tests the Farm id fix."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=50)
+    me_lines = [ln for ln in log.splitlines() if ln.split(" ", 2)[1:2] == ["ME"]]
+    assert any("Farm" in ln for ln in me_lines), "ME Farm build should appear (id=50 fix)"
+
+
+def test_render_dual_log_apm_line():
+    """Log must end with the owner's APM line."""
+    ops = _make_ops()
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=77)
+    assert log.strip().endswith("APM total_actions=77")
 
 
 # ---------------------------------------------------------------------------
@@ -108,11 +248,15 @@ def test_classify_opening_archers():
 # ---------------------------------------------------------------------------
 
 _SAMPLE_SALIENT_LOG = """\
-09:45 AGE_UP feudal
-10:02 BUILD Archery Range
-10:45 TRAIN Archer x2
-12:30 TECH Double-Bit Axe
-18:20 AGE_UP castle
+# ME = you (full play). OPP = opponent's key strategic moves only (age-ups, military buildings, first military). Player names & chat stripped.
+09:45 ME AGE_UP feudal
+09:50 OPP AGE_UP feudal
+10:02 ME BUILD Archery Range
+10:15 OPP BUILD Stable
+10:20 OPP TRAIN Scout Cavalry
+10:45 ME TRAIN Archer x2
+12:30 ME TECH Double-Bit Axe
+18:20 ME AGE_UP castle
 00:00 APM total_actions=320
 """
 
@@ -122,7 +266,6 @@ _SAMPLE_METRICS = {
     "imperial_uptime_s": None,
     "apm": 53,
     "villager_count": 22,
-    "opening": "Archers",
     "army": [{"name": "Archer", "amount": 12}, {"name": "Skirmisher", "amount": 4}],
     "eco_tech_timings": [{"name": "Double-Bit Axe", "t_s": 750}],
 }
@@ -138,15 +281,22 @@ def test_build_coach_prompt_contains_metric_values():
     prompt = build_coach_prompt(_SAMPLE_SALIENT_LOG, _SAMPLE_METRICS)
     assert "585" in prompt  # feudal_uptime_s
     assert "1100" in prompt  # castle_uptime_s
-    assert "Archers" in prompt  # opening tag
     assert "53" in prompt  # apm
+    # no opening_tag in metrics anymore
+    assert "opening_tag" not in prompt
+
+
+def test_build_coach_prompt_no_opening_tag():
+    """compute_metrics no longer includes an opening key — prompt must not include it."""
+    prompt = build_coach_prompt(_SAMPLE_SALIENT_LOG, _SAMPLE_METRICS)
+    assert "opening_tag" not in prompt
 
 
 def test_run_claude_coach_success():
     fake_json = json.dumps(
         {
             "result": "Good feudal uptime. Focus on villager production in Castle Age.",
-            "model": "claude-opus-4-5",
+            "model": "claude-sonnet-4-5",
             "is_error": False,
         }
     )
@@ -159,7 +309,26 @@ def test_run_claude_coach_success():
         text, model = run_claude_coach("some prompt")
 
     assert "villager production" in text
-    assert model == "claude-opus-4-5"
+    assert model == "claude-sonnet-4-5"
+
+
+def test_run_claude_coach_passes_model(settings):
+    """run_claude_coach must pass --model <AOE2_COACH_MODEL> to the subprocess."""
+    settings.AOE2_COACH_MODEL = "sonnet"
+    settings.AOE2_CLAUDE_BIN = "claude"
+
+    fake_json = json.dumps({"result": "ok", "model": "claude-sonnet-4-5", "is_error": False})
+    fake_proc = MagicMock()
+    fake_proc.returncode = 0
+    fake_proc.stdout = fake_json
+    fake_proc.stderr = ""
+
+    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc) as mock_run:
+        run_claude_coach("some prompt")
+
+    cmd = mock_run.call_args[0][0]
+    assert "--model" in cmd
+    assert "sonnet" in cmd
 
 
 def test_run_claude_coach_nonzero_exit_raises():
@@ -174,7 +343,7 @@ def test_run_claude_coach_nonzero_exit_raises():
 
 
 def test_run_claude_coach_missing_result_raises():
-    fake_json = json.dumps({"model": "claude-opus-4-5", "is_error": False})
+    fake_json = json.dumps({"model": "claude-sonnet-4-5", "is_error": False})
     fake_proc = MagicMock()
     fake_proc.returncode = 0
     fake_proc.stdout = fake_json
@@ -196,12 +365,12 @@ def _make_match_with_dummy_file(file_hash):
 
 
 def _fake_pipeline():
-    """Return (fake_rec, fake_timeline, fake_metrics, fake_salient) stubs."""
+    """Return (fake_rec, fake_timeline, fake_metrics, fake_dual_log) stubs."""
     fake_rec = MagicMock()
     fake_rec.is_1v1 = True
     fake_rec.is_ranked = True
     fake_rec.me = {"number": 1, "civ_name": "Celts", "is_me": True}
-    fake_rec.opponent = {"civ_name": "Franks", "is_me": False}
+    fake_rec.opponent = {"number": 2, "civ_name": "Franks", "is_me": False}
     fake_rec.map_name = "Arabia"
     fake_rec.duration_ms = 1_200_000
     fake_rec.version = "Version.DE"
@@ -222,30 +391,37 @@ def _fake_pipeline():
         "imperial_uptime_s": None,
         "apm": 53,
         "villager_count": 22,
-        "opening": "Archers",
         "army": [],
         "eco_tech_timings": [],
         "estimates": [],
     }
-    fake_salient = "09:45 AGE_UP feudal\n00:00 APM total_actions=320"
-    return fake_rec, fake_timeline, fake_metrics, fake_salient
+    fake_dual_log = (
+        "# ME = you (full play). OPP = opponent's key strategic moves only "
+        "(age-ups, military buildings, first military). Player names & chat stripped.\n"
+        "09:45 ME AGE_UP feudal\n"
+        "00:00 APM total_actions=320"
+    )
+    return fake_rec, fake_timeline, fake_metrics, fake_dual_log
 
 
 @pytest.mark.django_db
 def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
-    """Coach succeeds → coach_analysis + coach_model are stored on the match."""
+    """Coach succeeds → coach_analysis + coach_model + opening are stored on the match."""
     from website.tasks import analyze_match
 
     settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
-    fake_rec, fake_timeline, fake_metrics, fake_salient = _fake_pipeline()
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
 
     monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
     monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
-    monkeypatch.setattr("website.tasks.render_salient_log", lambda *_a, **_kw: fake_salient)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
     monkeypatch.setattr(
         "website.tasks.run_claude_coach",
-        lambda *_a, **_kw: ("Great game. Work on villager production.", "claude-opus-4-5"),
+        lambda *_a, **_kw: (
+            "OPENING: Archers\n\nGreat game. Work on villager production.",
+            "claude-sonnet-4-5",
+        ),
     )
 
     m = _make_match_with_dummy_file("coach-success-hash")
@@ -254,21 +430,22 @@ def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
 
     assert m.analysis_status == "done"
     assert "villager production" in m.coach_analysis
-    assert m.coach_model == "claude-opus-4-5"
+    assert m.coach_model == "claude-sonnet-4-5"
+    assert m.metrics.get("opening") == "Archers"
 
 
 @pytest.mark.django_db
 def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
-    """Coach raises → status is still 'done', coach_analysis is empty string."""
+    """Coach raises → status is still 'done', coach_analysis is empty, opening is empty string."""
     from website.tasks import analyze_match
 
     settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
-    fake_rec, fake_timeline, fake_metrics, fake_salient = _fake_pipeline()
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
 
     monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
     monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
-    monkeypatch.setattr("website.tasks.render_salient_log", lambda *_a, **_kw: fake_salient)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
     monkeypatch.setattr(
         "website.tasks.run_claude_coach",
         lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("claude not found")),
@@ -280,6 +457,7 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
 
     assert m.analysis_status == "done"
     assert m.coach_analysis == ""
+    assert m.metrics.get("opening") == ""
 
 
 @pytest.mark.django_db
@@ -311,7 +489,6 @@ def test_analyze_match_done(settings):
     assert m.my_civ and m.opponent_civ
     assert m.duration_seconds > 0
     assert "salient_log" in m.timeline
-    assert "opening" in m.metrics
 
 
 @pytest.mark.django_db

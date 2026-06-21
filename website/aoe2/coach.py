@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import subprocess
 
 from django.conf import settings
@@ -15,8 +16,17 @@ logger = logging.getLogger(__name__)
 COACH_SYSTEM = """\
 You are a concise, precise Age of Empires II: Definitive Edition 1v1 coaching assistant.
 You analyse a mechanical game log (salient.log) and a numeric metrics summary to produce
-a short, actionable coach report. The log contains only timestamped mechanical events
-(age-ups, builds, eco techs, unit trains); no player names, no chat, no speculation.
+a short, actionable coach report.
+
+LOG FORMAT:
+  Lines prefixed with "ME" are the owner's full play (age-ups, builds, eco techs, unit trains).
+  Lines prefixed with "OPP" are the opponent's key strategic markers ONLY — age-ups, military
+  building constructions, and the first train of each distinct military unit. OPP eco actions
+  (villagers, farms, houses, lumber/mining camps, walls) are stripped. Player names and chat
+  are never present.
+
+Use OPP lines only to contextualise the owner's REACTIONS (e.g. opponent built Stable → owner
+built Archery Range). Do NOT grade or evaluate the opponent's eco, micro, or performance.
 
 AoE2 1v1 benchmark uptimes (ranked-ladder averages — compare against these):
   Scouts opening  : Feudal ~9:30–10:00 | Castle ~18:00–20:00
@@ -31,27 +41,28 @@ Key metrics pros scrutinize:
   • Castle uptime vs. benchmark
   • Villager production consistency (long gaps → TC idle time)
   • Eco tech timings (Loom before feudal = eco-safe; Wheelbarrow before mid-Castle)
-  • Opening classification match vs. actual build (e.g. Scouts but built Archery Range)
   • Army composition and first military unit timing
   • APM (useful as context, not as a standalone metric)
 
-Output format — plain text, 3–5 short paragraphs:
-  1. Opening read: what opening was played and how it compares to the classified tag.
-  2. Uptime analysis: actual vs. benchmark, any notable gaps.
-  3. Eco / production: villager cadence, eco tech highlights or omissions.
-  4. Key observation: the single most impactful thing you noticed.
-  5. Improvement: one concrete, actionable change for the next game.
+Output format — plain text:
+  Line 1: OPENING: <short tag>
+  Blank line.
+  Then 3–5 short paragraphs (prose only, no bullet lists):
+    1. Opening read: what opening was played, inferred from ME's builds and first units.
+    2. Uptime analysis: actual vs. benchmark, any notable gaps.
+    3. Eco / production: villager cadence, eco tech highlights or omissions.
+    4. Key observation: the single most impactful thing you noticed.
+    5. Improvement: one concrete, actionable change for the next game.
 
-Keep it under 300 words. No bullet lists — prose only. No fluff, no praise padding.
-Do NOT reference opponent data or speculate about game state beyond the log.
+Keep it under 300 words. No fluff, no praise padding.
 """
 
 
 def build_coach_prompt(salient_log: str, metrics: dict) -> str:
     """Build the -p prompt passed to `claude` for coaching a single match.
 
-    salient_log is the pre-stripped mechanical event log (~5 KB).
-    metrics is the dict from compute_metrics (feudal_uptime_s, opening, etc.).
+    salient_log is the pre-stripped dual mechanical event log (~5 KB).
+    metrics is the dict from compute_metrics (feudal_uptime_s, etc.).
     Player names and chat are never in either input.
     """
     metrics_summary_lines = []
@@ -63,7 +74,6 @@ def build_coach_prompt(salient_log: str, metrics: dict) -> str:
     metrics_summary_lines.append(f"  imperial_uptime_s: {imperial if imperial is not None else 'n/a'}")
     metrics_summary_lines.append(f"  apm              : {metrics.get('apm', 'n/a')}")
     metrics_summary_lines.append(f"  villager_count   : {metrics.get('villager_count', 'n/a')}")
-    metrics_summary_lines.append(f"  opening_tag      : {metrics.get('opening', 'n/a')}")
 
     army = metrics.get("army", [])
     if army:
@@ -87,15 +97,30 @@ def build_coach_prompt(salient_log: str, metrics: dict) -> str:
     )
 
 
+_OPENING_RE = re.compile(r"^OPENING:\s*(.+)", re.MULTILINE)
+
+
+def parse_opening(text: str) -> str:
+    """Extract the OPENING tag from the first line of the coach report.
+
+    Returns the tag string, or empty string if not found.
+    """
+    m = _OPENING_RE.search(text)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
 def run_claude_coach(prompt: str, timeout: int = 120) -> tuple[str, str]:
-    """Run `claude -p <prompt> --output-format json` and return (result_text, model).
+    """Run `claude -p <prompt> --model <model> --output-format json` and return (result_text, model).
 
     Raises RuntimeError on non-zero exit or missing 'result' key so the caller
     can decide how to handle (graceful fallback expected in tasks.py).
     """
     claude_bin = getattr(settings, "AOE2_CLAUDE_BIN", "claude")
+    coach_model = getattr(settings, "AOE2_COACH_MODEL", "sonnet")
     result = subprocess.run(
-        [claude_bin, "-p", prompt, "--output-format", "json"],
+        [claude_bin, "-p", prompt, "--model", coach_model, "--output-format", "json"],
         capture_output=True,
         text=True,
         timeout=timeout,
