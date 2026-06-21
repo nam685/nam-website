@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0028_listentrack_from_sync'),
+        ("website", "0028_listentrack_from_sync"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='thought',
-            name='video',
-            field=models.FileField(blank=True, null=True, upload_to='thoughts/videos/%Y/%m/'),
+            model_name="thought",
+            name="video",
+            field=models.FileField(blank=True, null=True, upload_to="thoughts/videos/%Y/%m/"),
         ),
     ]
