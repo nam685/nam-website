@@ -34,6 +34,7 @@ from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess
 from .listen import (
     listen_import,
     listen_list,
+    listen_radio,
     listen_reauth,
     listen_stats,
     listen_sync,
@@ -116,6 +117,7 @@ __all__ = [
     "graph_search",
     "listen_import",
     "listen_list",
+    "listen_radio",
     "listen_reauth",
     "listen_stats",
     "listen_sync",

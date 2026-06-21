@@ -20,6 +20,10 @@ def _png(size=(10, 10)):
     return SimpleUploadedFile("x.png", buf.getvalue(), content_type="image/png")
 
 
+def _mp4(name="clip.mp4"):
+    return SimpleUploadedFile(name, b"\x00\x00\x00\x18ftypmp42fake video bytes", content_type="video/mp4")
+
+
 @pytest.mark.django_db
 class TestThoughtList:
     def test_empty_list(self, client):
@@ -40,6 +44,13 @@ class TestThoughtList:
         item = client.get("/api/thoughts/").json()["thoughts"][0]
         assert item["image"] is not None
         assert item["image"].endswith(".png")
+
+    def test_includes_video_url(self, client):
+        Thought.objects.create(content="", video=_mp4())
+        item = client.get("/api/thoughts/").json()["thoughts"][0]
+        assert item["video"] is not None
+        assert item["video"].endswith(".mp4")
+        assert item["image"] is None
 
     def test_pagination(self, client):
         for i in range(15):
@@ -73,6 +84,36 @@ class TestThoughtCreate:
         body = resp.json()
         assert body["content"] == "look"
         assert body["image"] is not None
+
+    def test_create_video_only(self, client, auth_headers):
+        resp = client.post("/api/thoughts/create/", {"video": _mp4()}, **auth_headers)
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["video"] is not None
+        assert body["video"].endswith(".mp4")
+        assert body["image"] is None
+
+    def test_create_text_and_video(self, client, auth_headers):
+        resp = client.post("/api/thoughts/create/", {"content": "yay 10 pull ups", "video": _mp4()}, **auth_headers)
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["content"] == "yay 10 pull ups"
+        assert body["video"] is not None
+
+    def test_video_too_large_rejected(self, client, auth_headers, monkeypatch):
+        from website.views import thought as thought_view
+
+        monkeypatch.setattr(thought_view, "MAX_VIDEO_SIZE", 5)
+        resp = client.post("/api/thoughts/create/", {"video": _mp4()}, **auth_headers)
+        assert resp.status_code == 400
+
+    def test_bad_video_extension_rejected(self, client, auth_headers):
+        resp = client.post("/api/thoughts/create/", {"video": _mp4(name="clip.mkv")}, **auth_headers)
+        assert resp.status_code == 400
+
+    def test_image_and_video_together_rejected(self, client, auth_headers):
+        resp = client.post("/api/thoughts/create/", {"image": _png(), "video": _mp4()}, **auth_headers)
+        assert resp.status_code == 400
 
     def test_empty_post_rejected(self, client, auth_headers):
         resp = client.post("/api/thoughts/create/", {"content": "   "}, **auth_headers)

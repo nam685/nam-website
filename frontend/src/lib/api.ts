@@ -11,6 +11,7 @@ export interface Thought {
   id: number;
   content: string;
   image: string | null;
+  video: string | null;
   created_at: string;
 }
 
@@ -53,6 +54,22 @@ export interface ListenStats {
     play_count: number;
   }[];
   daily: { date: string; count: number }[];
+}
+
+export async function fetchRadioTracks(
+  seed: string,
+  exclude: string[],
+): Promise<ListenTrack[]> {
+  const params = new URLSearchParams({ seed });
+  if (exclude.length) params.set("exclude", exclude.join(","));
+  try {
+    const res = await fetch(`${API}/api/listens/radio/?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.tracks ?? []) as ListenTrack[];
+  } catch {
+    return [];
+  }
 }
 
 /* ── Listens graph ─────────────────────────────────────── */

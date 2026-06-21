@@ -14,6 +14,7 @@ const FALLBACK: Thought[] = [
     id: 0,
     content: "This is my public diary. Certified 100% human generated.",
     image: null,
+    video: null,
     created_at: "2026-03-28T00:00:00Z",
   },
 ];
@@ -58,18 +59,20 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
   }, [preview]);
 
   // The [preview] effect above is the single owner of revocation — it revokes the
-  // previous URL when preview changes or on unmount, so attach/removeImage don't.
+  // previous URL when preview changes or on unmount, so attach/removeMedia don't.
   function attach(f: File | undefined | null) {
-    if (!f || !f.type.startsWith("image/")) return;
+    if (!f || (!f.type.startsWith("image/") && !f.type.startsWith("video/"))) return;
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
 
-  function removeImage() {
+  function removeMedia() {
     setFile(null);
     setPreview(null);
     if (fileRef.current) fileRef.current.value = "";
   }
+
+  const isVideo = !!file && file.type.startsWith("video/");
 
   function isCoolingDown() {
     const last = store("lastThoughtTime");
@@ -107,7 +110,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
     try {
       const form = new FormData();
       if (content) form.append("content", content);
-      if (file) form.append("image", file);
+      if (file) form.append(file.type.startsWith("video/") ? "video" : "image", file);
       const res = await fetch(`${API}/api/thoughts/create/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -128,7 +131,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
       onPost(thought);
       setText("");
       clearDraft();
-      removeImage();
+      removeMedia();
       setOpen(false);
     } catch {
       setError("Network error");
@@ -246,12 +249,16 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
       />
 
       {preview && (
-        <div style={{ position: "relative", width: "9rem", marginTop: "0.6rem" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="preview" style={{ width: "100%", borderRadius: "6px", display: "block" }} />
+        <div style={{ position: "relative", width: isVideo ? "14rem" : "9rem", marginTop: "0.6rem" }}>
+          {isVideo ? (
+            <video src={preview} controls playsInline style={{ width: "100%", borderRadius: "6px", display: "block" }} />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="preview" style={{ width: "100%", borderRadius: "6px", display: "block" }} />
+          )}
           <button
-            onClick={removeImage}
-            aria-label="Remove image"
+            onClick={removeMedia}
+            aria-label="Remove attachment"
             style={{ position: "absolute", top: "-0.5rem", right: "-0.5rem", width: "1.4rem", height: "1.4rem", borderRadius: "50%", background: "#0e0e0e", border: "1px solid #f87171", color: "#f87171", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1 }}
           >
             ✕
@@ -262,8 +269,8 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.75rem" }}>
         <button
           onClick={() => fileRef.current?.click()}
-          aria-label="Attach image"
-          title="Attach image"
+          aria-label="Attach image or video"
+          title="Attach image or video"
           style={{ width: "1.9rem", height: "1.9rem", borderRadius: "50%", background: "none", border: "1px solid color-mix(in srgb, var(--accent) 45%, #2a2a2a)", color: "var(--accent)", cursor: "pointer", fontSize: "0.95rem", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
         >
           ▦
@@ -283,7 +290,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         onChange={(e) => attach(e.target.files?.[0])}
         style={{ display: "none" }}
       />
@@ -494,6 +501,18 @@ export default function ThinksPage() {
                     loading="lazy"
                     onClick={() => setLightboxId(thought.id)}
                     style={{ maxWidth: "100%", height: "auto", borderRadius: "6px", cursor: "pointer", display: "block" }}
+                  />
+                </div>
+              )}
+
+              {thought.video && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: thought.content ? "0.7rem" : 0 }}>
+                  <video
+                    src={`${API}${thought.video}`}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    style={{ maxWidth: "100%", height: "auto", borderRadius: "6px", display: "block" }}
                   />
                 </div>
               )}
