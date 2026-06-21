@@ -113,13 +113,12 @@ export default function PlaysClient() {
       className="page"
       style={{ maxWidth: "72rem", position: "relative", zIndex: 1 }}
     >
-      {/* Tab bar */}
+      {/* Top-level tab bar: chess | AoE 2 */}
       <div
         style={{
           display: "flex",
           gap: "0.25rem",
           marginTop: "1rem",
-          marginBottom: "1.5rem",
           borderBottom: "1px solid #1a1a1a",
         }}
       >
@@ -127,11 +126,11 @@ export default function PlaysClient() {
           onClick={() => setTab("explorer")}
           style={{
             ...tabBtnStyle,
-            borderBottomColor: tab === "explorer" ? ACCENT : "transparent",
-            color: tab === "explorer" ? ACCENT : "#555",
+            borderBottomColor: tab !== "empires" ? ACCENT : "transparent",
+            color: tab !== "empires" ? ACCENT : "#555",
           }}
         >
-          Explorer
+          chess
         </button>
         <button
           onClick={() => setTab("empires")}
@@ -141,33 +140,57 @@ export default function PlaysClient() {
             color: tab === "empires" ? ACCENT : "#555",
           }}
         >
-          Empires
+          AoE 2
         </button>
-        {isAdmin && (
+      </div>
+
+      {/* Secondary bar: Explorer | Play (only when chess is active) */}
+      {tab !== "empires" && (
+        <div
+          style={{
+            display: "flex",
+            gap: "0.25rem",
+            marginBottom: "1.5rem",
+            borderBottom: "1px solid #111",
+          }}
+        >
           <button
-            onClick={() => setTab("play")}
+            onClick={() => setTab("explorer")}
             style={{
-              ...tabBtnStyle,
-              borderBottomColor: tab === "play" ? ACCENT : "transparent",
-              color: tab === "play" ? ACCENT : "#555",
+              ...secondaryTabBtnStyle,
+              borderBottomColor: tab === "explorer" ? ACCENT : "transparent",
+              color: tab === "explorer" ? ACCENT : "#444",
             }}
           >
-            Play
-            {lichessStatus?.connected && (
-              <span
-                style={{
-                  display: "inline-block",
-                  width: "6px",
-                  height: "6px",
-                  borderRadius: "50%",
-                  background: "#22c55e",
-                  marginLeft: "0.4rem",
-                }}
-              />
-            )}
+            Explorer
           </button>
-        )}
-      </div>
+          {isAdmin && (
+            <button
+              onClick={() => setTab("play")}
+              style={{
+                ...secondaryTabBtnStyle,
+                borderBottomColor: tab === "play" ? ACCENT : "transparent",
+                color: tab === "play" ? ACCENT : "#444",
+              }}
+            >
+              Play
+              {lichessStatus?.connected && (
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "5px",
+                    height: "5px",
+                    borderRadius: "50%",
+                    background: "#22c55e",
+                    marginLeft: "0.35rem",
+                  }}
+                />
+              )}
+            </button>
+          )}
+        </div>
+      )}
+      {tab === "empires" && <div style={{ marginBottom: "1.5rem" }} />}
 
       {/* Explorer tab */}
       {tab === "explorer" && <OpeningExplorer />}
@@ -281,6 +304,19 @@ const tabBtnStyle: React.CSSProperties = {
   letterSpacing: "0.12em",
   textTransform: "uppercase",
   padding: "0.5rem 1rem",
+  background: "transparent",
+  border: "none",
+  borderBottom: "2px solid transparent",
+  cursor: "pointer",
+  transition: "color 0.15s, border-color 0.15s",
+};
+
+const secondaryTabBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-headline)",
+  fontSize: "0.6rem",
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  padding: "0.35rem 0.75rem",
   background: "transparent",
   border: "none",
   borderBottom: "2px solid transparent",

@@ -1,9 +1,6 @@
-"""Derived metrics + opening classification from the salient timeline. Inputs-only; some
-values (idle TC) are ESTIMATES and labelled as such."""
+"""Derived metrics + opening classification from the salient timeline."""
 
 from collections import defaultdict
-
-IDLE_GAP_MS = 30000  # gaps between vill queues longer than this count as approx idle TC
 
 
 def classify_opening(timeline):
@@ -28,17 +25,6 @@ def classify_opening(timeline):
     return "Other"
 
 
-def _idle_tc_est_s(vill_times):
-    if len(vill_times) < 2:
-        return 0
-    idle = 0
-    for a, b in zip(vill_times, vill_times[1:]):
-        gap = b - a
-        if gap > IDLE_GAP_MS:
-            idle += gap - IDLE_GAP_MS
-    return idle // 1000
-
-
 def compute_metrics(timeline, duration_ms):
     up = timeline["uptimes"]
     minutes = max(duration_ms / 60000, 1 / 60)
@@ -58,9 +44,8 @@ def compute_metrics(timeline, duration_ms):
         "imperial_uptime_s": (up["imperial"] // 1000) if up["imperial"] is not None else None,
         "apm": apm,
         "villager_count": villagers,
-        "idle_tc_est_s": _idle_tc_est_s(timeline["villager_queue_times"]),
         "opening": classify_opening(timeline),
         "army": [{"name": n, "amount": a} for n, a in sorted(army.items(), key=lambda x: -x[1])],
         "eco_tech_timings": [{"name": e["name"], "t_s": e["t"] // 1000} for e in timeline["eco_techs"]],
-        "estimates": ["idle_tc_est_s"],
+        "estimates": [],
     }

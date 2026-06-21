@@ -197,6 +197,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 function MatchDetail({ detail }: { detail: Detail }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function copyShare() {
@@ -212,13 +213,30 @@ function MatchDetail({ detail }: { detail: Detail }) {
   }
 
   const m = detail.metrics as Record<string, number | null | string>;
-  const estimates: string[] =
-    ((detail.metrics as Record<string, unknown>).estimates as string[]) || [];
   return (
     <div style={{ padding: "1rem 0 1.5rem" }}>
-      <button onClick={copyShare} style={shareBtnStyle}>
-        {copied ? "Copied!" : "Share"}
-      </button>
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          justifyContent: "flex-end",
+        }}
+      >
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label="More"
+          style={dotsBtnStyle}
+        >
+          ⋮
+        </button>
+        {menuOpen && (
+          <div style={menuStyle}>
+            <button onClick={copyShare} style={menuItemStyle}>
+              {copied ? "Copied!" : "Share link"}
+            </button>
+          </div>
+        )}
+      </div>
       <div
         style={{
           display: "flex",
@@ -242,11 +260,6 @@ function MatchDetail({ detail }: { detail: Detail }) {
         <Metric label="APM" value={String(m.apm ?? "—")} />
         <Metric label="Villagers" value={String(m.villager_count ?? "—")} />
         <Metric
-          label="Idle TC (est)"
-          value={`${m.idle_tc_est_s ?? 0}s`}
-          estimate={estimates.includes("idle_tc_est_s")}
-        />
-        <Metric
           label="Length"
           value={formatDuration(detail.duration_seconds)}
         />
@@ -268,15 +281,7 @@ function MatchDetail({ detail }: { detail: Detail }) {
   );
 }
 
-function Metric({
-  label,
-  value,
-  estimate,
-}: {
-  label: string;
-  value: string;
-  estimate?: boolean;
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div
@@ -288,7 +293,6 @@ function Metric({
         }}
       >
         {label}
-        {estimate && <span style={{ color: "#b45309" }}> ~est</span>}
       </div>
       <div style={{ fontSize: "1rem", color: "#ddd" }}>{value}</div>
     </div>
@@ -329,16 +333,36 @@ const taglineStyle: React.CSSProperties = {
   textTransform: "lowercase",
 };
 
-const shareBtnStyle: React.CSSProperties = {
-  fontFamily: "var(--font-headline)",
-  fontSize: "0.6rem",
-  letterSpacing: "0.1em",
-  textTransform: "uppercase",
-  padding: "0.25rem 0.6rem",
+const dotsBtnStyle: React.CSSProperties = {
   background: "transparent",
-  color: "var(--accent)",
-  border: "1px solid var(--accent)",
-  borderRadius: "3px",
+  border: "none",
+  color: "#888",
+  fontSize: "1.2rem",
+  lineHeight: 1,
   cursor: "pointer",
-  marginBottom: "0.75rem",
+  padding: "0.1rem 0.4rem",
+};
+
+const menuStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "1.6rem",
+  right: 0,
+  background: "#0e0e0e",
+  border: "1px solid #2a2a2a",
+  borderRadius: "4px",
+  padding: "0.25rem",
+  zIndex: 10,
+};
+
+const menuItemStyle: React.CSSProperties = {
+  fontFamily: "var(--font-headline)",
+  fontSize: "0.65rem",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "var(--accent)",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  padding: "0.3rem 0.6rem",
 };

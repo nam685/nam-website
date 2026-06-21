@@ -72,8 +72,6 @@ def test_compute_metrics():
     assert m["villager_count"] == sum(u["amount"] for u in tl["units"] if u["name"] == "Villager")
     # fixture is an archery-range (Archers) opening
     assert m["opening"] == "Archers"
-    # the idle-TC estimate is labelled as an estimate
-    assert "idle_tc_est_s" in m["estimates"]
     # output shapes
     assert all({"name", "amount"} <= a.keys() for a in m["army"])
     assert all({"name", "t_s"} <= e.keys() for e in m["eco_tech_timings"])
