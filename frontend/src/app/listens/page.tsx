@@ -144,8 +144,14 @@ export default function ListensGraphPage() {
         setSyncMessage(data.error || "Sync failed.");
       } else {
         setSyncStatus("done");
-        // Sync rebuilds the graph server-side; refresh the current patch.
-        if (data.synced > 0 || data.synced_liked > 0) loadPatch();
+        // The graph now rebuilds asynchronously (Celery) since the Last.fm pass takes minutes,
+        // so the new tracks won't appear in the graph until that finishes — say so.
+        if ((data.synced > 0 || data.synced_liked > 0) && data.graph_rebuilding) {
+          setSyncMessage(`Synced ${data.synced + data.synced_liked} tracks — graph rebuilding in the background.`);
+        } else if (data.synced > 0 || data.synced_liked > 0) {
+          // Rebuild ran inline (broker down fallback) — graph is current, refresh it.
+          loadPatch();
+        }
       }
     } catch {
       setSyncStatus("error");
@@ -288,7 +294,15 @@ export default function ListensGraphPage() {
       </div>
 
       {isAdmin && syncMessage && (
-        <div style={{ color: "#f87171", fontSize: 11, fontFamily: "monospace", padding: "0 4px 8px", lineHeight: 1.5 }}>
+        <div
+          style={{
+            color: syncStatus === "error" ? "#f87171" : "#888",
+            fontSize: 11,
+            fontFamily: "monospace",
+            padding: "0 4px 8px",
+            lineHeight: 1.5,
+          }}
+        >
           {syncMessage}
         </div>
       )}

@@ -192,10 +192,29 @@ def _fetch_frequent_from_home(yt):
     return parsed_tracks
 
 
-def _do_sync(progress=None):
+def _rebuild_graph(progress=None):
+    """Rebuild the listening graph from current data. Non-fatal — never raises.
+
+    Slow: it fetches Last.fm similarities for every artist/track (minutes). Callers on the
+    request path must run this off-thread (see `rebuild_listen_graph` Celery task) so they
+    don't blow gunicorn's request timeout.
+    """
+    try:
+        from django.conf import settings
+
+        from ..services import music_graph
+
+        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers(), progress=progress)
+    except Exception:
+        logger.exception("Graph rebuild failed")
+
+
+def _do_sync(progress=None, rebuild_graph=True):
     """Core sync logic shared by the view and Celery task.
 
     `progress` is an optional callable(str) for live status output (e.g. a CLI writer).
+    `rebuild_graph` rebuilds the graph inline when True; the web view passes False and
+    dispatches the rebuild to Celery instead (the Last.fm pass exceeds the request timeout).
     Returns {"synced_history": int, "synced_liked": int, "synced_frequent": int} or raises on auth failure.
     """
 
@@ -284,18 +303,11 @@ def _do_sync(progress=None):
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
 
-    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked + {len(new_frequent)} frequent; rebuilding graph…")
+    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked + {len(new_frequent)} frequent")
 
-    # Rebuild the listening graph from the freshly-synced data. Non-fatal: a graph
-    # failure must not break the sync. Runs for both the view and the Celery task.
-    try:
-        from django.conf import settings
-
-        from ..services import music_graph
-
-        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers(), progress=progress)
-    except Exception:
-        logger.exception("Graph rebuild after sync failed")
+    if rebuild_graph:
+        report("Rebuilding graph…")
+        _rebuild_graph(progress=progress)
 
     return {
         "synced_history": len(new_tracks),
@@ -319,7 +331,10 @@ def listen_sync(request):
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     try:
-        result = _do_sync()
+        # Sync the tracks synchronously (fast), but defer the graph rebuild — its Last.fm pass
+        # takes minutes and would otherwise blow gunicorn's request timeout (a real success then
+        # reported to the user as a 502).
+        result = _do_sync(rebuild_graph=False)
     except YTMAuthError as e:
         # 409 (not 401) — the admin token is fine; it's the YTM cookie that's stale. A 401 would
         # trip the frontend's admin-token-expiry path and bounce the user to /sudo. `auth_expired`
@@ -333,11 +348,24 @@ def listen_sync(request):
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
+    # Rebuild the graph off the request path. Falls back to inline if the broker is unreachable,
+    # so a Celery outage degrades to the old (slow) behaviour rather than skipping the rebuild.
+    graph_rebuilding = True
+    try:
+        from ..tasks import rebuild_listen_graph
+
+        rebuild_listen_graph.delay()
+    except Exception:
+        logger.exception("Could not queue graph rebuild; running inline")
+        _rebuild_graph()
+        graph_rebuilding = False
+
     return JsonResponse(
         {
             "synced": result["synced_history"],
             "synced_liked": result["synced_liked"],
             "synced_frequent": result["synced_frequent"],
+            "graph_rebuilding": graph_rebuilding,
         }
     )
 
