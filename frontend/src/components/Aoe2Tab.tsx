@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
 import {
   Aoe2MatchSummary,
+  clipEmbedUrl,
   formatDuration,
   formatUptime,
   gameSharePath,
@@ -20,12 +21,16 @@ type Stats = {
   losses: number;
   favourite_civ: string | null;
   current_elo: number | null;
+  current_rank: number | null;
 };
 
 type Detail = Aoe2MatchSummary & {
   metrics: Record<string, unknown>;
   timeline: Record<string, unknown>;
   coach_analysis: string;
+  clip_title: string;
+  clip_note: string;
+  clip_start_seconds: number | null;
 };
 
 export default function Aoe2Tab() {
@@ -45,8 +50,11 @@ export default function Aoe2Tab() {
           const param = Number(
             new URLSearchParams(window.location.search).get("game"),
           );
-          const target = list.find((m) => m.id === param);
-          setSelectedId(target ? target.id : list[0].id); // shared game if valid, else newest
+          // Precedence: ?game= > featured > newest
+          const byParam = list.find((m) => m.id === param);
+          const featured = list.find((m) => m.featured);
+          const target = byParam ?? featured ?? list[0];
+          setSelectedId(target.id);
         }
       })
       .catch(() => {});
@@ -92,6 +100,29 @@ export default function Aoe2Tab() {
     window.location.reload();
   }
 
+  function refreshMatch(id: number) {
+    // Re-fetch the specific match in the list + its detail.
+    fetch(`${API}/api/aoe2/${id}/`)
+      .then((r) => r.json())
+      .then((d: Detail) => {
+        setDetail(d);
+        setMatches((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  featured: d.featured,
+                  clip_url: d.clip_url,
+                  my_elo: d.my_elo,
+                  my_rating_change: d.my_rating_change,
+                }
+              : m,
+          ),
+        );
+      })
+      .catch(() => {});
+  }
+
   return (
     <div>
       {/* Stats header */}
@@ -105,6 +136,9 @@ export default function Aoe2Tab() {
           }}
         >
           <Stat label="ELO" value={stats.current_elo ?? "—"} />
+          {stats.current_rank && (
+            <Stat label="Rank" value={`#${stats.current_rank}`} />
+          )}
           <Stat label="W / L" value={`${stats.wins} / ${stats.losses}`} />
           <Stat label="Games" value={stats.total} />
           <Stat label="Top civ" value={stats.favourite_civ ?? "—"} />
@@ -142,26 +176,62 @@ export default function Aoe2Tab() {
               style={{ ...rowStyle, color: selected ? ACCENT : "#ccc" }}
             >
               <span style={{ flex: 1, textAlign: "left" }}>
+                {m.featured && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginRight: "0.35rem",
+                      color: ACCENT,
+                      fontSize: "0.6rem",
+                    }}
+                    title="Featured"
+                  >
+                    ★
+                  </span>
+                )}
                 {m.my_civ} vs {m.opponent_civ}
               </span>
               <span style={{ color: "#777" }}>{m.map_name}</span>
-              <span
-                style={{
-                  fontSize: "0.6rem",
-                  padding: "0.1rem 0.4rem",
-                  borderRadius: "3px",
-                  background: openingColor(m.opening),
-                  color: "#0e0e0e",
-                }}
-              >
-                {m.opening}
-              </span>
+              {m.opening && (
+                <span
+                  style={{
+                    fontSize: "0.6rem",
+                    padding: "0.1rem 0.4rem",
+                    borderRadius: "3px",
+                    background: openingColor(m.opening),
+                    color: "#0e0e0e",
+                  }}
+                >
+                  {m.opening}
+                </span>
+              )}
+              {m.my_rating_change !== null &&
+                m.my_rating_change !== undefined && (
+                  <span
+                    style={{
+                      fontSize: "0.65rem",
+                      color:
+                        m.my_rating_change > 0
+                          ? "#22c55e"
+                          : m.my_rating_change < 0
+                            ? "#ef4444"
+                            : "#888",
+                    }}
+                  >
+                    {m.my_rating_change > 0 ? "+" : ""}
+                    {m.my_rating_change}
+                  </span>
+                )}
               <span style={{ width: "4.5rem", textAlign: "right" }}>
                 {resultLabel(m.my_result)}
               </span>
             </button>
             {selected && detail && detail.id === m.id && (
-              <MatchDetail detail={detail} />
+              <MatchDetail
+                detail={detail}
+                isAdmin={isAdmin}
+                onRefresh={() => refreshMatch(m.id)}
+              />
             )}
           </div>
         );
@@ -196,9 +266,40 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function MatchDetail({ detail }: { detail: Detail }) {
+function MatchDetail({
+  detail,
+  isAdmin,
+  onRefresh,
+}: {
+  detail: Detail;
+  isAdmin: boolean;
+  onRefresh: () => void;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [clipFormOpen, setClipFormOpen] = useState(false);
+  const [clipUrl, setClipUrl] = useState(detail.clip_url || "");
+  const [clipTitle, setClipTitle] = useState(detail.clip_title || "");
+  const [clipNote, setClipNote] = useState(detail.clip_note || "");
+  const [clipStart, setClipStart] = useState(
+    detail.clip_start_seconds !== null &&
+      detail.clip_start_seconds !== undefined
+      ? String(detail.clip_start_seconds)
+      : "",
+  );
+  const [clipSaving, setClipSaving] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click.
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
 
   async function copyShare() {
     try {
@@ -212,7 +313,47 @@ function MatchDetail({ detail }: { detail: Detail }) {
     }
   }
 
+  async function toggleFeature() {
+    setMenuOpen(false);
+    const token = store("adminToken");
+    await fetch(`${API}/api/aoe2/${detail.id}/feature/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+    onRefresh();
+  }
+
+  async function saveClip() {
+    setClipSaving(true);
+    const token = store("adminToken");
+    await fetch(`${API}/api/aoe2/${detail.id}/clip/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: clipUrl,
+        title: clipTitle,
+        note: clipNote,
+        start_seconds: clipStart !== "" ? Number(clipStart) : null,
+      }),
+    }).catch(() => {});
+    setClipSaving(false);
+    setClipFormOpen(false);
+    onRefresh();
+  }
+
   const m = detail.metrics as Record<string, number | null | string>;
+
+  // Convert stored watch URL to embed URL for the iframe.
+  const embedUrl = detail.clip_url
+    ? clipEmbedUrl(
+        detail.clip_url,
+        typeof window !== "undefined" ? window.location.hostname : "localhost",
+      )
+    : null;
+
   return (
     <div style={{ padding: "1rem 0 1.5rem" }}>
       <div
@@ -230,13 +371,109 @@ function MatchDetail({ detail }: { detail: Detail }) {
           ⋮
         </button>
         {menuOpen && (
-          <div style={menuStyle}>
+          <div ref={menuRef} style={menuStyle}>
             <button onClick={copyShare} style={menuItemStyle}>
               {copied ? "Copied!" : "Share link"}
             </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setClipFormOpen((o) => !o);
+                  }}
+                  style={menuItemStyle}
+                >
+                  {detail.clip_url ? "Edit clip" : "Attach clip"}
+                </button>
+                <button onClick={toggleFeature} style={menuItemStyle}>
+                  {detail.featured ? "Unfeature" : "Feature"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {/* Admin clip form */}
+      {isAdmin && clipFormOpen && (
+        <div
+          style={{
+            background: "#111",
+            border: "1px solid #2a2a2a",
+            borderRadius: "4px",
+            padding: "0.75rem",
+            marginBottom: "1rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem",
+          }}
+        >
+          <input
+            type="url"
+            placeholder="YouTube or Twitch URL"
+            value={clipUrl}
+            onChange={(e) => setClipUrl(e.target.value)}
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            placeholder="Title (optional)"
+            value={clipTitle}
+            onChange={(e) => setClipTitle(e.target.value)}
+            style={inputStyle}
+          />
+          <input
+            type="text"
+            placeholder="Note (optional)"
+            value={clipNote}
+            onChange={(e) => setClipNote(e.target.value)}
+            style={inputStyle}
+          />
+          <input
+            type="number"
+            placeholder="Start seconds (optional)"
+            value={clipStart}
+            onChange={(e) => setClipStart(e.target.value)}
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={saveClip}
+              disabled={clipSaving}
+              style={{ ...uploadBtnStyle, fontSize: "0.65rem" }}
+            >
+              {clipSaving ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setClipFormOpen(false)}
+              style={{
+                ...uploadBtnStyle,
+                background: "transparent",
+                color: "#888",
+                border: "1px solid #333",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {detail.featured && (
+        <div
+          style={{
+            fontSize: "0.6rem",
+            color: "var(--accent)",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            marginBottom: "0.5rem",
+          }}
+        >
+          ★ Featured game
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
@@ -263,7 +500,11 @@ function MatchDetail({ detail }: { detail: Detail }) {
           label="Length"
           value={formatDuration(detail.duration_seconds)}
         />
+        {detail.my_elo !== null && detail.my_elo !== undefined && (
+          <Metric label="ELO after" value={String(detail.my_elo)} />
+        )}
       </div>
+
       {detail.coach_analysis && (
         <div style={{ marginTop: "1.5rem" }}>
           <div
@@ -291,18 +532,43 @@ function MatchDetail({ detail }: { detail: Detail }) {
           </div>
         </div>
       )}
-      {detail.clip_url && (
-        <iframe
-          src={detail.clip_url}
-          style={{
-            width: "100%",
-            maxWidth: "640px",
-            aspectRatio: "16/9",
-            border: "none",
-          }}
-          allowFullScreen
-          title="clip"
-        />
+
+      {embedUrl && (
+        <div style={{ marginTop: "0.75rem" }}>
+          {detail.clip_title && (
+            <div
+              style={{
+                fontSize: "0.7rem",
+                color: "#888",
+                marginBottom: "0.3rem",
+              }}
+            >
+              {detail.clip_title}
+            </div>
+          )}
+          <iframe
+            src={embedUrl}
+            style={{
+              width: "100%",
+              maxWidth: "640px",
+              aspectRatio: "16/9",
+              border: "none",
+            }}
+            allowFullScreen
+            title={detail.clip_title || "clip"}
+          />
+          {detail.clip_note && (
+            <div
+              style={{
+                fontSize: "0.65rem",
+                color: "#666",
+                marginTop: "0.3rem",
+              }}
+            >
+              {detail.clip_note}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -392,4 +658,18 @@ const menuItemStyle: React.CSSProperties = {
   cursor: "pointer",
   whiteSpace: "nowrap",
   padding: "0.3rem 0.6rem",
+  display: "block",
+  width: "100%",
+  textAlign: "left",
+};
+
+const inputStyle: React.CSSProperties = {
+  background: "#0a0a0a",
+  border: "1px solid #2a2a2a",
+  borderRadius: "3px",
+  color: "#ccc",
+  padding: "0.3rem 0.5rem",
+  fontSize: "0.75rem",
+  width: "100%",
+  boxSizing: "border-box",
 };
