@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import mgz.fast.header
+import pytest
 
 from website.aoe2 import const
 from website.aoe2.metrics import classify_opening, compute_metrics
@@ -88,9 +89,6 @@ def test_classify_opening_archers():
         "action_count": 50,
     }
     assert classify_opening(tl) == "Archers"
-
-
-import pytest
 
 
 @pytest.mark.django_db
