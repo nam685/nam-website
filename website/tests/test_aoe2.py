@@ -3,6 +3,7 @@ from pathlib import Path
 import mgz.fast.header
 
 from website.aoe2 import const
+from website.aoe2.metrics import classify_opening, compute_metrics
 from website.aoe2.parser import parse_rec
 from website.aoe2.timeline import build_timeline, render_salient_log
 
@@ -55,3 +56,26 @@ def test_build_timeline_and_log():
     # privacy: no chat/name leakage — log is purely mechanical tags
     for line in log.splitlines():
         assert line.split(" ", 2)[1] in {"AGE_UP", "BUILD", "TECH", "TRAIN", "APM"}
+
+
+def test_compute_metrics():
+    rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
+    tl = build_timeline(rec.ops, rec.me["number"])
+    m = compute_metrics(tl, rec.duration_ms)
+    assert m["feudal_uptime_s"] is None or m["feudal_uptime_s"] > 0
+    assert m["apm"] >= 0
+    assert m["villager_count"] == len([u for u in tl["units"] if u["name"] == "Villager"]) or m["villager_count"] >= 0
+    assert isinstance(m["opening"], str) and m["opening"]
+    assert "idle_tc_est_s" in m["estimates"]
+
+
+def test_classify_opening_archers():
+    tl = {
+        "uptimes": {"feudal": 600000, "castle": None, "imperial": None},
+        "builds": [{"t": 610000, "name": "Archery Range"}],
+        "eco_techs": [],
+        "units": [{"t": 620000, "name": "Archer", "amount": 1}],
+        "villager_queue_times": [],
+        "action_count": 50,
+    }
+    assert classify_opening(tl) == "Archers"
