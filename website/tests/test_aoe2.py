@@ -4,6 +4,7 @@ import mgz.fast.header
 
 from website.aoe2 import const
 from website.aoe2.parser import parse_rec
+from website.aoe2.timeline import build_timeline, render_salient_log
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_1v1.aoe2record"
 OWNER_PROFILE_ID = 14697894
@@ -41,3 +42,16 @@ def test_parse_rec_basic():
     assert rec.me["civ_name"] and rec.opponent["civ_name"]
     assert rec.map_name  # non-empty
     assert rec.my_result in ("win", "loss", "unknown")
+
+
+def test_build_timeline_and_log():
+    rec = parse_rec(str(FIXTURE), OWNER_PROFILE_ID)
+    tl = build_timeline(rec.ops, rec.me["number"])
+    # A real 1v1 always reaches at least Feudal:
+    assert tl["uptimes"]["feudal"] is not None
+    assert tl["action_count"] > 0
+    log = render_salient_log(tl)
+    assert "AGE_UP feudal" in log
+    # privacy: no chat/name leakage — log is purely mechanical tags
+    for line in log.splitlines():
+        assert line.split(" ", 2)[1] in {"AGE_UP", "BUILD", "TECH", "TRAIN", "APM"}
