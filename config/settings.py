@@ -88,6 +88,7 @@ AOE2_PROFILE_ID = env.int("AOE2_PROFILE_ID", default=14697894)
 AOE2_IGN = env("AOE2_IGN", default="nom")
 AOE2_RELIC_HOST = env("AOE2_RELIC_HOST", default="https://aoe-api.worldsedgelink.com")
 AOE2_CLAUDE_BIN = env("AOE2_CLAUDE_BIN", default="claude")
+AOE2_COACH_MODEL = env("AOE2_COACH_MODEL", default="sonnet")
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"

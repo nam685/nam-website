@@ -9,10 +9,10 @@ from django.utils import timezone
 from django.utils import timezone as dj_timezone
 
 from config.celery import app
-from website.aoe2.coach import build_coach_prompt, run_claude_coach
+from website.aoe2.coach import build_coach_prompt, parse_opening, run_claude_coach
 from website.aoe2.metrics import compute_metrics
 from website.aoe2.parser import parse_rec
-from website.aoe2.timeline import build_timeline, render_salient_log
+from website.aoe2.timeline import build_timeline, render_dual_log
 from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
@@ -460,16 +460,20 @@ def analyze_match(match_id):
         timeline = build_timeline(rec.ops, rec.me["number"])
         metrics = compute_metrics(timeline, rec.duration_ms)
         timeline_payload = {k: v for k, v in timeline.items()}
-        timeline_payload["salient_log"] = render_salient_log(timeline)
+        # Dual log (ME full + OPP key) for the coach; legacy single-player log preserved too.
+        dual_log = render_dual_log(rec.ops, rec.me["number"], rec.opponent["number"], timeline["action_count"])
+        timeline_payload["salient_log"] = dual_log
 
         # Stage 4: LLM coach — graceful; failure must not block metrics being saved.
         coach_analysis = ""
         coach_model = ""
         try:
-            prompt = build_coach_prompt(timeline_payload["salient_log"], metrics)
+            prompt = build_coach_prompt(dual_log, metrics)
             coach_analysis, coach_model = run_claude_coach(prompt)
+            metrics["opening"] = parse_opening(coach_analysis)
         except Exception:  # noqa: BLE001
             logger.warning("Coach stage failed for match %s — storing empty coach_analysis", match_id)
+            metrics.setdefault("opening", "")
 
         match.map_name = rec.map_name
         match.duration_seconds = rec.duration_ms // 1000
