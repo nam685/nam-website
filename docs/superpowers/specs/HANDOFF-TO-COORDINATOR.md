@@ -20,7 +20,9 @@ You are the **coordinator**. Review these specs, then **allocate sub-projects to
    ├─► #7 Strategic map (geometry+render; consumes spatial+engagements; ships WITH #4)
    ├─► #6 Mistake detectors + KB (detectors over Reconstruction)
    ├─► #3 Build-order library + classifier (signals from Reconstruction)
-   │      └─► #4 Coach v2 (consumes #1 facts + #3 candidates + #6 flagged + #7 map PNG)  ◄── the headline
+   │      └─► #4 Coach v2 (consumes EVERY producer: #1 facts + #2 economy(opt) + #3 candidates
+   │                        + #6 flagged + #7 map PNG)  ◄── the headline. Map(#7) & economy(#2)
+   │                        are coach INPUT, not side-car features — that's the whole thesis.
    ├─► #2 Economy model (thin; consumes #1; needs gaia objects from #1's parser)
    └─► #5 Frontend viz (consumes #1 + #2 + #7 geometry; the deferred "last" one)
 ```

@@ -5,11 +5,13 @@
 **Scope:** Sub-project #4 of the "coach = preprocessing + AI" program.
 **Program overview & feasibility map:** `aoe2coach-analysis/5_feasibility_and_design.md`
 **Consumes the full preprocessing bundle:** #1 `Reconstruction`
-(`docs/superpowers/specs/2026-06-22-aoe2-reconstruction-core-design.md`), #3 candidate builds +
+(`docs/superpowers/specs/2026-06-22-aoe2-reconstruction-core-design.md`), #2 economy estimate
+(`…/2026-06-22-aoe2-economy-model-design.md`, optional/flagged), #3 candidate builds +
 reference library (`…/2026-06-22-aoe2-buildorder-classifier-design.md`), #6 flagged mistakes +
 rubric (`…/2026-06-22-aoe2-coaching-knowledge-base-design.md`), and #7's strategic map
-(`…/2026-06-22-aoe2-strategic-map-rendering-design.md`). The coach's quality is **bounded by the
-quality of this bundle** — it explains, it does not re-analyze.
+(`…/2026-06-22-aoe2-strategic-map-rendering-design.md`). The map (#7) and economy (#2) are coach
+*input*, not side-car features. The coach's quality is **bounded by the quality of this bundle** —
+it explains, it does not re-analyze.
 
 ## Why
 
@@ -36,10 +38,11 @@ coaching out; garbage in → garbage out. Every fact it states, every mistake it
 benchmark it cites originates in a preprocessing producer; the coach adds reasoning and narration,
 not new analysis of the rec.
 
-## Input contract (the full preprocessing bundle — #1, #3, #6, #7)
+## Input contract (the full preprocessing bundle — #1, #2, #3, #6, #7)
 
-The coach consumes **all four preprocessing producers**; this is the bundle whose quality bounds
-the coach's output. `coach()` receives, per match:
+The coach consumes **every preprocessing producer**; this is the bundle whose quality bounds
+the coach's output. The principle (Nam): the map (#7) and economy model (#2) are not side-car
+frontend features — **their output is coach input**. `coach()` receives, per match:
 
 - **`reconstruction: dict`** *(#1 — facts)* — the #1 `Reconstruction` object (JSON-serializable).
   Authoritative facts: ages (arrival + click), techs (eco/military/university), production milestones
@@ -69,24 +72,34 @@ the coach's output. `coach()` receives, per match:
   `map_legend.md` #7 renders into the workspace (base layout, walls, forward buildings, scout
   route, army-push vectors, attacks on known buildings, engagement zones). The agent **sees** the
   PNG (multimodal Read); it is strictly additive (see graceful degradation).
+- **`economy: dict | None`** *(#2 — economy model, ESTIMATE, optional)* — when #2 has shipped, the
+  estimate-tagged economy block: age-boundary vils-per-resource split snapshots, the
+  front/safe **gold/eco exposure** read (from #1 `spatial.eco_exposure`), and a collected-total
+  estimate **only if #2 validated it** (else suppressed → qualitative shape). The coach uses this for
+  eco narrative but **must hedge it as an estimate** (honesty tier `estimate`) and never state a
+  suppressed/absent number as fact. **Optional/graceful:** if #2 hasn't shipped (or self-suppressed),
+  `economy` is `None`/absent and the coach simply omits eco-estimate commentary — it is never blocked
+  on #2.
 - **`salient_log: str`** — kept for sequence/context (the agent reads facts for numbers, log for
   ordering). Unchanged from today.
 
 The coach treats `reconstruction` numbers as ground truth and **never** invents benchmark targets;
 targets come only from a reference file it has read. Its value is **capped by the quality of this
-bundle** — it is an explainer over the four producers, not an analyzer of raw logs.
+bundle** — it is an explainer over the producers (#1/#2/#3/#6/#7), not an analyzer of raw logs.
 
 ## Architecture: workspace + invocation + tools
 
 ### Per-match workspace (`workspace.py`, new)
 
-`build_workspace(reconstruction, candidates, reference_root, salient_log, flagged, map_geometry, ops)
--> Path` materializes a throwaway temp dir (under `tempfile.mkdtemp(prefix="aoe2coach-")`), laid out
-so the agent's tools have the full preprocessing bundle locally and nothing else:
+`build_workspace(reconstruction, candidates, reference_root, salient_log, flagged, map_geometry, ops,
+economy=None) -> Path` materializes a throwaway temp dir (under `tempfile.mkdtemp(prefix="aoe2coach-")`),
+laid out so the agent's tools have the full preprocessing bundle locally and nothing else:
 
 ```
 <workspace>/
   facts.json            # json.dumps(reconstruction, indent=2) — authoritative numbers (#1)
+  economy.json          # NEW (#2, ONLY if present) — estimate-tagged eco split + gold/eco exposure
+                        #   + collected estimate (if validated); coach hedges it as estimate
   salient.log           # the dual mechanical log (sequence/context)
   candidates.md         # the 1-3 pre-narrowed builds (#3): build_id, name, confidence,
                         #   matched/missed signals, → references/<build_id>.yaml
