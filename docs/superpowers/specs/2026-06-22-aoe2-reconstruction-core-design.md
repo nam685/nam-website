@@ -79,6 +79,21 @@ pin. New/modified modules:
   military-building `BUILD`, military/university-tech `RESEARCH`, army `MOVE`/`ATTACK_GROUND`/
   `STANCE`/`PATROL`/`DELETE`; everything else uncategorized but still counted in `apm_total`.
   Counts exposed are labeled `produced`.
+- **`population.py`** *(new)* — `housing_capacity(ops, player)`: the **exact** pop-room curve from
+  `BUILD` (House +5, Town Center +5, Castle +20), clamped at the 200 game cap; `maxed_at_s` (when
+  capacity first reaches 200); `housed_flags` (heuristic: capacity plateaus below 200 during active
+  production → "possible housed moment", best-effort); `attrition_floor` (= total `produced` − 200,
+  a loose lower bound on units lost/deleted, framed as a floor not a count). **Civ caveat:** Huns
+  need no houses (free pop room) — guard with a per-civ rule; unknown civs fall back to the standard
+  model and the curve is flagged approximate.
+- **`combat.py`** *(new)* — `engagements(ops, me, opp, spatial)`: detect **fights, not casualties**.
+  Two sources: (a) **exact** — attack-type commands (`ORDER`/`ATTACK_GROUND` with a `target_id`
+  matching a known OPP *building* id from `BUILD`) → "attacked opp's <building> at T"; (b)
+  **heuristic** — attack/attack-move commands clustered by time + location, classified by zone
+  (near own base / near opp base / center) using the base centroids. Output: list of
+  `{t_start_s, t_end_s, zone, centroid_xy, my_units_committed, building_targets}`. Detects
+  engagement timing/location/intensity only — never who died. Unit-ownership of arbitrary spawned
+  ids is unknown, so non-building targets are inferred spatially and flagged.
 - **`reconstruct.py`** *(new)* — `reconstruct(rec) -> Reconstruction`: the assembler that ties the
   modules into one JSON-serializable object. This is the single artifact downstream sub-projects
   consume.
@@ -108,15 +123,23 @@ JSON-serializable dict (or dataclass with `.to_dict()`). Per-player where it mak
                  opp:{... key buildings ...}},
   "efficiency": {tc_idle_s, longest_villager_gap_s, villager_gaps_s,
                  apm_total, apm_eco, apm_military},
+  "population":  {housing_capacity:[{t_s, cap}], maxed_at_s,            # cap curve EXACT (civ caveat)
+                  housed_flags:[{t_s}], attrition_floor},               # flags heuristic; floor = loose
+  "engagements": [{t_start_s, t_end_s, zone, centroid_xy,              # fights DETECTED, not casualties
+                   my_units_committed, building_targets:[{name,t_s}]}],
 }
 ```
 
-Exact fields are unmarked; the only estimate-adjacent values (`*_produced`) carry the word
-`produced` in their key. No field in this object is an estimate or a fabricated number.
+Exact fields are unmarked. Estimate-adjacent / inferred values are explicitly marked: `*_produced`
+counts carry the word `produced`; `population.housed_flags` + `attrition_floor` are heuristic/loose;
+`engagements` describe fights **detected** (timing, location, intensity), never casualties. No field
+is a fabricated number, and nothing claims a kill/death count.
 
 ## What this core deliberately does NOT do
 
-- No over-time **live** curves (pop/vil/army) — needs death modelling → sub-project #2.
+- No over-time **live** curves (pop/vil/army), **live army size, or true K/D** — deaths are
+  engine-only (verified: the rec body carries no kill signal, only an opaque per-tick state
+  checksum). `engagements` detect *that* fights happened, not outcomes.
 - No **resource** estimates (`WORK` absent on current patch) → sub-project #2.
 - No **build-order classification** or Hera reference library → sub-project #3.
 - No **coach prompt** changes / facts-block wiring → sub-project #4 (will serialize this object).
