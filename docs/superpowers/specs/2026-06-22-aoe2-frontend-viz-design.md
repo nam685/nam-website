@@ -86,14 +86,24 @@ vs `apm_military` vs `apm_total`) as a small stacked bar or donut.
 - **Honesty:** exact → solid. (Note: TC idle is derived from villager-queue gaps — exact per #1's
   definition, not an estimate.)
 
-### V4 — Economy curves **(estimate, flagged — gated on #2)**
-Line charts over time: **vils-per-resource** (food/wood/gold/stone allocation) and
-**resources-collected** trend, from #2's `~estimate`-flagged curves.
+### V4 — Economy allocation **(estimate, flagged — gated on #2)**
+**Not** a continuous curve. #2's feasibility work on save 68.0 (`WORK` is gone; `GATHER_POINT`/`ORDER`
+are orders of magnitude sparser) means #2 does **not** emit a continuous vils-per-resource line —
+only **coarse step snapshots at age boundaries** plus a **bounded, suppressible** collected total.
+V4 renders exactly that, no more:
 
-- **Data (#2, estimate):** the eco-model output (shape TBD by #2; assume
-  `economy.{vils_per_resource:[{t_s, food, wood, gold, stone}], resources_collected:[{t_s,...}],
-  is_estimate:true}`).
-- **Rendering:** dashed lines, reduced-opacity area fills, **`~est` badge** + tooltip on the panel.
+- **Age-boundary eco-split snapshots (primary):** for each age transition
+  (Dark→Feudal→Castle→Imperial) a small **stacked bar / step readout** of estimated vils-per-resource
+  (food/wood/gold/stone), each annotated with `n_events` (the assignment-event count behind it). A
+  **step** view across the boundaries, never an interpolated curve.
+- **Collected total (conditional):** shown as a number **only when #2 validated it inside its band**;
+  if #2 **suppressed** it (out of band), V4 shows only the **qualitative shape** ("food-heavy eco,
+  gold income stalled in Castle"), never a bare suppressed number.
+- **Data (#2, estimate):** the eco-model output (per #2:
+  `economy.{eco_split_at_ages:{age:{food,wood,gold,stone,n_events}}, collected_estimate:{resource:{value,low,high}}|null, is_estimate:true}`).
+  A `null`/absent `collected_estimate` (suppressed) drives the qualitative-only path above.
+- **Rendering:** dashed strokes / reduced-opacity fills on the step bars, **`~est` badge** + tooltip
+  on the panel; suppressed totals render as a qualitative note, not a tile.
 - **Honesty:** the entire panel is Tier-B. If #2 hasn't shipped (no `economy` key), render the
   panel as **Tier-C "unavailable — estimate model not yet built"** rather than hiding it, so the
   intent is visible.
@@ -130,7 +140,7 @@ components/
     Aoe2BuildingMap.tsx        V1 — SVG minimap; props: { spatial, accent }
     Aoe2Timeline.tsx           V2 — lanes; props: { ages, techs, production, durationS }
     Aoe2EfficiencyPanel.tsx    V3 — tiles + APM bar; props: { efficiency }
-    Aoe2EconomyChart.tsx       V4 — dashed line charts; props: { economy | null }
+    Aoe2EconomyPanel.tsx       V4 — age-boundary step bars + conditional collected total; props: { economy | null }
     Aoe2ProducedStrip.tsx      V5 — produced counts + Tier-C placeholders
     DataBadge.tsx              shared tier badge: { tier: "exact"|"est"|"unavailable", label? }
 ```
@@ -143,8 +153,9 @@ components/
   shared classes from `globals.css`; `fadeUp` keyframe for panel entrance. Dashed vs solid SVG
   strokes via `strokeDasharray` driven by tier.
 - **No new charting dependency.** Build the minimap, timeline, and APM bar as plain inline SVG
-  (the codebase has no chart lib and the shapes are simple). The economy line chart (V4) is also
-  hand-rolled SVG polylines — keeps the bundle light and self-contained.
+  (the codebase has no chart lib and the shapes are simple). V4's economy panel (age-boundary step
+  bars, not a continuous curve) is also hand-rolled SVG rects — keeps the bundle light and
+  self-contained.
 - **Lazy-mount:** the building-map SVG and economy chart mount **only for the currently expanded
   match** (the accordion already mounts the clip iframe only when selected — same discipline), so
   the list stays light.
@@ -155,10 +166,14 @@ The viz needs `Reconstruction` (and #2's economy) reaching the browser. **Additi
 the existing `Aoe2Match` model + `GET /api/aoe2/<id>/` detail endpoint; no new routes, no new auth.
 
 ### Persistence (Django)
-- **`#1` writes `Reconstruction` into a new JSON field** on `Aoe2Match`:
-  `reconstruction = models.JSONField(default=dict, blank=True)`. This is the natural home — #4
-  already plans to serialize the same object for the coach, so persisting it costs nothing extra.
-  Populated in `analyze_match` (`website/tasks.py`) right after `reconstruct(rec)` is added by #1.
+- **A single additive `reconstruction` JSONField on `Aoe2Match` is the shared home for #4/#5/#7.**
+  `reconstruction = models.JSONField(default=dict, blank=True)`. #1 writes the `Reconstruction` here;
+  #4 serializes the same object for the coach; #5 reads it for the viz — so persisting it costs
+  nothing extra. Populated in `analyze_match` (`website/tasks.py`) right after `reconstruct(rec)`.
+- **`#7` writes its `MapGeometry` into the same field under a `map_geometry` key** (resolving #7's
+  open persistence decision — sub-key of `reconstruction`, not a sibling field). #5's V1 minimap and
+  #7's coach PNG both read the same `map_geometry` vectors; the PNG itself is a regenerable coach
+  build artifact and is **not** persisted.
 - **`#2` writes its estimate output** into the same field under an `economy` key (or a sibling
   `economy = models.JSONField(...)`), carrying `is_estimate: true`. Decided in #2; this spec only
   requires that the served object distinguishes it.

@@ -4,9 +4,12 @@
 **Status:** Draft for review
 **Scope:** Sub-project #4 of the "coach = preprocessing + AI" program.
 **Program overview & feasibility map:** `aoe2coach-analysis/5_feasibility_and_design.md`
-**Consumes:** #1 `Reconstruction` (`docs/superpowers/specs/2026-06-22-aoe2-reconstruction-core-design.md`)
-and #3 candidate builds + reference library (`…/2026-06-22-aoe2-buildorder-classifier-design.md`,
-in flight — designed here against its program-overview contract).
+**Consumes the full preprocessing bundle:** #1 `Reconstruction`
+(`docs/superpowers/specs/2026-06-22-aoe2-reconstruction-core-design.md`), #3 candidate builds +
+reference library (`…/2026-06-22-aoe2-buildorder-classifier-design.md`), #6 flagged mistakes +
+rubric (`…/2026-06-22-aoe2-coaching-knowledge-base-design.md`), and #7's strategic map
+(`…/2026-06-22-aoe2-strategic-map-rendering-design.md`). The coach's quality is **bounded by the
+quality of this bundle** — it explains, it does not re-analyze.
 
 ## Why
 
@@ -25,51 +28,89 @@ bogus timing, invented numbers. #1 now hands it **honest structured facts** and 
 The mechanism change that makes this possible: the coach becomes an **agent with tools** in a
 sandboxed per-match workspace, not a single embedded-everything `claude -p` call.
 
-## Input contract (from #1 and #3)
+**Bounded by preprocessing (the program thesis).** Coach v2 consumes the **full preprocessing
+bundle** — #1 reconstruction facts, #3 build candidates, #6 flagged mistakes, and #7's strategic
+map — and is an *explainer/investigator over that bundle, never an analyzer of raw logs*. Its
+output quality is therefore **capped by preprocessing quality**: heavy preprocessing in → good
+coaching out; garbage in → garbage out. Every fact it states, every mistake it explains, and every
+benchmark it cites originates in a preprocessing producer; the coach adds reasoning and narration,
+not new analysis of the rec.
 
-`coach()` receives, per match:
+## Input contract (the full preprocessing bundle — #1, #3, #6, #7)
 
-- **`reconstruction: dict`** — the #1 `Reconstruction` object (JSON-serializable). Authoritative
-  facts: ages (arrival + click), techs (eco/military/university), production milestones
-  (`first_military_building_s`, `first_siege_s`, `first_treb_s`, `first_unit_s`), `*_produced`
-  counts (labeled), spatial (base centroid, buildings, **forward** buildings, walls),
-  efficiency (`tc_idle_s`, `longest_villager_gap_s`, `apm_eco`/`apm_military`), and `meta`
+The coach consumes **all four preprocessing producers**; this is the bundle whose quality bounds
+the coach's output. `coach()` receives, per match:
+
+- **`reconstruction: dict`** *(#1 — facts)* — the #1 `Reconstruction` object (JSON-serializable).
+  Authoritative facts: ages (arrival + click), techs (eco/military/university), production milestones
+  (`first_military_building_s`, `first_siege_s`, `first_treb_s`, `first_unit_s`, plus the derived
+  `first_military_unit_s`/`first_military_unit_name`), `*_produced` counts (labeled), spatial
+  (base centroid for **both** me and opp, buildings, **forward** buildings, walls), efficiency
+  (`tc_idle_s`, `longest_villager_gap_s`, `apm_eco`/`apm_military`), `engagements`
+  (zones `own_base|center|opp_base`), `population.housed_flags`, and `meta`
   (map, duration, civs, **result**, ranked, opp_rating).
-- **`candidates: list[dict]`** — 1–3 pre-narrowed builds from #3, each
-  `{slug, display_name, confidence, reference_path}` where `reference_path` points into the
-  Hera reference library bundled with #3 (e.g. `references/fast_castle_knights.md`).
-- **`reference_root: str`** — directory containing the full Hera library (~25 build files +
-  any techtree pointers), so the agent can retrieve a *different* file if its hypothesis differs
-  from the candidates.
+- **`candidates: list[dict]`** *(#3 — build candidates)* — 1–3 pre-narrowed builds from #3, each
+  exactly #3's `Candidate` shape:
+  `{build_id, name, confidence, matched_signals, missed_signals}` (no `slug`, no `reference_path`).
+  `build_id` is #3's stable hyphenated id (e.g. `fast-castle-into-knights`); the per-build
+  reference lives at `references/<build_id>.yaml`. #3 may also pass `is_confident` / `unknown` /
+  `notes` from its `ClassificationResult`, which the agent uses to decide whether to verify between
+  candidates or coach from first principles.
+- **`reference_root: str`** *(#3 — reference library)* — directory containing the full Hera library
+  (~25 build **YAML** files + any techtree pointers), loaded per #3 via `buildorders.load_one(build_id)`,
+  so the agent can retrieve a *different* build if its hypothesis differs from the candidates.
+- **`flagged: list[dict]`** *(#6 — flagged mistakes)* — #6's deterministic detector output (the
+  linter-style `Flagged` rows; NOT LLM-noticed). Each carries a `mistake_id`, `severity`,
+  `confidence_tier` (`exact`/`heuristic`/`needs-#2`), and the magnitude that tripped it. The coach
+  **explains** these (it does not detect mistakes itself) and retrieves each one's rubric entry on
+  demand via `mistakes.load_one(mistake_id)` — the same progressive-disclosure mechanism as #3's
+  references.
+- **`map_geometry: dict`** *(#7 — strategic map)* — drives the annotated `strategic_map.png` +
+  `map_legend.md` #7 renders into the workspace (base layout, walls, forward buildings, scout
+  route, army-push vectors, attacks on known buildings, engagement zones). The agent **sees** the
+  PNG (multimodal Read); it is strictly additive (see graceful degradation).
 - **`salient_log: str`** — kept for sequence/context (the agent reads facts for numbers, log for
   ordering). Unchanged from today.
 
 The coach treats `reconstruction` numbers as ground truth and **never** invents benchmark targets;
-targets come only from a reference file it has read.
+targets come only from a reference file it has read. Its value is **capped by the quality of this
+bundle** — it is an explainer over the four producers, not an analyzer of raw logs.
 
 ## Architecture: workspace + invocation + tools
 
 ### Per-match workspace (`workspace.py`, new)
 
-`build_workspace(reconstruction, candidates, reference_root, salient_log) -> Path` materializes a
-throwaway temp dir (under `tempfile.mkdtemp(prefix="aoe2coach-")`), laid out so the agent's tools
-have everything locally and nothing else:
+`build_workspace(reconstruction, candidates, reference_root, salient_log, flagged, map_geometry, ops)
+-> Path` materializes a throwaway temp dir (under `tempfile.mkdtemp(prefix="aoe2coach-")`), laid out
+so the agent's tools have the full preprocessing bundle locally and nothing else:
 
 ```
 <workspace>/
-  facts.json            # json.dumps(reconstruction, indent=2) — authoritative numbers
+  facts.json            # json.dumps(reconstruction, indent=2) — authoritative numbers (#1)
   salient.log           # the dual mechanical log (sequence/context)
-  candidates.md         # the 1-3 pre-narrowed builds: name, confidence, → reference path
-  references/           # COPY of the Hera library (read-only retrieval target)
-    fast_castle_knights.md
-    scouts_into_crossbow.md
-    …                    # all ~25 builds, so the agent can pick a non-candidate if it disagrees
+  candidates.md         # the 1-3 pre-narrowed builds (#3): build_id, name, confidence,
+                        #   matched/missed signals, → references/<build_id>.yaml
+  references/           # COPY of the Hera library (#3, read-only retrieval target) — YAML
+    fast-castle-into-knights.yaml
+    scouts-into-archers.yaml
+    …                    # all ~25 builds (hyphenated build_id stems), so the agent can pick a
+                        #   non-candidate if it disagrees; loaded per #3's load_one(build_id)
+  mistakes.json         # NEW (#6) — the deterministic flagged-mistake list; the coach EXPLAINS
+                        #   these and reads each rubric entry on demand via mistakes.load_one(id)
+  rubric/               # COPY of #6's mistake-rubric library (read-only) — YAML, one per mistake_id
+    idle-tc.yaml
+    slow-feudal.yaml
+    …
+  strategic_map.png     # NEW (#7) — annotated strategic map the agent SEES (multimodal Read)
+  map_legend.md         # NEW (#7) — one-paragraph legend + exact/heuristic disclaimer
   TASK.md               # the user-turn instructions (what to produce); points at the files above
 ```
 
-`references/` is **copied in** (not symlinked to `reference_root`) so the agent's filesystem access
-stays inside the workspace; cwd is the workspace, so Read/Grep need no `--add-dir`. The dir is
-deleted in a `finally` after the run (best-effort; leave on debug flag).
+`references/` and `rubric/` are **copied in** (not symlinked) so the agent's filesystem access
+stays inside the workspace; cwd is the workspace, so Read/Grep need no `--add-dir`. #7's
+`strategic_map.png` + `map_legend.md` are written by composing `build_map(reconstruction, ops, …)`
+(hence `ops` in the signature). The dir is deleted in a `finally` after the run (best-effort; leave
+on debug flag).
 
 ### Invocation (`run_agentic_coach`, replaces `run_claude_coach` for the v2 path)
 
@@ -90,8 +131,9 @@ subprocess.run(
 )
 ```
 
-- **Tools:** `Read`, `Grep`, `Glob` only — enough to read `facts.json`, open the candidate's
-  reference, grep the library, and retrieve a different build if it disagrees. **No** Write/Edit
+- **Tools:** `Read`, `Grep`, `Glob` only — enough to read `facts.json`/`mistakes.json`, **see
+  `strategic_map.png`** (multimodal Read), open the candidate's reference and a flagged mistake's
+  rubric entry, grep the libraries, and retrieve a different build if it disagrees. **No** Write/Edit
   (output is the final assistant message, not a file), **no** Bash. When web is enabled, add
   `WebFetch(domain:age-of-empires-2.fandom.com)` (or the wiki host #3 standardizes on) — scoped to
   exactly one domain so the agent can verify a unit/tech stat but cannot browse the open web.
@@ -127,25 +169,43 @@ markers**, **cite the reference you read**, **don't invent targets**, **under a 
 You are a concise, precise Age of Empires II: Definitive Edition 1v1 coaching assistant
 operating as an AGENT with file tools in this workspace.
 
-Authoritative inputs in your cwd:
+Authoritative inputs in your cwd (the full preprocessing bundle — you EXPLAIN it, you do not
+re-analyze the raw game):
   facts.json     — STRUCTURED MATCH FACTS (#1 Reconstruction). All numbers come from here.
                    *_produced counts are cumulative-queued upper bounds, NOT live counts —
                    never present them as live army/villager totals.
   salient.log    — mechanical event log; use ONLY for sequence/context, never for numbers.
-  candidates.md  — 1-3 pre-narrowed build orders, each with a reference file path.
-  references/    — the build-order reference library (Hera targets). Read on demand.
+  candidates.md  — 1-3 pre-narrowed build orders (#3), each with build_id, confidence, and
+                   matched/missed signals → references/<build_id>.yaml.
+  references/    — the build-order reference library (Hera targets), YAML, one file per
+                   build_id (hyphenated, e.g. fast-castle-into-knights.yaml). Read on demand.
+  mistakes.json  — DETERMINISTICALLY flagged mistakes (#6) — a linter result, already computed.
+                   You EXPLAIN each flagged mistake (you do not detect mistakes yourself); read its
+                   rubric entry on demand (Read rubric/<mistake_id>.yaml). Each flag carries a
+                   confidence_tier: state `exact` flags as fact with the number, HEDGE `heuristic`
+                   flags, and treat `needs-#2` flags as not-yet-detectable.
+  strategic_map.png — an annotated strategic map (#7) of base layout, walls, forward buildings,
+                   the scout's opening route, army-push directions, and where fights clustered.
+  map_legend.md  — legend + the exact/heuristic disclaimer for the map.
 
 AGE TIMINGS: judge ages by ARRIVAL time (facts.ages.*_arrival_s), not click time.
 
 PROCESS (follow in order):
-  1. Read facts.json.
-  2. Form a build hypothesis from the early facts (first buildings, first units, age timing).
-  3. READ the matching candidate's reference file (Read references/<file>). If none of the
+  1. Read facts.json and mistakes.json.
+  2. READ strategic_map.png to see base layout, walls, forward buildings, the scout route,
+     army-push directions, and engagement zones. Treat dashed/heuristic layers as approximate and
+     NEVER describe unit-vs-unit combat — the map shows where forces MOVED and PUSHED, not who beat
+     whom (see map_legend.md). If you cannot see the image, rely on facts.json — every coordinate
+     is there; you lose the picture, not any fact.
+  3. Form a build hypothesis from the early facts (first buildings, first units, age timing).
+  4. READ the matching candidate's reference file (Read references/<build_id>.yaml). If none of the
      candidates fits what the facts show, Grep references/ and read the build that does — and
      say the classifier's candidates were off.
-  4. Judge actual-vs-target using ONLY the targets in the reference you read. If a target isn't
+  5. For each flagged mistake, Read rubric/<mistake_id>.yaml and explain it, hedging per its
+     confidence_tier (above).
+  6. Judge actual-vs-target using ONLY the targets in the reference you read. If a target isn't
      in any reference and you didn't verify it, do NOT assert a number — say it's unverified.
-  5. (If web is enabled) you MAY WebFetch the aoe2 wiki for a specific unit/tech stat. Cite it.
+  7. (If web is enabled) you MAY WebFetch the aoe2 wiki for a specific unit/tech stat. Cite it.
 
 You MUST record these markers when present (record ALL — do not decide which matter): opening,
 age-up ARRIVAL times, army composition, first military building, first siege, first treb,
@@ -170,15 +230,17 @@ Cite every benchmark to the reference file or wiki page you read. Do NOT emit a 
 under ~340 words. No fluff, no praise padding.
 ```
 
-The `TASK.md` user turn is thin: "Coach this 1v1. Inputs are in your cwd (facts.json, salient.log,
-candidates.md, references/). Follow the process in your instructions and produce WHAT HAPPENED +
-ANALYSIS." The system prompt carries the contract; `TASK.md` just points and triggers.
+The `TASK.md` user turn is thin: "Coach this 1v1. Inputs are in your cwd (facts.json, mistakes.json,
+strategic_map.png, map_legend.md, candidates.md, references/, rubric/). Follow the process in your
+instructions and produce WHAT HAPPENED + ANALYSIS." The system prompt carries the contract;
+`TASK.md` just points and triggers.
 
 ## Output contract + opening parsing
 
 - **Return shape unchanged:** `CoachOutput(raw_text, opening_tag, model_used)`. `coach()` keeps its
-  signature additively — gains `reconstruction`, `candidates`, `reference_root` (all optional;
-  when absent → v1 path, byte-identical for old callers).
+  signature additively — gains `reconstruction`, `candidates`, `reference_root`, `flagged`,
+  `map_geometry`, `ops` (all optional; when absent → v1 path, byte-identical for old callers; a
+  missing `flagged`/`map_geometry` simply omits `mistakes.json`/the map from the workspace).
 - **`raw_text`** = the agent's final message = `WHAT HAPPENED` + `ANALYSIS` (no standalone
   `OPENING:` line).
 - **Opening parsing** (per phase-2 Task 7): parse the `- Opening: <tag>` bullet from the summary,
@@ -219,9 +281,9 @@ also the cheaper option if agentic cost/latency proves unjustified.
 
 ## Latency / cost
 
-- v1 is one model call (~few s). v2 is a multi-turn tool loop: read facts → read 1 reference
-  → maybe 1 wiki fetch → write report ≈ **3–6 turns**. Expect a few× the latency and token cost of
-  v1. Bound it: `--max-turns` (default 12, typical run far less), `timeout=180s`, and (if the CLI
+- v1 is one model call (~few s). v2 is a multi-turn tool loop: read facts + mistakes → see the
+  strategic map → read 1 reference + the flagged-mistake rubric entries → maybe 1 wiki fetch →
+  write report ≈ **4–7 turns**. Expect a few× the latency and token cost of v1. Bound it: `--max-turns` (default 12, typical run far less), `timeout=180s`, and (if the CLI
   supports it) a per-run budget cap. The website already runs the coach **async (Celery)**, so
   added latency is off the request path.
 - Progressive disclosure is the cost win vs. the naive alternative: instead of ~25 build files in
@@ -240,13 +302,18 @@ All tests mock the subprocess — no real `claude`, no network (`aoe2coach` stay
 testable; ruff line-length 120; PostToolUse ruff hook strips not-yet-used imports).
 
 - **Workspace build** — `build_workspace(...)` writes `facts.json` (round-trips the reconstruction),
-  `salient.log`, `candidates.md`, copies `references/`, writes `TASK.md`; cleans up on context exit.
+  `salient.log`, `candidates.md` (with hyphenated `build_id` → `references/<build_id>.yaml`),
+  `mistakes.json` (round-trips `flagged`), `strategic_map.png` + `map_legend.md` (from `map_geometry`),
+  copies `references/` (YAML) and `rubric/`, writes `TASK.md`; cleans up on context exit. With
+  `flagged`/`map_geometry` absent, those files are simply omitted.
 - **Invocation shape** — patch `subprocess.run`; assert argv contains `-p`, `--output-format json`,
   the read-only `--allowedTools` set (and that Write/Edit/Bash are absent), `cwd` == workspace.
   When web on: assert exactly one `WebFetch(domain:…)` entry and no bare `WebFetch`.
 - **Prompt content** — assert `COACH_SYSTEM_V2` contains `WHAT HAPPENED`, the named-markers list,
-  the "cite the reference"/"don't invent targets" rule, and the two-section output spec; assert
-  `TASK.md` points at `facts.json`/`references/`.
+  the "cite the reference"/"don't invent targets" rule, the **Read-the-map** clause + the
+  no-unit-vs-unit-combat constraint, the **per-flag confidence_tier hedging** rule, and the
+  two-section output spec; assert `TASK.md` points at `facts.json`/`mistakes.json`/`strategic_map.png`/
+  `references/`.
 - **Opening parses from summary** — `parse_opening("WHAT HAPPENED\n- Opening: Fast Castle\n…")`
   == `"Fast Castle"`; legacy `parse_opening("OPENING: Scouts\n…")` == `"Scouts"`.
 - **Output capture** — mock JSON `{"result": "WHAT HAPPENED\n- Opening: Archers\n\nANALYSIS\nx",
@@ -264,6 +331,10 @@ testable; ruff line-length 120; PostToolUse ruff hook strips not-yet-used import
 - **Does not classify the build or author the reference library** — that's #3. v2 *verifies* a
   candidate by reading its reference; it may overrule the candidates but does not build them.
 - **Does not estimate resources / live curves** — #2; v2 must not present `*_produced` as live.
+- **Does not detect mistakes** — #6 does, deterministically. v2 *explains* the `flagged` list and
+  hedges by `confidence_tier`; it never invents a mistake of its own.
+- **Does not render the strategic map** — #7 produces `strategic_map.png`/`map_geometry`. v2 *reads*
+  the PNG; it must never describe unit-vs-unit combat the map cannot show.
 - **Does not change the frontend** — #5. v2 keeps `metrics["opening"]` so the existing chip works.
 - **Does not write files as output** — the report is the final assistant message, captured from
   `--output-format json` `result`; the agent's tools are read-only.

@@ -101,6 +101,12 @@ The AI stops being the analyst and becomes the *explainer + investigator*: prepr
 honest, structured facts + 1-3 candidate builds; it confirms the build by reading the specific
 reference (progressive disclosure), then narrates and advises against verified targets.
 
+**The thesis, stated plainly:** the coach's quality is *bounded by preprocessing* — heavy
+preprocessing in → good coaching out; garbage in → garbage out. The coach consumes the **full
+preprocessed bundle** (reconstruction facts, build candidates, flagged mistakes, the strategic map)
+and is an explainer/investigator over it, **never** an analyzer of raw logs. Every dollar of
+quality is earned in the preprocessing layers, not in the prompt.
+
 **Calibration (Nam will provide):** since end-game totals aren't in the file, Nam screenshots a
 game's end-game Statistics; we check the estimator's resource/idle/army numbers against those
 real totals ("estimated wood 14,200 vs actual 13,980 → good enough"). A handful of these become a
@@ -109,10 +115,14 @@ validation set so the Tier-B estimates earn trust before the coach is allowed to
 ## 6. This is a program, not one plan — proposed sub-projects
 
 1. **Reconstruction core** — spatial + timeline + state curves (Tier A + produced curves).
-2. **Economy model** — WORK→resource assignment + gather-rate integration (Tier B, flagged).
+2. **Economy model** — WORK/GATHER_POINT/ORDER→resource assignment + gather-rate integration (Tier B, flagged).
 3. **Hera template library + deterministic build classifier.**
 4. **Coach v2** — facts block + restate-before-judge + template-aware benchmarking.
-5. *(maybe later)* **Frontend viz** — CaptureAge-style charts on the website.
+5. *(deferred — "maybe later")* **Frontend viz** — CaptureAge-style charts on the website.
+6. **Coaching knowledge base + mistake detectors** — deterministic rubric + linter-style mistake
+   flagging the coach explains (ships WITH #4).
+7. **Strategic map rendering** — annotated server-side PNG of the reconstruction the coach can SEE
+   (ships WITH #4; #5 reuses its geometry).
 
 Each gets its own spec → plan → implementation. The existing `2026-06-22-aoe2coach-phase2-enrich`
 plan (tech upgrades, milestones, idle, forward buildings, facts block, coach v2) is essentially a
@@ -123,7 +133,9 @@ subset of #1 + #4 and can be absorbed.
 2. Economy model — `2026-06-22-aoe2-economy-model-design.md`  ⚠️ feasibility-constrained on save 68.0
 3. Build-order library + classifier — `2026-06-22-aoe2-buildorder-classifier-design.md`
 4. Coach v2 (agentic) — `2026-06-22-aoe2-coach-v2-design.md`
-5. Frontend viz — `2026-06-22-aoe2-frontend-viz-design.md`
+5. Frontend viz — `2026-06-22-aoe2-frontend-viz-design.md`  ← the **deferred** one ("maybe later")
+6. Coaching knowledge base + mistake detectors — `2026-06-22-aoe2-coaching-knowledge-base-design.md`  (ships WITH #4)
+7. Strategic map rendering — `2026-06-22-aoe2-strategic-map-rendering-design.md`  (ships WITH #4)
 
 ## Resolved (Nam's calls)
 - **Build knowledge = progressive disclosure**, not prompt-flooding. Reference library + agentic
