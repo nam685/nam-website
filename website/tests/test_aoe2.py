@@ -4,12 +4,18 @@ from unittest.mock import MagicMock, patch
 
 import mgz.fast.header
 import pytest
-
-from website.aoe2 import const
-from website.aoe2.coach import build_coach_prompt, parse_opening, run_claude_coach
-from website.aoe2.metrics import compute_metrics
-from website.aoe2.parser import parse_rec
-from website.aoe2.timeline import build_timeline, render_dual_log, render_salient_log
+from aoe2coach import (
+    CoachOutput,
+    build_coach_prompt,
+    build_timeline,
+    compute_metrics,
+    const,
+    parse_opening,
+    parse_rec,
+    render_dual_log,
+    render_salient_log,
+    run_claude_coach,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_1v1.aoe2record"
 requires_fixture = pytest.mark.skipif(
@@ -305,30 +311,32 @@ def test_run_claude_coach_success():
     fake_proc.stdout = fake_json
     fake_proc.stderr = ""
 
-    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+    with patch("aoe2coach.coach.subprocess.run", return_value=fake_proc):
         text, model = run_claude_coach("some prompt")
 
     assert "villager production" in text
     assert model == "claude-sonnet-4-5"
 
 
-def test_run_claude_coach_passes_model(settings):
-    """run_claude_coach must pass --model <AOE2_COACH_MODEL> to the subprocess."""
-    settings.AOE2_COACH_MODEL = "sonnet"
-    settings.AOE2_CLAUDE_BIN = "claude"
+def test_run_claude_coach_passes_model():
+    """run_claude_coach passes the given model + claude_bin through to the subprocess.
 
+    (Settings-driven model selection now lives in the prod wrapper website.tasks._run_coach,
+    covered by test_run_coach_wrapper_success.)
+    """
     fake_json = json.dumps({"result": "ok", "model": "claude-sonnet-4-5", "is_error": False})
     fake_proc = MagicMock()
     fake_proc.returncode = 0
     fake_proc.stdout = fake_json
     fake_proc.stderr = ""
 
-    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc) as mock_run:
-        run_claude_coach("some prompt")
+    with patch("aoe2coach.coach.subprocess.run", return_value=fake_proc) as mock_run:
+        run_claude_coach("some prompt", model="opus", claude_bin="my-claude")
 
     cmd = mock_run.call_args[0][0]
+    assert cmd[0] == "my-claude"
     assert "--model" in cmd
-    assert "sonnet" in cmd
+    assert "opus" in cmd
 
 
 def test_run_claude_coach_nonzero_exit_raises():
@@ -337,7 +345,7 @@ def test_run_claude_coach_nonzero_exit_raises():
     fake_proc.stdout = ""
     fake_proc.stderr = "permission denied"
 
-    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+    with patch("aoe2coach.coach.subprocess.run", return_value=fake_proc):
         with pytest.raises(RuntimeError, match="exited 1"):
             run_claude_coach("some prompt")
 
@@ -348,7 +356,7 @@ def test_run_claude_coach_missing_result_raises():
     fake_proc.returncode = 0
     fake_proc.stdout = fake_json
 
-    with patch("website.aoe2.coach.subprocess.run", return_value=fake_proc):
+    with patch("aoe2coach.coach.subprocess.run", return_value=fake_proc):
         with pytest.raises(RuntimeError, match="missing 'result'"):
             run_claude_coach("some prompt")
 
@@ -417,10 +425,11 @@ def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
     monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
     monkeypatch.setattr(
-        "website.tasks.run_claude_coach",
-        lambda *_a, **_kw: (
-            "OPENING: Archers\n\nGreat game. Work on villager production.",
-            "claude-sonnet-4-5",
+        "website.tasks.coach",
+        lambda *_a, **_kw: CoachOutput(
+            raw_text="OPENING: Archers\n\nGreat game. Work on villager production.",
+            opening_tag="Archers",
+            model_used="claude-sonnet-4-5",
         ),
     )
 
@@ -447,7 +456,7 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
     monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
     monkeypatch.setattr(
-        "website.tasks.run_claude_coach",
+        "website.tasks.coach",
         lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("claude not found")),
     )
 
@@ -458,6 +467,29 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
     assert m.analysis_status == "done"
     assert m.coach_analysis == ""
     assert m.metrics.get("opening") == ""
+
+
+def test_run_coach_wrapper_success(settings):
+    """The prod wrapper reads settings, calls aoe2coach.coach(), returns (text, model, opening)."""
+    from website.tasks import _run_coach
+
+    settings.AOE2_COACH_MODEL = "sonnet"
+    fake = json.dumps({"result": "OPENING: Scouts\n\nbody", "model": "claude-sonnet-4-5"})
+    with patch("aoe2coach.coach.subprocess.run") as run:
+        run.return_value = MagicMock(returncode=0, stdout=fake, stderr="")
+        text, model, opening = _run_coach("00:00 APM total_actions=6", {"apm": 80}, "win")
+    assert text == "OPENING: Scouts\n\nbody"
+    assert model == "claude-sonnet-4-5"
+    assert opening == "Scouts"
+
+
+def test_run_coach_wrapper_graceful_failure():
+    """The prod wrapper swallows coach failures and returns empty strings."""
+    from website.tasks import _run_coach
+
+    with patch("aoe2coach.coach.subprocess.run", side_effect=RuntimeError("boom")):
+        text, model, opening = _run_coach("log", {"apm": 1}, "loss")
+    assert (text, model, opening) == ("", "", "")
 
 
 @pytest.mark.django_db
@@ -1036,7 +1068,7 @@ def test_render_dual_log_tech_no_duplicates():
 
 def test_compute_metrics_feudal_uptime_is_arrival():
     """feudal_uptime_s must be click_ms/1000 + 130 (AGE_RESEARCH_MS for feudal)."""
-    from website.aoe2.timeline import AGE_RESEARCH_MS
+    from aoe2coach.timeline import AGE_RESEARCH_MS
 
     click_ms = 585_000  # 9:45 click
     ops = [
@@ -1054,7 +1086,7 @@ def test_compute_metrics_feudal_uptime_is_arrival():
 
 def test_compute_metrics_castle_imperial_arrival():
     """castle/imperial uptime_s are also arrival (click + research timer)."""
-    from website.aoe2.timeline import AGE_RESEARCH_MS
+    from aoe2coach.timeline import AGE_RESEARCH_MS
 
     feudal_click = 585_000
     castle_click = 1_100_000
