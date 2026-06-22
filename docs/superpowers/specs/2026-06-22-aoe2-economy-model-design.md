@@ -196,6 +196,19 @@ Methodology:
    held-out games before the coach (#4) is allowed to *cite* a collected number rather than just the
    shape.
 
+**Calibration data on hand (4 resource-collected points, see `aoe2coach-analysis/calibration.md`):**
+Game 1 `game.aoe2record` (nom Vietnamese): W28079/F24658/G12686/S4474 + opp. Game 2
+`game2.aoe2record` (nom Burgundians): F22140/W17058/S4155/G17891 + opp Flip
+F17865/W12992/S2419/G6654. Tune on game 1 (nom); hold out game 2 + both opponents. Both games are
+save 68.0 — so both exercise the sparse-`GATHER_POINT` path the model must survive.
+
+**Per-TC gather points (Nam's note):** a player with 3 Town Centers can set 3 different gather
+points, so villager→resource assignment is **per-TC, not global** — the model must track each TC's
+gather target separately (new villagers from TC #2 may go to a different resource than TC #1's).
+Tie each `GATHER_POINT`/initial assignment to its issuing TC `object_id` and resolve resource per
+TC; collapsing them into one stream would mis-split the eco. Same applies to the auto-assignment of
+freshly-produced villagers (they walk to their TC's gather point).
+
 ## Testing
 
 - **Synthetic-ops unit tests** for `assignment_events`, `eco_split_steps`, `eco_split_at_ages`,
