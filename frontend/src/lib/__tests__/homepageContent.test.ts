@@ -46,7 +46,7 @@ describe("lerpDotColor", () => {
 
   it("wraps correctly between last dot and first dot", () => {
     const [r, g, b] = lerpDotColor(342);
-    // 342° is between thinks (324°, #FF1744) and listens (0°, #f97316)
+    // 342° is between yaps (324°, #FF1744) and listens (0°, #f97316)
     // Should be valid channel values
     expect(r).toBeGreaterThanOrEqual(0);
     expect(r).toBeLessThanOrEqual(255);

@@ -21,7 +21,7 @@ export const DOTS: Dot[] = [
   { label: "reads", href: "/reads", color: "#94a3b8", size: 7, angle: 200, desc: "i know many words", breatheDur: 3.9, breatheDelay: 1.5 },
   { label: "watches", href: "/watches", color: "#1e40af", size: 8, angle: 240, desc: "at least i don't doom scroll facebook et al.", breatheDur: 4.2, breatheDelay: 1.0 },
   { label: "bets", href: "/bets", color: "#db2777", size: 8, angle: 280, desc: "i look here to feel very smart", breatheDur: 3.4, breatheDelay: 0.7 },
-  { label: "thinks", href: "/thinks", color: "#FF1744", size: 11, angle: 320, desc: "sometimes, some of my neurons fire", breatheDur: 3.2, breatheDelay: 0 },
+  { label: "yaps", href: "/yaps", color: "#FF1744", size: 11, angle: 320, desc: "sometimes, some of my neurons fire", breatheDur: 3.2, breatheDelay: 0 },
 ];
 
 /* ── Angle + color math ───────────────────────────────── */

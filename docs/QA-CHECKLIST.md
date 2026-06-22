@@ -22,7 +22,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 - [ ] Landing orbit renders: center profile photo + section dots, no console errors (no hydration warning)
 - [ ] Profile photo is circular, served from `/media/profile/profile-N.webp`, and varies between reloads (random per load)
-- [ ] Photo rim + edge tint track the mouse, matching the ambient glow hue (e.g. red near `thinks`, cyan near `plays`)
+- [ ] Photo rim + edge tint track the mouse, matching the ambient glow hue (e.g. red near `yaps`, cyan near `plays`)
 - [ ] Photo sized ~75% of the center→dot distance; layout holds on mobile (orbit goes 85vw)
 
 ## Auth (/sudo)
@@ -34,7 +34,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Protected pages redirect to `/sudo` when not logged in
 - [ ] Token expires after 7 days
 
-## Thinks
+## Yaps
 
 - [ ] Feed loads as a single-column timeline and paginates
 - [ ] "Load more" fetches the next page
@@ -55,7 +55,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Lightbox: Esc closes the lightbox
 - [ ] Lightbox: admin delete button removes the post and closes the lightbox
 - [ ] Typed text in the compose box survives a redirect to `/sudo` to log in and is restored on return
-- [ ] Visiting `/draws` 301-redirects to `/thinks`
+- [ ] Visiting `/draws` and `/thinks` 301-redirect to `/yaps`
 
 ## Codes
 
@@ -101,7 +101,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Daily automated sync runs via Celery Beat (also rebuilds the graph)
 - [ ] Clicking play opens the mini player
 - [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek
-- [ ] Mini player persists when navigating to other pages (/watches, /thinks, etc.)
+- [ ] Mini player persists when navigating to other pages (/watches, /yaps, etc.)
 - [ ] Mini player minimize/close work
 - [ ] Listens: the ∞ (radio) toggle in the player turns orange when enabled
 - [ ] Listens: with radio on, playing a single track keeps auto-playing related tracks (queue never ends)
