@@ -1,0 +1,172 @@
+# AoE2 Coach — Reconstruction Core (Design Spec)
+
+**Date:** 2026-06-22
+**Status:** Draft for review
+**Scope:** Sub-project #1 of the "coach = preprocessing + AI" program.
+**Program overview & feasibility map:** `aoe2coach-analysis/5_feasibility_and_design.md`
+(raw/denoised log dumps + the calibration game live in that folder).
+
+## Why
+
+The coach today receives a thin, partly-misleading summary and a denoised event log, then
+*guesses* the build order and judges against half-remembered benchmarks — producing wrong builds
+and bogus timing. The fix is to make **preprocessing do the analysis** and hand the AI honest,
+structured facts. This spec is the foundation: a deterministic **`Reconstruction`** object that
+captures everything *exactly* derivable from the command stream. Estimates, build classification,
+and the new coach prompt are later sub-projects (#2–#4) that consume this object.
+
+**Hard rule: this core emits only EXACT, command-derived facts.** No estimates, no fabricated
+numbers, no over-time "live" curves. Cumulative counts are labeled `produced` (see Validation).
+
+## Validation against ground truth (calibration game)
+
+Game: **Vietnamese (nom) vs Incas (Be_Kaiser)**, Arabia, ranked 1v1, 58:01
+(`aoe2coach-analysis/game.aoe2record`; end-game stat screenshots provided by Nam).
+
+| Signal | Parser computed | In-game (CaptureAge) | Verdict |
+|---|---|---|---|
+| Feudal arrival | 9:34 | 9:34 | exact |
+| Castle arrival | 20:53 | 20:55 | exact (±2s, research-timer rounding) |
+| Imperial arrival | 40:23 | 40:23 | exact |
+| Villagers | 126 *queued* | 107 *max alive* | **queued ≠ live** → label `produced` |
+| Army | ~246 *produced* | 53 *army high* | **produced ≠ live** → label `produced` |
+| APM | 35 | (far higher) | current APM under-counts → recompute |
+
+**Takeaways baked into this spec:**
+1. Age/tech/build *timings and events* are exact and trustworthy → the core's backbone.
+2. Any *count* from production commands is `produced` (cumulative queued), an upper bound on live
+   counts. The core labels it as such and does **not** emit live counts or over-time curves
+   (deferred to the estimate sub-project #2).
+3. APM must be a real action-rate, split eco vs military, not the current build/research/queue tally.
+
+## Data facts (game version: save 68.0 / patch 48086 — Nam's current build)
+
+Verified field shapes from the calibration rec (humans = player_id 1 & 2):
+
+| Action | Fields used | Notes |
+|---|---|---|
+| `BUILD` | `building_id, x, y, t` | 185 ME / 105 OPP. Coords present & reliable. |
+| `WALL` | `x, y, x_end, y_end, building_id, t` | wall segments. |
+| `DE_QUEUE` | `unit_id, amount, t` | **the** unit-production signal on this patch. |
+| `RESEARCH` | `technology_id, t` | ages + all techs. |
+| `GATHER_POINT` | `target_id, target_type, x, y, t` | assignment signal (sparse) — for #2, not this core. |
+| `DELETE` | `object_ids, t` | self-deletes only (no combat deaths). |
+
+> ⚠️ **Version risk (flagged for #2, not this core):** save 68.0 recs contain **zero `WORK` ops**
+> (older save 64.3 had 131k). The economy model (#2) planned to mine `WORK` for villager→resource
+> assignment; on the current patch it must use the much sparser `GATHER_POINT` instead. The
+> reconstruction core does not depend on `WORK`, so it is unaffected — but the parser's fidelity
+> across game versions needs an explicit check before #2.
+
+## Architecture
+
+All code lands in the standalone **`aoe2coach`** package (pure functions over
+`ops: list[(clock_ms, action_type, data)]`, no Django/DB/network). nam-website later bumps its git
+pin. New/modified modules:
+
+- **`spatial.py`** *(new)* — `base_centroid(ops, player)`, `buildings(ops, player)` list,
+  `forward_buildings(...)` (military buildings beyond `FORWARD_DIST` from own centroid),
+  `walls(ops, player)` segments. All guard missing/zero coords (never raise).
+  Opponent-relative frontal/flank is **deferred** (needs an opp-start reference; calibrate on a
+  real rec later).
+- **`timeline.py`** *(extend existing)* — keep age clicks+arrivals; add **military/university tech**
+  timelines (new `const` maps); surface production commands and **milestones** (first-of-each
+  military unit, first military building, first siege, first treb).
+- **`efficiency.py`** *(new)* — `tc_idle(...)` (villager-queue gaps over threshold),
+  `apm(...)` (real per-minute action rate over **all** ME actions), `apm_split(...)`
+  (eco vs military). Classification basis: **eco** = villager `DE_QUEUE`, eco-building `BUILD`,
+  eco-tech `RESEARCH`, `GATHER_POINT`, market `BUY`/`SELL`; **military** = non-villager `DE_QUEUE`,
+  military-building `BUILD`, military/university-tech `RESEARCH`, army `MOVE`/`ATTACK_GROUND`/
+  `STANCE`/`PATROL`/`DELETE`; everything else uncategorized but still counted in `apm_total`.
+  Counts exposed are labeled `produced`.
+- **`reconstruct.py`** *(new)* — `reconstruct(rec) -> Reconstruction`: the assembler that ties the
+  modules into one JSON-serializable object. This is the single artifact downstream sub-projects
+  consume.
+- **`const.py`** *(extend)* — add `MILITARY_TECHS`, `UNIVERSITY_TECHS`, `SIEGE_UNIT_IDS`,
+  `tech_name()`; `MILITARY_BUILDINGS` already exists. Ids are best-effort (aoe2techtree),
+  validated against the calibration rec.
+
+`compute_metrics` stays (back-compat for current nam-website), derived from / coexisting with
+`Reconstruction` so nothing breaks while #4 migrates the coach over.
+
+## The `Reconstruction` object (shape)
+
+JSON-serializable dict (or dataclass with `.to_dict()`). Per-player where it makes sense
+(`me` / `opp`). Sketch:
+
+```
+{
+  "meta":       {map, duration_s, my_civ, opp_civ, result, is_ranked, opp_rating},
+  "ages":       {feudal_arrival_s, castle_arrival_s, imperial_arrival_s,  # exact
+                 feudal_click_s, ...},
+  "techs":      {eco:[{name, t_s}], military:[{name, t_s}], university:[{name, t_s}]},  # ME; OPP key only
+  "production": {produced_units:[{name, unit_id, amount, t_s}],            # ME, "produced" = queued
+                 milestones:{first_military_building_s, first_siege_s, first_treb_s,
+                             first_unit_s:{name:t_s}}},
+  "counts":     {villagers_produced, army_produced:[{name, amount}]},      # LABELED produced, not live
+  "spatial":    {me:{base_centroid, buildings:[{name,x,y,t_s}], forward:[...], walls:[...]},
+                 opp:{... key buildings ...}},
+  "efficiency": {tc_idle_s, longest_villager_gap_s, villager_gaps_s,
+                 apm_total, apm_eco, apm_military},
+}
+```
+
+Exact fields are unmarked; the only estimate-adjacent values (`*_produced`) carry the word
+`produced` in their key. No field in this object is an estimate or a fabricated number.
+
+## What this core deliberately does NOT do
+
+- No over-time **live** curves (pop/vil/army) — needs death modelling → sub-project #2.
+- No **resource** estimates (`WORK` absent on current patch) → sub-project #2.
+- No **build-order classification** or Hera reference library → sub-project #3.
+- No **coach prompt** changes / facts-block wiring → sub-project #4 (will serialize this object).
+- No **frontend** visualization → sub-project #5.
+
+## Testing
+
+- **Synthetic-ops unit tests** for every extractor, with dicts faithful to `mgz.fast.parse_action`
+  shapes (existing convention in `tests/`).
+- **Fidelity tests** (bytes → `mgz.fast.parse_action`) for any newly consumed action
+  (`BUILD` coords, `WALL`, `GATHER_POINT` target fields) so synthetic fixtures can't drift from
+  reality.
+- **Real-rec golden test** against `game.aoe2record`: age arrivals within ±3s of the known values
+  (9:34 / 20:55 / 40:23); building counts ≈ 185 ME / 105 OPP; `villagers_produced ≥ 107`.
+- **`const` id validation** on the real rec: common military/university techs resolve to names
+  (no `#id`); extend maps if any do.
+- Ruff clean (line-length 120). Note the PostToolUse ruff hook strips not-yet-used imports.
+
+## Relationship to the existing `phase2-enrich` plan
+
+This core **supersedes and absorbs** Tasks 1–6 of
+`docs/superpowers/plans/2026-06-22-aoe2coach-phase2-enrich.md` (military/university tech maps,
+milestones, villager-idle metrics, forward-building detection, the facts assembler), reframing
+them as the single `Reconstruction` object and **adding** the spatial building map, wall segments,
+and real eco/military APM. That plan's coach v2 (Task 7) becomes **sub-project #4**; its facts
+block becomes a thin serialization of `Reconstruction`.
+
+## Downstream consumer requirements (reconciled from the #2–#5 specs)
+
+Breadth-first speccing of the later sub-projects surfaced concrete things the core must provide so
+it remains the single contract everything builds on:
+
+- **Starting GAIA objects (for #2 economy):** the parser must expose the header's starting object
+  table — `header["players"][0]` is GAIA with ~4,560 objects carrying `class_id`/`object_id`/
+  `instance_id`/position. #2 joins `GATHER_POINT`/`ORDER` target ids against it to classify a
+  target as wood/food/gold/stone. Surface this on `ParsedRec` (e.g. `rec.gaia_objects`) — additive.
+- **Build-classifier signals (for #3):** the `Reconstruction` must explicitly include
+  **first military building** (name + `t_s`) and **villagers produced by feudal *click* time**
+  (vils-at-click) — #3's deterministic classifier keys on both. Both are derivable from data the
+  core already reads (spatial/production + age click); just expose them as named fields.
+- **Serialization & persistence (for #4 coach, #5 frontend):** `Reconstruction` must be cleanly
+  JSON-serializable. nam-website will persist it in a new additive `JSONField` on `Aoe2Match` and
+  return it from the existing match-detail endpoint (shared #4/#5 work; not this package's job, but
+  the shape must be stable and self-describing).
+
+## Open / deferred decisions
+
+- **Frontal vs flank** building classification — needs an opponent-start reference; calibrate on a
+  real rec in a later pass.
+- **Parser version fidelity** — confirm the parser handles save 64.3 *and* 68.0 (the `WORK`
+  divergence) before building #2.
+- **`Reconstruction` home for the coach** — whether #4 passes the whole object or a trimmed facts
+  view to `claude -p` (decided in #4).
