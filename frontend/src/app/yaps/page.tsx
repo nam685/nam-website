@@ -364,7 +364,7 @@ function Lightbox({
 }
 
 /* ── Main page ──────────────────────────────────────── */
-export default function ThinksPage() {
+export default function YapsPage() {
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(false);
@@ -443,7 +443,7 @@ export default function ThinksPage() {
 
   return (
     <>
-      <title>Nam thinks</title>
+      <title>Nam yaps</title>
 
       {lightboxIdx >= 0 && <Lightbox images={images} index={lightboxIdx} onClose={() => setLightboxId(null)} onNav={navLightbox} onDelete={handleDelete} />}
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 const BG_MAP: Record<string, string> = {
-  "/thinks": "/images/bg/thinks.jpg",
+  "/yaps": "/images/bg/yaps.jpg",
   "/codes": "/images/bg/codes.jpg",
   "/grinds": "/images/bg/grinds.jpg",
   "/plays": "/images/bg/plays.jpg",
@@ -17,7 +17,7 @@ const BG_MAP: Record<string, string> = {
 export default function PageBackground() {
   const pathname = usePathname();
   const bg = BG_MAP[pathname] ?? BG_MAP["/" + pathname.split("/")[1]];
-  const isThinks = pathname === "/thinks" || pathname.split("/")[1] === "thinks";
+  const isYaps = pathname === "/yaps" || pathname.split("/")[1] === "yaps";
   const [loaded, setLoaded] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function PageBackground() {
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
-        filter: isThinks ? "brightness(1.4)" : undefined,
+        filter: isYaps ? "brightness(1.4)" : undefined,
       }}
     />
   );
