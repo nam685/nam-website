@@ -83,6 +83,12 @@ pin. New/modified modules:
 - **`spatial.py`** *(new)* — `base_centroid(ops, player)`, `buildings(ops, player)` list,
   `forward_buildings(...)` (military buildings beyond `FORWARD_DIST` from own centroid),
   `walls(ops, player)` segments. All guard missing/zero coords (never raise).
+  **`eco_exposure(...)`** — classifies ME resource buildings (gold/stone **mining camps**, **lumber
+  camps**) as `side: front | safe` by projecting their position onto the **me↔opp axis** (front =
+  toward the opponent's `base_centroid`). This is the "**front gold vs safe back gold**" signal: a
+  forward/exposed mining camp is a raidable, committed economy → materially different coaching than
+  gold mined safe in base. Exact positions; the front/safe cut is heuristic (axis projection), so
+  tagged accordingly.
   **`spatial.opp` includes `base_centroid`** too — computed the same way (centroid of the
   opponent's own `BUILD` coords); this is approximate but feasible from data we already read, and
   #5/#7 hard-require it. Only opponent-relative **frontal vs flank** building classification stays
@@ -142,8 +148,9 @@ JSON-serializable dict (or dataclass with `.to_dict()`). Per-player where it mak
                              first_unit_s:{name:t_s},                      # map of EVERY unit's first-trained time
                              first_military_unit_s, first_military_unit_name}},  # earliest non-villager (see note)
   "counts":     {villagers_produced, army_produced:[{name, amount}]},      # LABELED produced, not live
-  "spatial":    {me:{base_centroid, buildings:[{name,x,y,t_s}], forward:[...], walls:[...]},
-                 opp:{base_centroid, ... key buildings ...}},   # opp.base_centroid approx from opp BUILD coords
+  "spatial":    {me:{base_centroid, buildings:[{name,x,y,t_s}], forward:[...], walls:[...],
+                     eco_exposure:[{name,x,y,t_s,side}]},  # resource bldgs (mining/lumber camp) tagged
+                 opp:{base_centroid, ... key buildings ...}},   # side: front|safe along me↔opp axis
   "efficiency": {tc_idle_s, longest_villager_gap_s, villager_gaps_s,
                  apm_total, apm_eco, apm_military},
   "population":  {housing_capacity:[{t_s, cap}], maxed_at_s,            # cap curve EXACT (civ caveat)

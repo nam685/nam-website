@@ -352,7 +352,16 @@ testable; ruff line-length 120; PostToolUse ruff hook strips not-yet-used import
 3. **Web on/off default.** Default **off** (tier 2) for reproducibility and to avoid a flaky
    external dependency; enable WebFetch (single wiki domain) behind a config flag once the wiki
    host is standardized with #3. Confirm the exact wiki host to allowlist.
-4. **`references/` copy vs `--add-dir`.** Spec copies the library into the workspace for a clean
+5. **Model tier — Haiku vs Sonnet vs Opus (evaluate, don't assume).** The coach is mostly
+   *restate-the-facts + look-up-the-reference + explain* — not deep open-ended reasoning — so it may
+   NOT need Opus. Run the same coach over the calibration games at each tier (`--model
+   claude-haiku-4-5` / `claude-sonnet-4-6` / `claude-opus-4-8`) and compare: does it follow the
+   workspace protocol (reads facts/map/reference, restates before judging), get the build + benchmark
+   right, and stay honest (no fabricated numbers)? **Pick the cheapest tier that passes** — default
+   `sonnet`, drop to `haiku` if it holds the protocol, reserve `opus` only if both fail. The Phase-1
+   elluminate eval (issue #248) is the scoring harness for this comparison. `model` is already a
+   `coach()` param, so this is a config/eval choice, not a code change.
+6. **`references/` copy vs `--add-dir`.** Spec copies the library into the workspace for a clean
    read-only sandbox. If the library is large, switch to `--add-dir <reference_root>` (read-only)
    instead of copying — decide based on #3's library size.
 5. **Cost/latency budget.** Set `--max-turns` and (if supported) a per-run USD cap; pick values

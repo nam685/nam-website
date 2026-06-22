@@ -81,6 +81,8 @@ disabled) until #2's economy estimate is trusted — they are honest about why.
 | `slow-imperial` | slow Imperial uptime | `ages.imperial_arrival_s` vs band | **exact** | AoE Library uptimes |
 | `late-loom-or-eco-up` | key eco upgrade late/missing (Wheelbarrow, Double-Bit Axe, lumber/mining camp ups) | `techs.eco[]` names + `t_s` vs age-relative deadlines | **exact** | Steam guide; SotL ROI |
 | `too-few-villagers` | under-producing villagers for the game length | `counts.villagers_produced` vs pop-vs-time floor (produced is an upper bound → only flag when *below*, never when above) | **exact** | AoE Library; Villager wiki |
+| `villager-stall-late` | villager production stalled / count plateaued low after Imperial (e.g. "stuck at 80 vils post-Imp") | no villager `DE_QUEUE` `t_s` after `ages.imperial_arrival_s` (production *ceased* — exact) AND `villagers_produced` below a post-Imperial floor | **exact** | Hera/SotL (never stop making vils until ~maxed) |
+| `exposed-gold` | gold/key mining camp placed forward/exposed (raidable) without nearby protection | `spatial.me.eco_exposure[]` with `side==front` AND no `walls`/`forward` military covering it | **heuristic** | Hera (safe vs front gold = different game) |
 | `got-housed` | hit pop cap / housing plateau during active production | `population.housed_flags`, `population.maxed_at_s` | **heuristic** | Steam guide (constant farms) |
 | `no-map-presence` | no forward/expansion buildings; everything hugging base | `spatial.me.forward` empty + few `engagements` in opp/center zones | **heuristic** | Steam guide (map awareness) |
 | `leaky-or-late-walls` | walls absent or with gaps when under pressure | `spatial.me.walls` coverage vs `engagements` near own base; wall `t_s` | **heuristic** | Steam guide (wall after eco) |
@@ -112,6 +114,8 @@ aoe2coach/
       slow-imperial.yaml
       late-loom-or-eco-up.yaml
       too-few-villagers.yaml
+      villager-stall-late.yaml
+      exposed-gold.yaml
       got-housed.yaml
       no-map-presence.yaml
       leaky-or-late-walls.yaml
