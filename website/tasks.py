@@ -4,19 +4,33 @@ import os
 import re
 import subprocess
 
+from aoe2coach import BENCHMARKS, build_timeline, coach, compute_metrics, parse_rec, render_dual_log
 from django.conf import settings as dj_settings
 from django.utils import timezone
 from django.utils import timezone as dj_timezone
 
 from config.celery import app
-from website.aoe2.coach import build_coach_prompt, parse_opening, run_claude_coach
-from website.aoe2.metrics import compute_metrics
-from website.aoe2.parser import parse_rec
-from website.aoe2.timeline import build_timeline, render_dual_log
 from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 logger = logging.getLogger(__name__)
+
+
+def _run_coach(salient_log, metrics, result):
+    """Prod wrapper: read settings, call the pure aoe2coach.coach(), own graceful degradation.
+
+    Returns (coach_analysis, coach_model, opening). On any failure returns ("", "", "")
+    so analysis still completes and metrics are saved.
+    """
+    try:
+        model = getattr(dj_settings, "AOE2_COACH_MODEL", "sonnet")
+        claude_bin = getattr(dj_settings, "AOE2_CLAUDE_BIN", "claude")
+        out = coach(metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin)
+        return out.raw_text, out.model_used, out.opening_tag
+    except Exception:  # noqa: BLE001
+        logger.warning("Coach stage failed — storing empty coach_analysis")
+        return "", "", ""
+
 
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
@@ -320,7 +334,6 @@ def enrich_ladder():
     from django.core.cache import cache
     from django.utils import timezone as tz
 
-    from website.aoe2.const import civ_name as civ_name_fn
     from website.aoe2.relic import get_personal_stat, get_recent_1v1_matches
 
     profile_id = dj_settings.AOE2_PROFILE_ID
@@ -381,15 +394,10 @@ def enrich_ladder():
             )
             continue
 
-        my_civ_name = civ_name_fn(rm["my_civ_id"]) if rm.get("my_civ_id") else None
-
-        # Filter by civ if possible.
-        if my_civ_name:
-            civ_candidates = candidates.filter(my_civ=my_civ_name)
-            if civ_candidates.exists():
-                candidates = civ_candidates
-
         # Take the row whose effective_time is closest to completiontime.
+        # NOTE: Relic civ_id uses a different numeric scheme than our dat-based
+        # civ names, so a civ equality check would silently reject valid matches.
+        # We rely solely on the ±2h time window + closest-time tiebreak.
         best = None
         best_delta = None
         for row in candidates:
@@ -465,15 +473,8 @@ def analyze_match(match_id):
         timeline_payload["salient_log"] = dual_log
 
         # Stage 4: LLM coach — graceful; failure must not block metrics being saved.
-        coach_analysis = ""
-        coach_model = ""
-        try:
-            prompt = build_coach_prompt(dual_log, metrics)
-            coach_analysis, coach_model = run_claude_coach(prompt)
-            metrics["opening"] = parse_opening(coach_analysis)
-        except Exception:  # noqa: BLE001
-            logger.warning("Coach stage failed for match %s — storing empty coach_analysis", match_id)
-            metrics.setdefault("opening", "")
+        coach_analysis, coach_model, opening = _run_coach(dual_log, metrics, rec.my_result)
+        metrics["opening"] = opening
 
         match.map_name = rec.map_name
         match.duration_seconds = rec.duration_ms // 1000
