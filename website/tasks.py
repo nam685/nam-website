@@ -320,7 +320,6 @@ def enrich_ladder():
     from django.core.cache import cache
     from django.utils import timezone as tz
 
-    from website.aoe2.const import civ_name as civ_name_fn
     from website.aoe2.relic import get_personal_stat, get_recent_1v1_matches
 
     profile_id = dj_settings.AOE2_PROFILE_ID
@@ -381,15 +380,10 @@ def enrich_ladder():
             )
             continue
 
-        my_civ_name = civ_name_fn(rm["my_civ_id"]) if rm.get("my_civ_id") else None
-
-        # Filter by civ if possible.
-        if my_civ_name:
-            civ_candidates = candidates.filter(my_civ=my_civ_name)
-            if civ_candidates.exists():
-                candidates = civ_candidates
-
         # Take the row whose effective_time is closest to completiontime.
+        # NOTE: Relic civ_id uses a different numeric scheme than our dat-based
+        # civ names, so a civ equality check would silently reject valid matches.
+        # We rely solely on the ±2h time window + closest-time tiebreak.
         best = None
         best_delta = None
         for row in candidates:

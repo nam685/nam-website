@@ -2,6 +2,8 @@
 
 from collections import defaultdict
 
+from .timeline import AGE_RESEARCH_MS
+
 
 def compute_metrics(timeline, duration_ms):
     up = timeline["uptimes"]
@@ -16,10 +18,16 @@ def compute_metrics(timeline, duration_ms):
         else:
             army[u["name"]] += u["amount"]
 
+    def _arrival_s(age):
+        click_ms = up[age]
+        if click_ms is None:
+            return None
+        return (click_ms + AGE_RESEARCH_MS[age]) // 1000
+
     return {
-        "feudal_uptime_s": (up["feudal"] // 1000) if up["feudal"] is not None else None,
-        "castle_uptime_s": (up["castle"] // 1000) if up["castle"] is not None else None,
-        "imperial_uptime_s": (up["imperial"] // 1000) if up["imperial"] is not None else None,
+        "feudal_uptime_s": _arrival_s("feudal"),
+        "castle_uptime_s": _arrival_s("castle"),
+        "imperial_uptime_s": _arrival_s("imperial"),
         "apm": apm,
         "villager_count": villagers,
         "army": [{"name": n, "amount": a} for n, a in sorted(army.items(), key=lambda x: -x[1])],
