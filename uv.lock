@@ -56,6 +56,14 @@ wheels = [
 ]
 
 [[package]]
+name = "aoe2coach"
+version = "0.1.0"
+source = { git = "https://github.com/nam685/aoe2coach.git?rev=101e1c05e523b9235ceb19f0e07c201c29f764fb#101e1c05e523b9235ceb19f0e07c201c29f764fb" }
+dependencies = [
+    { name = "mgz-fast" },
+]
+
+[[package]]
 name = "asgiref"
 version = "3.11.1"
 source = { registry = "https://pypi.org/simple" }
@@ -756,6 +764,7 @@ name = "nam-website"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aoe2coach" },
     { name = "celery", extra = ["redis"] },
     { name = "django" },
     { name = "django-cors-headers" },
@@ -786,6 +795,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aoe2coach", git = "https://github.com/nam685/aoe2coach.git?rev=101e1c05e523b9235ceb19f0e07c201c29f764fb" },
     { name = "celery", extras = ["redis"], specifier = ">=5.4" },
     { name = "django", specifier = ">=6.0" },
     { name = "django-cors-headers", specifier = ">=4.6" },
