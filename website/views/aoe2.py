@@ -1,6 +1,9 @@
 import hashlib
 import logging
+import re
+from datetime import datetime, timedelta, timezone
 
+from django.conf import settings as dj_settings
 from django.core.cache import cache
 from django.db.models import Count
 from django.http import JsonResponse
@@ -10,6 +13,9 @@ from ..auth import require_admin
 from ..models import Aoe2Match
 from ..tasks import analyze_match
 from ..utils import parse_json_body, parse_pagination
+
+# Matches: "MP Replay v... @YYYY.MM.DD HHMMSS (N).aoe2record"
+_REC_FILENAME_RE = re.compile(r"@(\d{4})\.(\d{2})\.(\d{2}) (\d{2})(\d{2})(\d{2})")
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +109,20 @@ def aoe2_upload(request):
 
     from django.core.files.base import ContentFile
 
-    match = Aoe2Match.objects.create(file_hash=file_hash)
-    match.rec_file.save(f.name or f"{file_hash}.aoe2record", ContentFile(raw), save=True)
+    # Parse played_at from the rec filename, e.g.
+    # "MP Replay v1.8 @2024.03.15 183042 (1).aoe2record"
+    # Timestamp is local time; convert to UTC using AOE2_TZ_OFFSET_HOURS.
+    played_at = None
+    fname = f.name or ""
+    m = _REC_FILENAME_RE.search(fname)
+    if m:
+        year, month, day, hour, minute, second = (int(x) for x in m.groups())
+        tz_offset_hours = getattr(dj_settings, "AOE2_TZ_OFFSET_HOURS", 7)
+        local_dt = datetime(year, month, day, hour, minute, second)
+        played_at = local_dt.replace(tzinfo=timezone.utc) - timedelta(hours=tz_offset_hours)
+
+    match = Aoe2Match.objects.create(file_hash=file_hash, played_at=played_at)
+    match.rec_file.save(fname or f"{file_hash}.aoe2record", ContentFile(raw), save=True)
     analyze_match.delay(match.id)
     return JsonResponse({"id": match.id, "status": match.analysis_status}, status=201)
 

@@ -988,3 +988,224 @@ def test_enrich_ladder_idempotent(settings):
 
     m.refresh_from_db()
     assert m.relic_match_id == 88001  # still correctly set, not duplicated
+
+
+# ---------------------------------------------------------------------------
+# Bug 1 — Tech deduplication
+# ---------------------------------------------------------------------------
+
+
+def test_build_timeline_dedupes_eco_techs():
+    """Two RESEARCH events for the same eco tech → only the FIRST appears in eco_techs."""
+    ops = [
+        (300_000, Action.RESEARCH, {"player_id": 1, "technology_id": 202}),  # Double-Bit Axe (first)
+        (350_000, Action.RESEARCH, {"player_id": 1, "technology_id": 202}),  # Double-Bit Axe again (dup)
+        (400_000, Action.RESEARCH, {"player_id": 1, "technology_id": 213}),  # Wheelbarrow (different tech)
+    ]
+    tl = build_timeline(ops, me_number=1)
+    names = [e["name"] for e in tl["eco_techs"]]
+    # Only one Double-Bit Axe, at the FIRST occurrence time
+    assert names.count("Double-Bit Axe") == 1, f"Expected 1 Double-Bit Axe, got: {names}"
+    dba = next(e for e in tl["eco_techs"] if e["name"] == "Double-Bit Axe")
+    assert dba["t"] == 300_000, "First occurrence (300s) should be kept, not the duplicate"
+    # Wheelbarrow still present
+    assert "Wheelbarrow" in names
+
+
+def test_render_dual_log_tech_no_duplicates():
+    """Duplicate TECH RESEARCH events for a given tech must yield exactly one TECH line, no xN."""
+    ops = [
+        # ME researches Loom twice (RESEARCH can fire more than once per tech in a rec)
+        (200_000, Action.RESEARCH, {"player_id": 1, "technology_id": 22}),  # Loom (first)
+        (210_000, Action.RESEARCH, {"player_id": 1, "technology_id": 22}),  # Loom (dup — within 10s window)
+        # OPP age-up (unrelated)
+        (590_000, Action.RESEARCH, {"player_id": 2, "technology_id": 101}),
+    ]
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=10)
+    tech_lines = [ln for ln in log.splitlines() if "TECH" in ln and "ME" in ln]
+    loom_lines = [ln for ln in tech_lines if "Loom" in ln]
+    assert len(loom_lines) == 1, f"Expected exactly 1 Loom TECH line, got: {loom_lines}"
+    # Must NOT have "x2" or any xN suffix on a TECH line
+    assert "x2" not in loom_lines[0], f"TECH line must not have xN: {loom_lines[0]!r}"
+
+
+# ---------------------------------------------------------------------------
+# Bug 2 — Age-up arrival times
+# ---------------------------------------------------------------------------
+
+
+def test_compute_metrics_feudal_uptime_is_arrival():
+    """feudal_uptime_s must be click_ms/1000 + 130 (AGE_RESEARCH_MS for feudal)."""
+    from website.aoe2.timeline import AGE_RESEARCH_MS
+
+    click_ms = 585_000  # 9:45 click
+    ops = [
+        (click_ms, Action.RESEARCH, {"player_id": 1, "technology_id": 101}),  # feudal click
+    ]
+    tl = build_timeline(ops, me_number=1)
+    m = compute_metrics(tl, duration_ms=1_200_000)
+    expected_arrival_s = (click_ms + AGE_RESEARCH_MS["feudal"]) // 1000
+    assert m["feudal_uptime_s"] == expected_arrival_s, (
+        f"Expected arrival {expected_arrival_s}s, got {m['feudal_uptime_s']}s"
+    )
+    # Sanity: 585s click + 130s = 715s = 11:55
+    assert m["feudal_uptime_s"] == 715
+
+
+def test_compute_metrics_castle_imperial_arrival():
+    """castle/imperial uptime_s are also arrival (click + research timer)."""
+    from website.aoe2.timeline import AGE_RESEARCH_MS
+
+    feudal_click = 585_000
+    castle_click = 1_100_000
+    imperial_click = 2_000_000
+    ops = [
+        (feudal_click, Action.RESEARCH, {"player_id": 1, "technology_id": 101}),
+        (castle_click, Action.RESEARCH, {"player_id": 1, "technology_id": 102}),
+        (imperial_click, Action.RESEARCH, {"player_id": 1, "technology_id": 103}),
+    ]
+    tl = build_timeline(ops, me_number=1)
+    m = compute_metrics(tl, duration_ms=3_000_000)
+    assert m["castle_uptime_s"] == (castle_click + AGE_RESEARCH_MS["castle"]) // 1000
+    assert m["imperial_uptime_s"] == (imperial_click + AGE_RESEARCH_MS["imperial"]) // 1000
+
+
+def test_render_dual_log_age_up_shows_arrival():
+    """AGE_UP lines must include both the click timestamp and the ~arrival timestamp."""
+    ops = [
+        (585_000, Action.RESEARCH, {"player_id": 1, "technology_id": 101}),  # feudal click at 9:45
+        (590_000, Action.RESEARCH, {"player_id": 2, "technology_id": 101}),  # OPP feudal
+    ]
+    log = render_dual_log(ops, me_number=1, opp_number=2, me_action_count=5)
+    me_age_line = next(ln for ln in log.splitlines() if "ME" in ln and "AGE_UP" in ln and "feudal" in ln)
+    # Click at 09:45, arrival at 09:45 + 2:10 = 11:55
+    assert "09:45" in me_age_line, f"Click time missing from: {me_age_line!r}"
+    assert "reached" in me_age_line, f"Arrival annotation missing from: {me_age_line!r}"
+    assert "11:55" in me_age_line, f"Arrival time 11:55 missing from: {me_age_line!r}"
+
+
+# ---------------------------------------------------------------------------
+# Bug 3 — played_at parsed from rec filename
+# ---------------------------------------------------------------------------
+
+
+def test_parse_played_at_from_filename():
+    """Upload view parses played_at from a standard rec filename and converts VN local → UTC."""
+    import datetime
+
+    from website.views.aoe2 import _REC_FILENAME_RE
+
+    fname = "MP Replay v1.8 @2024.03.15 183042 (1).aoe2record"
+    m = _REC_FILENAME_RE.search(fname)
+    assert m is not None, "Regex must match the standard rec filename format"
+    year, month, day, hour, minute, second = (int(x) for x in m.groups())
+    assert (year, month, day) == (2024, 3, 15)
+    assert (hour, minute, second) == (18, 30, 42)
+
+    # Simulate UTC conversion with default offset=7 (UTC+7 VN)
+    tz_offset_hours = 7
+    local_dt = datetime.datetime(year, month, day, hour, minute, second)
+    played_at = local_dt.replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(hours=tz_offset_hours)
+    # 18:30:42 VN = 11:30:42 UTC
+    assert played_at == datetime.datetime(2024, 3, 15, 11, 30, 42, tzinfo=datetime.timezone.utc)
+
+
+def test_parse_played_at_no_match_for_bare_filename():
+    """A bare filename like 'rec.aoe2record' must not match the regex → played_at stays None."""
+    from website.views.aoe2 import _REC_FILENAME_RE
+
+    assert _REC_FILENAME_RE.search("rec.aoe2record") is None
+    assert _REC_FILENAME_RE.search("my_game.aoe2record") is None
+
+
+@pytest.mark.django_db
+def test_upload_sets_played_at_from_filename(client, auth_headers, settings):
+    """Uploading a file with a standard rec filename populates played_at on the match."""
+    import datetime
+    import io
+
+    settings.AOE2_TZ_OFFSET_HOURS = 7
+
+    fname = "MP Replay v1.8 @2024.03.15 183042 (1).aoe2record"
+    dummy_content = b"dummy rec content - not a real rec"
+    f = io.BytesIO(dummy_content)
+    f.name = fname
+
+    # We monkeypatch analyze_match.delay to prevent task execution.
+    with patch("website.views.aoe2.analyze_match") as mock_task:
+        mock_task.delay = lambda _id: None
+        resp = client.post("/api/aoe2/upload/", {"rec": f}, **auth_headers)
+
+    assert resp.status_code == 201
+    from website.models import Aoe2Match
+
+    match = Aoe2Match.objects.get(id=resp.json()["id"])
+    expected = datetime.datetime(2024, 3, 15, 11, 30, 42, tzinfo=datetime.timezone.utc)
+    assert match.played_at == expected, f"Expected {expected}, got {match.played_at}"
+
+
+@pytest.mark.django_db
+def test_upload_played_at_none_for_bare_filename(client, auth_headers):
+    """Uploading 'rec.aoe2record' (no timestamp in name) → played_at is None."""
+    import io
+
+    dummy_content = b"another dummy rec"
+    f = io.BytesIO(dummy_content)
+    f.name = "rec.aoe2record"
+
+    with patch("website.views.aoe2.analyze_match") as mock_task:
+        mock_task.delay = lambda _id: None
+        resp = client.post("/api/aoe2/upload/", {"rec": f}, **auth_headers)
+
+    assert resp.status_code == 201
+    from website.models import Aoe2Match
+
+    match = Aoe2Match.objects.get(id=resp.json()["id"])
+    assert match.played_at is None
+
+
+@pytest.mark.django_db
+def test_enrich_ladder_lenient_civ_match(settings):
+    """enrich_ladder matches by time proximity even when civ names don't align."""
+    import datetime
+
+    from django.utils import timezone
+
+    from website.models import Aoe2Match
+    from website.tasks import enrich_ladder
+
+    settings.AOE2_PROFILE_ID = 14697894
+    profile_id = 14697894
+
+    completion_epoch = 1750000000
+    played = timezone.datetime.fromtimestamp(completion_epoch - 300, tz=datetime.timezone.utc)
+    # Use a civ name that does NOT match relic civ_id=8 ("Celts") — should still match by time.
+    m = Aoe2Match.objects.create(
+        file_hash="enrich-lenient-civ",
+        analysis_status="done",
+        my_civ="Britons",  # deliberately wrong civ — should not block match
+        played_at=played,
+    )
+
+    stat_resp = MagicMock()
+    stat_resp.json.return_value = _make_relic_stat_response()
+    stat_resp.raise_for_status = MagicMock()
+
+    history_resp = MagicMock()
+    history_resp.json.return_value = _make_relic_history_response(
+        profile_id=profile_id,
+        relic_match_id=99002,
+        my_civ_id=8,  # Celts in relic scheme — does not match "Britons" in our scheme
+    )
+    history_resp.raise_for_status = MagicMock()
+
+    def fake_get(url, **_kwargs):
+        if "getPersonalStat" in url:
+            return stat_resp
+        return history_resp
+
+    with patch("website.aoe2.relic.httpx.get", side_effect=fake_get):
+        enrich_ladder()
+
+    m.refresh_from_db()
+    assert m.relic_match_id == 99002, "Should match by time proximity despite civ mismatch"

@@ -25,10 +25,18 @@ LOG FORMAT:
   (villagers, farms, houses, lumber/mining camps, walls) are stripped. Player names and chat
   are never present.
 
+AGE_UP TIMESTAMPS — IMPORTANT:
+  AGE_UP log lines show the click time (when the player clicked to research the age) AND the
+  computed arrival time in parentheses, e.g. "07:24 ME AGE_UP feudal (reached ~09:34)".
+  The metrics feudal_uptime_s / castle_uptime_s / imperial_uptime_s are ARRIVAL times
+  (click + research timer). Standard DE 1.0× research times: Feudal ~2:10, Castle ~2:40,
+  Imperial ~3:10. Always judge and discuss age timings using ARRIVAL, not the click time.
+  The benchmark uptimes below are arrival times.
+
 Use OPP lines only to contextualise the owner's REACTIONS (e.g. opponent built Stable → owner
 built Archery Range). Do NOT grade or evaluate the opponent's eco, micro, or performance.
 
-AoE2 1v1 benchmark uptimes (ranked-ladder averages — compare against these):
+AoE2 1v1 benchmark uptimes — ARRIVAL times (ranked-ladder averages):
   Scouts opening  : Feudal ~9:30–10:00 | Castle ~18:00–20:00
   Archers opening : Feudal ~9:00–9:45  | Castle ~18:30–21:00
   M@A → Archers  : Feudal ~8:45–9:30  | Castle ~19:00–21:30
