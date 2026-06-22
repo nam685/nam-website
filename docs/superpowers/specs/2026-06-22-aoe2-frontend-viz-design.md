@@ -43,7 +43,9 @@ its absence is explained, not silently dropped.
 
 ### V1 — Building-map minimap **(headline, exact)**
 A 2D top-down minimap rendered from `Reconstruction.spatial` — every building plotted at its exact
-`(x, y)`, both players overlaid (me = accent cyan, opp = muted amber/grey). This is the
+`(x, y)`, both players overlaid. **Player color convention (Nam's call, program-wide): ME = blue,
+OPP = red**, fixed regardless of in-game player colors — consistent across the web viz (#5) and the
+coach-facing map PNGs (#7) so "blue is always you" reads instantly. This is the
 single highest-value exact visualization: it makes "where did I build, did I wall, did I go
 forward" *visible* in a way no text ladder can.
 

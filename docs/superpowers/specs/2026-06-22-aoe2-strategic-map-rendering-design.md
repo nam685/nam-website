@@ -159,6 +159,10 @@ moment a map earns its thousand words, so the renderer keys off #1's `engagement
 Keep the geometry pure and **isolate all imperative drawing here.** `render.py` takes a `MapGeometry`
 dict and writes a PNG; it contains no game logic, only coordinate transforms + drawing calls.
 
+**Player color convention (Nam's call, program-wide): ME = blue, OPP = red** — fixed, regardless of
+in-game player colors, matching the #5 web viz so "blue is you" is instant for the coach reading the
+image.
+
 - **Library:** **Pillow** (`PIL.ImageDraw`). Rationale: it draws lines/polygons/text to a raster with
   no display server, no SVG-rasterizer toolchain, and no heavyweight scientific stack — the map is
   schematic (squares, line segments, arrows, a legend strip), not a chart. (matplotlib is heavier and
