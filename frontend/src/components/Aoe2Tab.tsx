@@ -315,10 +315,6 @@ export default function Aoe2Tab() {
         </div>
       )}
 
-      <div style={{ textAlign: "center", marginTop: "2rem" }}>
-        <span style={taglineStyle}>built different — analyzed differently</span>
-      </div>
-
       <style>{`
         .aoe2-shell { display: flex; gap: 1rem; align-items: flex-start; }
         .aoe2-list {
@@ -763,13 +759,6 @@ const uploadBtnStyle: React.CSSProperties = {
   borderRadius: "3px",
   cursor: "pointer",
   fontWeight: 700,
-};
-const taglineStyle: React.CSSProperties = {
-  fontFamily: "var(--font-headline)",
-  fontSize: "0.6rem",
-  color: "#2a2a2a",
-  letterSpacing: "0.2em",
-  textTransform: "lowercase",
 };
 const dotsBtnStyle: React.CSSProperties = {
   background: "transparent",

@@ -91,10 +91,7 @@ export default function Aoe2ResourceBalanceChart({
 
   return (
     <div>
-      <div style={labelStyle}>
-        Resource balance — spent (dark) + floating (bright) per resource (x =
-        time)
-      </div>
+      <div style={labelStyle}>Resource balance (bright = floating)</div>
       <div
         style={{
           display: "flex",
@@ -231,11 +228,6 @@ export default function Aoe2ResourceBalanceChart({
           ))}
         </div>
       </div>
-      <div style={footNote}>
-        dark = cumulative SPEND (near-exact) · bright = FLOATING (~est:
-        gathered-but-unspent = effort minus spend). A wide bright patch = that
-        resource floated. Collected/bank totals aren&apos;t fabricated.
-      </div>
     </div>
   );
 }
@@ -268,11 +260,6 @@ const legendCol: React.CSSProperties = {
   flexDirection: "column",
   gap: "0.35rem",
   paddingTop: "0.2rem",
-};
-const footNote: React.CSSProperties = {
-  fontSize: "0.5rem",
-  color: "#555",
-  marginTop: "0.4rem",
 };
 const tickText: React.CSSProperties = {
   fontSize: "9px",
