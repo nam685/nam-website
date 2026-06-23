@@ -1,6 +1,7 @@
 "use client";
 
 import { Reconstruction } from "@/lib/aoe2";
+import Aoe2Icon from "./Aoe2Icon";
 
 /**
  * V5 — produced-counts strip (#5 spec). The word "produced" is MANDATORY in every label: these are
@@ -30,9 +31,16 @@ export default function Aoe2ProducedStrip({
         <div>
           <div style={labelStyle}>Villagers produced</div>
           <div
-            style={{ fontSize: "1.2rem", color: "#ddd" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "1.2rem",
+              color: "#ddd",
+            }}
             title="cumulative queued — an upper bound, not a live count"
           >
+            <Aoe2Icon name="Villager" size={22} />
             {vils ?? "—"}
           </div>
         </div>
@@ -42,17 +50,24 @@ export default function Aoe2ProducedStrip({
             <div
               style={{
                 display: "flex",
-                gap: "0.6rem",
+                gap: "0.7rem",
                 flexWrap: "wrap",
-                marginTop: "0.15rem",
+                marginTop: "0.25rem",
               }}
             >
               {army.map((u) => (
                 <span
                   key={u.name}
-                  style={{ fontSize: "0.75rem", color: "#bbb" }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.25rem",
+                    fontSize: "0.8rem",
+                    color: "#bbb",
+                  }}
+                  title={u.name}
                 >
-                  {u.name}{" "}
+                  <Aoe2Icon name={u.name} size={20} />
                   <span style={{ color: "var(--accent)" }}>×{u.amount}</span>
                 </span>
               ))}

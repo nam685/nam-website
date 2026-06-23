@@ -155,7 +155,12 @@ export type Reconstruction = {
   };
   production?: {
     milestones?: Record<string, unknown>;
-    produced_units?: { name: string; t_s: number }[];
+    produced_units?: {
+      name: string;
+      unit_id?: number;
+      amount?: number;
+      t_s: number;
+    }[];
     villager_curve?: { t_s: number; villagers: number }[];
   };
   counts?: {
@@ -634,4 +639,153 @@ export function parseMarkdown(src: string | null | undefined): MdBlock[] {
   flushPara();
   flushList();
   return blocks;
+}
+
+/* ── Stacked production-over-time series (Army & Stats chart) ──────────────
+ * Shapes villager_curve + produced_units into ordered cumulative series for a
+ * stacked-area chart. Villagers always sit on the bottom; army UNIT TYPES stack
+ * above, top-N by total produced, the rest folded into "Other". Every series
+ * carries a sampled point per time bucket so the SVG renderer just maps x/y. */
+
+export type ProductionSeries = {
+  name: string;
+  color: string;
+  total: number;
+  isVillager: boolean;
+  /** cumulative produced count at each bucket boundary (aligned to `times`). */
+  values: number[];
+};
+
+export type ProductionChart = {
+  /** bucket boundary times in seconds (0 … duration), shared x-axis. */
+  times: number[];
+  /** bottom-to-top stacking order; villagers first. */
+  series: ProductionSeries[];
+  /** max stacked total across all buckets (y-axis top). */
+  yMax: number;
+  durationS: number;
+};
+
+/* Distinct, readable palette for army unit types (villagers use their own tan). */
+const VILLAGER_COLOR = "#d8b878";
+const ARMY_COLORS = [
+  "#e0564f", // red
+  "#4f9be0", // blue
+  "#7bc96f", // green
+  "#c77dff", // violet
+  "#ffb347", // amber
+  "#5fd0c5", // teal
+];
+const OTHER_COLOR = "#8a8f98";
+
+export function buildProductionSeries(
+  production:
+    | {
+        produced_units?: { name: string; amount?: number; t_s: number }[];
+        villager_curve?: { t_s: number; villagers: number }[];
+      }
+    | undefined,
+  durationS: number | null | undefined,
+  opts?: { stepS?: number; topN?: number },
+): ProductionChart | null {
+  const stepS = opts?.stepS ?? 30;
+  const topN = opts?.topN ?? 5;
+  const produced = production?.produced_units ?? [];
+  const curve = production?.villager_curve ?? [];
+
+  // Determine the timeline. Prefer explicit duration; fall back to last event.
+  const lastEvent = Math.max(
+    0,
+    ...produced.map((u) => u.t_s || 0),
+    ...curve.map((p) => p.t_s || 0),
+  );
+  const dur = Math.max(durationS && durationS > 0 ? durationS : 0, lastEvent);
+  if (dur <= 0) return null;
+  if (produced.length === 0 && curve.length === 0) return null;
+
+  // Bucket boundaries: 0, step, 2*step, …, dur (inclusive).
+  const times: number[] = [];
+  for (let t = 0; t < dur; t += stepS) times.push(t);
+  times.push(dur);
+
+  const isVil = (name: string) => name.toLowerCase() === "villager";
+
+  // Villager cumulative per bucket — prefer the explicit curve, else derive
+  // from produced_units villager entries.
+  const villagerValues = times.map((t) => {
+    if (curve.length > 0) {
+      let v = 0;
+      for (const p of curve) if ((p.t_s || 0) <= t) v = p.villagers;
+      return v;
+    }
+    let v = 0;
+    for (const u of produced)
+      if (isVil(u.name) && (u.t_s || 0) <= t) v += u.amount ?? 1;
+    return v;
+  });
+
+  // Army totals by unit type → pick top-N, fold the rest into "Other".
+  const totals = new Map<string, number>();
+  for (const u of produced) {
+    if (isVil(u.name)) continue;
+    totals.set(u.name, (totals.get(u.name) ?? 0) + (u.amount ?? 1));
+  }
+  const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  const topNames = ranked.slice(0, topN).map(([n]) => n);
+  const topSet = new Set(topNames);
+  const hasOther = ranked.length > topN;
+
+  // Cumulative per bucket for each army series (+ Other bucket).
+  const armyCumulative = (match: (name: string) => boolean) =>
+    times.map((t) => {
+      let v = 0;
+      for (const u of produced)
+        if (!isVil(u.name) && match(u.name) && (u.t_s || 0) <= t)
+          v += u.amount ?? 1;
+      return v;
+    });
+
+  const series: ProductionSeries[] = [];
+  const villagerTotal = villagerValues[villagerValues.length - 1] ?? 0;
+  if (villagerTotal > 0) {
+    series.push({
+      name: "Villagers",
+      color: VILLAGER_COLOR,
+      total: villagerTotal,
+      isVillager: true,
+      values: villagerValues,
+    });
+  }
+  topNames.forEach((name, i) => {
+    series.push({
+      name,
+      color: ARMY_COLORS[i % ARMY_COLORS.length],
+      total: totals.get(name) ?? 0,
+      isVillager: false,
+      values: armyCumulative((n) => n === name),
+    });
+  });
+  if (hasOther) {
+    const otherTotal = ranked.slice(topN).reduce((s, [, amt]) => s + amt, 0);
+    series.push({
+      name: "Other",
+      color: OTHER_COLOR,
+      total: otherTotal,
+      isVillager: false,
+      values: armyCumulative((n) => !topSet.has(n)),
+    });
+  }
+
+  if (series.length === 0) return null;
+
+  // y-axis top = max stacked sum across buckets.
+  let yMax = 0;
+  for (let i = 0; i < times.length; i++) {
+    let sum = 0;
+    for (const s of series) sum += s.values[i];
+    if (sum > yMax) yMax = sum;
+  }
+  yMax = Math.max(yMax, 1);
+
+  return { times, series, yMax, durationS: dur };
 }

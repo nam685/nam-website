@@ -25,6 +25,7 @@ import Aoe2Icon from "./aoe2/Aoe2Icon";
 import Aoe2Markdown from "./aoe2/Aoe2Markdown";
 import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
 import Aoe2ProducedStrip from "./aoe2/Aoe2ProducedStrip";
+import Aoe2ProductionChart from "./aoe2/Aoe2ProductionChart";
 import Aoe2Timeline from "./aoe2/Aoe2Timeline";
 
 const ACCENT = "var(--accent)";
@@ -685,8 +686,8 @@ function ArmyStatsTab({ detail }: { detail: Detail }) {
       {/* Army + villagers produced (engine-only stats labeled "unavailable") */}
       <Aoe2ProducedStrip recon={recon} />
 
-      {/* Villager-count curve */}
-      <VillagerCurve recon={recon} />
+      {/* Stacked production-over-time chart (villagers + army by unit type) */}
+      <Aoe2ProductionChart recon={recon} />
 
       {/* APM split + efficiency */}
       <Aoe2EfficiencyPanel recon={recon} />
@@ -759,34 +760,6 @@ function MistakesTab({ detail }: { detail: Detail }) {
     <div>
       <div style={sectionLabel}>Mistakes</div>
       <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
-    </div>
-  );
-}
-
-/* Compact villager-count curve sparkline (exact, simulated pops). */
-function VillagerCurve({ recon }: { recon: Reconstruction }) {
-  const curve = recon.production?.villager_curve ?? [];
-  if (curve.length < 2) return null;
-  const W = 220;
-  const H = 48;
-  const maxV = Math.max(...curve.map((p) => p.villagers), 1);
-  const maxT = Math.max(...curve.map((p) => p.t_s), 1);
-  const pts = curve
-    .map((p) => `${(p.t_s / maxT) * W},${H - (p.villagers / maxV) * H}`)
-    .join(" ");
-  return (
-    <div>
-      <div style={statLabel}>Villager curve</div>
-      <svg
-        width={W}
-        height={H}
-        style={{ display: "block", marginTop: "0.2rem" }}
-      >
-        <polyline points={pts} fill="none" stroke={ACCENT} strokeWidth={1.5} />
-      </svg>
-      <div style={{ fontSize: "0.5rem", color: "#555" }}>
-        simulated from production (excludes deaths)
-      </div>
     </div>
   );
 }
