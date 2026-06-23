@@ -10,26 +10,44 @@ from django.utils import timezone
 from django.utils import timezone as dj_timezone
 
 from config.celery import app
+from website.aoe2.v2 import build_bundle
 from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 logger = logging.getLogger(__name__)
 
 
-def _run_coach(salient_log, metrics, result):
+def _run_coach(salient_log, metrics, result, bundle=None):
     """Prod wrapper: read settings, call the pure aoe2coach.coach(), own graceful degradation.
 
-    Returns (coach_analysis, coach_model, opening). On any failure returns ("", "", "")
-    so analysis still completes and metrics are saved.
+    Returns (coach_analysis, coach_model, opening, tier). On any failure returns ("", "", "", "")
+    so analysis still completes and the rich data is saved.
+
+    When `bundle` (the v2 preprocessing bundle from website.aoe2.v2.build_bundle) is supplied, the
+    AGENTIC coach v2 path runs: coach() builds a per-match workspace from the Reconstruction,
+    classifier candidates, mistakes, economy, and strategic-map PNGs, runs the read-only opus agent
+    over it, and falls back to single-shot facts-only on any failure. Without a bundle the legacy v1
+    embedded-benchmark path runs (back-compat).
     """
     try:
-        model = getattr(dj_settings, "AOE2_COACH_MODEL", "sonnet")
+        model = getattr(dj_settings, "AOE2_COACH_MODEL", "opus")
         claude_bin = getattr(dj_settings, "AOE2_CLAUDE_BIN", "claude")
-        out = coach(metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin)
-        return out.raw_text, out.model_used, out.opening_tag
+        kwargs = {}
+        if bundle is not None:
+            kwargs = {
+                "reconstruction": bundle.get("recon_obj") or bundle.get("reconstruction"),
+                "candidates": bundle.get("candidates"),
+                "economy": bundle.get("economy"),
+                "mistakes": bundle.get("mistakes"),
+                "map_pngs": bundle.get("map_png_paths"),
+            }
+        out = coach(
+            metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin, **kwargs
+        )
+        return out.raw_text, out.model_used, out.opening_tag, getattr(out, "tier", "")
     except Exception:  # noqa: BLE001
         logger.warning("Coach stage failed — storing empty coach_analysis")
-        return "", "", ""
+        return "", "", "", ""
 
 
 KLAUDE_USER = "klaude"
@@ -472,8 +490,18 @@ def analyze_match(match_id):
         dual_log = render_dual_log(rec.ops, rec.me["number"], rec.opponent["number"], timeline["action_count"])
         timeline_payload["salient_log"] = dual_log
 
-        # Stage 4: LLM coach — graceful; failure must not block metrics being saved.
-        coach_analysis, coach_model, opening = _run_coach(dual_log, metrics, rec.my_result)
+        # Stage 2: aoe2coach v2 preprocessing bundle — reconstruct → classify → detect_mistakes →
+        # estimate_economy → render strategic-map PNGs. Each producer is internally guarded; a total
+        # failure here degrades to the empty bundle (legacy v1 coach path) rather than blocking save.
+        bundle = None
+        try:
+            bundle = build_bundle(rec, dj_settings.MEDIA_ROOT, match.id)
+        except Exception:  # noqa: BLE001
+            logger.exception("aoe2coach v2 bundle failed for %s — falling back to v1 coach", match_id)
+
+        # Stage 4: LLM coach — graceful; failure must not block the rich data being saved.
+        # With a bundle, the agentic opus coach v2 runs over the per-match workspace.
+        coach_analysis, coach_model, opening, coach_tier = _run_coach(dual_log, metrics, rec.my_result, bundle=bundle)
         metrics["opening"] = opening
 
         match.map_name = rec.map_name
@@ -484,8 +512,16 @@ def analyze_match(match_id):
         match.my_result = rec.my_result
         match.timeline = timeline_payload
         match.metrics = metrics
+        if bundle is not None:
+            match.reconstruction = bundle.get("reconstruction", {})
+            match.map_geometry = bundle.get("map_geometry", {})
+            match.classifier = bundle.get("classifier", {})
+            match.mistakes = bundle.get("mistakes", [])
+            match.economy = bundle.get("economy", {})
+            match.map_images = bundle.get("map_images", [])
         match.coach_analysis = coach_analysis
         match.coach_model = coach_model
+        match.coach_tier = coach_tier
         match.analyzed_at = dj_timezone.now()
         match.analysis_status = Aoe2Match.Status.DONE
         match.save()

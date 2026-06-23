@@ -57,6 +57,17 @@ def aoe2_detail(_request, match_id):
     data["timeline"] = m.timeline
     data["metrics"] = m.metrics
     data["coach_analysis"] = m.coach_analysis
+    data["coach_tier"] = m.coach_tier
+    # aoe2coach v2 rich data (sub-projects #1/#2/#3/#5/#6). Optional → old matches degrade gracefully
+    # (empty dicts/lists) and the frontend falls back to the flat metrics text view.
+    data["reconstruction"] = m.reconstruction
+    data["map_geometry"] = m.map_geometry
+    data["classifier"] = m.classifier
+    data["mistakes"] = m.mistakes
+    data["economy"] = m.economy
+    # Map PNGs are served from MEDIA; expose absolute media URLs (overall first, then engagements).
+    media_url = dj_settings.MEDIA_URL
+    data["map_images"] = [f"{media_url}{p}" for p in (m.map_images or [])]
     data["clip_title"] = m.clip_title
     data["clip_note"] = m.clip_note
     data["clip_start_seconds"] = m.clip_start_seconds

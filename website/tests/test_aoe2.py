@@ -424,12 +424,26 @@ def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
     monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
     monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    # Mock the v2 bundle (its producers are unit-tested in the aoe2coach package against real recs).
+    fake_bundle = {
+        "reconstruction": {"meta": {"map": "Arabia"}},
+        "map_geometry": {"map_name": "Arabia", "me": {"buildings": []}},
+        "classifier": {"candidates": [{"build_id": "scouts", "name": "Scouts", "confidence": 0.8}]},
+        "mistakes": [],
+        "economy": {"estimate": True},
+        "map_images": ["aoe2/maps/1/map_overall.png"],
+        "map_png_paths": [],
+        "candidates": None,
+        "recon_obj": None,
+    }
+    monkeypatch.setattr("website.tasks.build_bundle", lambda *_a, **_kw: fake_bundle)
     monkeypatch.setattr(
         "website.tasks.coach",
         lambda *_a, **_kw: CoachOutput(
             raw_text="OPENING: Archers\n\nGreat game. Work on villager production.",
             opening_tag="Archers",
             model_used="claude-sonnet-4-5",
+            tier="agentic",
         ),
     )
 
@@ -440,7 +454,12 @@ def test_analyze_match_stores_coach_analysis(settings, monkeypatch):
     assert m.analysis_status == "done"
     assert "villager production" in m.coach_analysis
     assert m.coach_model == "claude-sonnet-4-5"
+    assert m.coach_tier == "agentic"
     assert m.metrics.get("opening") == "Archers"
+    # rich v2 data persisted + served
+    assert m.reconstruction == {"meta": {"map": "Arabia"}}
+    assert m.classifier["candidates"][0]["build_id"] == "scouts"
+    assert m.map_images == ["aoe2/maps/1/map_overall.png"]
 
 
 @pytest.mark.django_db
@@ -455,6 +474,7 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
     monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
     monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
     monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr("website.tasks.build_bundle", lambda *_a, **_kw: {})
     monkeypatch.setattr(
         "website.tasks.coach",
         lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("claude not found")),
@@ -470,17 +490,21 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
 
 
 def test_run_coach_wrapper_success(settings):
-    """The prod wrapper reads settings, calls aoe2coach.coach(), returns (text, model, opening)."""
+    """The prod wrapper reads settings, calls aoe2coach.coach(), returns (text, model, opening, tier).
+
+    With no bundle it takes the legacy v1 path (single `claude -p` call, tier="v1").
+    """
     from website.tasks import _run_coach
 
     settings.AOE2_COACH_MODEL = "sonnet"
     fake = json.dumps({"result": "OPENING: Scouts\n\nbody", "model": "claude-sonnet-4-5"})
     with patch("aoe2coach.coach.subprocess.run") as run:
         run.return_value = MagicMock(returncode=0, stdout=fake, stderr="")
-        text, model, opening = _run_coach("00:00 APM total_actions=6", {"apm": 80}, "win")
+        text, model, opening, tier = _run_coach("00:00 APM total_actions=6", {"apm": 80}, "win")
     assert text == "OPENING: Scouts\n\nbody"
     assert model == "claude-sonnet-4-5"
     assert opening == "Scouts"
+    assert tier == "v1"
 
 
 def test_run_coach_wrapper_graceful_failure():
@@ -488,8 +512,53 @@ def test_run_coach_wrapper_graceful_failure():
     from website.tasks import _run_coach
 
     with patch("aoe2coach.coach.subprocess.run", side_effect=RuntimeError("boom")):
-        text, model, opening = _run_coach("log", {"apm": 1}, "loss")
-    assert (text, model, opening) == ("", "", "")
+        text, model, opening, tier = _run_coach("log", {"apm": 1}, "loss")
+    assert (text, model, opening, tier) == ("", "", "", "")
+
+
+def test_run_coach_wrapper_v2_agentic_path(settings):
+    """With a bundle, _run_coach drives the AGENTIC v2 coach path (no real CLI).
+
+    The aoe2coach agentic runner is mocked. We assert _run_coach forwards the bundle's
+    reconstruction (triggering the v2 path inside coach()) and returns the agentic tier + opening.
+    """
+    from website.tasks import _run_coach
+
+    settings.AOE2_COACH_MODEL = "opus"
+    settings.AOE2_CLAUDE_BIN = "claude"
+
+    # A minimal real Reconstruction so build_workspace can serialize facts.json without a real rec.
+    from aoe2coach import reconstruct
+
+    fake_rec, _ft, _fm, _fl = _fake_pipeline()
+    fake_rec.map_dim = 120
+    fake_rec.gaia_objects = []
+    fake_rec.start_positions = {}
+    recon = reconstruct(fake_rec)
+
+    bundle = {
+        "recon_obj": recon,
+        "reconstruction": recon.to_dict(),
+        "candidates": None,
+        "economy": {"estimate": True},
+        "mistakes": [],
+        "map_png_paths": [],
+    }
+
+    # Mock the agentic runner at the source (its default `runner=subprocess.run` is bound at def-time,
+    # so we patch run_agentic_coach itself — the contract _run_coach depends on).
+    agentic_text = "WHAT HAPPENED\n- Opening: scouts\n\nANALYSIS\nGood macro."
+    with patch(
+        "aoe2coach.coach.run_agentic_coach",
+        return_value=(agentic_text, "claude-opus-4-1"),
+    ) as mock_agentic:
+        text, model, opening, tier = _run_coach("00:00 APM total_actions=6", {"apm": 80}, "win", bundle=bundle)
+
+    assert mock_agentic.called, "agentic coach must run when a bundle (reconstruction) is passed"
+    assert "WHAT HAPPENED" in text
+    assert opening == "scouts"
+    assert tier == "agentic"
+    assert model == "claude-opus-4-1"
 
 
 @pytest.mark.django_db
@@ -1194,6 +1263,107 @@ def test_upload_played_at_none_for_bare_filename(client, auth_headers):
 
     match = Aoe2Match.objects.get(id=resp.json()["id"])
     assert match.played_at is None
+
+
+# ---------------------------------------------------------------------------
+# #5 viz — detail endpoint serves the rich v2 data; v2 bundle helpers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_detail_serves_v2_fields(client):
+    """The detail endpoint exposes reconstruction / map_geometry / classifier / mistakes / economy /
+    map_images (absolute MEDIA urls) + coach_tier — optional, so old rows degrade to empties."""
+    from website.models import Aoe2Match
+
+    m = Aoe2Match.objects.create(
+        file_hash="detail-v2",
+        analysis_status="done",
+        my_civ="Celts",
+        opponent_civ="Franks",
+        reconstruction={"meta": {"map": "Arabia"}},
+        map_geometry={"map_name": "Arabia", "me": {"buildings": []}},
+        classifier={"candidates": [{"build_id": "scouts", "name": "Scouts", "confidence": 0.8}]},
+        mistakes=[{"id": "slow_feudal", "source": {"study": {"url": "https://x", "title": "T"}}}],
+        economy={"estimate": True, "collected": None},
+        map_images=["aoe2/maps/5/map_overall.png"],
+        coach_tier="agentic",
+    )
+    data = client.get(f"/api/aoe2/{m.id}/").json()
+    assert data["reconstruction"] == {"meta": {"map": "Arabia"}}
+    assert data["classifier"]["candidates"][0]["build_id"] == "scouts"
+    assert data["mistakes"][0]["source"]["study"]["url"] == "https://x"
+    assert data["economy"]["collected"] is None
+    assert data["coach_tier"] == "agentic"
+    assert data["map_images"] == ["/media/aoe2/maps/5/map_overall.png"]
+
+
+@pytest.mark.django_db
+def test_detail_v2_fields_empty_for_old_rows(client):
+    """A match analyzed before v2 (no rich fields) serves safe empties — no crash, viz falls back."""
+    from website.models import Aoe2Match
+
+    m = Aoe2Match.objects.create(file_hash="detail-old", analysis_status="done", my_civ="Celts")
+    data = client.get(f"/api/aoe2/{m.id}/").json()
+    assert data["reconstruction"] == {}
+    assert data["mistakes"] == []
+    assert data["map_images"] == []
+
+
+def test_slim_map_geometry_extracts_spatial():
+    """_slim_map_geometry pulls the minimap slice (game coords) from a Reconstruction dict."""
+    from website.aoe2.v2 import _slim_map_geometry
+
+    recon = {
+        "meta": {"map": "Arabia", "map_dim": 120, "duration_s": 1500},
+        "spatial": {
+            "me": {
+                "base_centroid": {"x": 30, "y": 40},
+                "buildings": [{"name": "House", "x": 32, "y": 41, "t_s": 60}],
+                "forward": [{"name": "Barracks", "x": 80, "y": 80, "t_s": 400}],
+                "walls": [{"x": 1, "y": 2, "x_end": 5, "y_end": 2}],
+            },
+            "opp": {"base_centroid": {"x": 90, "y": 95}, "buildings": [], "walls": []},
+        },
+        "combat": {"me": {"engagements": [{"zone": "center", "x": 60, "y": 60, "n_commands": 3}]}},
+    }
+    g = _slim_map_geometry(recon)
+    assert g["map_name"] == "Arabia" and g["map_dim"] == 120
+    assert g["me"]["base_centroid"] == {"x": 30, "y": 40}
+    assert g["me"]["forward"][0]["name"] == "Barracks"
+    assert g["opp"]["base_centroid"] == {"x": 90, "y": 95}
+    assert g["engagements"][0]["zone"] == "center"
+
+
+def test_slim_map_geometry_degrades_on_empty():
+    """Missing spatial data → empty lists / None, never a KeyError."""
+    from website.aoe2.v2 import _slim_map_geometry
+
+    g = _slim_map_geometry({})
+    assert g["map_name"] == "" and g["map_dim"] is None
+    assert g["me"]["buildings"] == [] and g["opp"]["walls"] == []
+    assert g["engagements"] == []
+
+
+def test_enrich_mistakes_attaches_study_link():
+    """_enrich_mistakes merges the rubric's source.study deep-link onto a flagged row.
+
+    Uses a real rubric id from the bundled #6 library so the study link resolves; an unknown id
+    leaves the row untouched (honest, no crash)."""
+    from aoe2coach.mistakes import load_library
+
+    from website.aoe2.v2 import _enrich_mistakes
+
+    a_real_id = next(iter(load_library().keys()))
+    rows = _enrich_mistakes(
+        [
+            {"id": a_real_id, "name": "x", "severity": "high", "reference_path": f"mistakes/data/{a_real_id}.yaml"},
+            {"id": "definitely_not_a_real_rubric", "name": "y", "severity": "low"},
+        ]
+    )
+    assert rows[0]["source"]["study"].get("url"), "real rubric must gain a study url"
+    assert "explanation" in rows[0] and "fix" in rows[0]
+    assert "source" not in rows[1], "unknown rubric row is left as-is"
 
 
 @pytest.mark.django_db

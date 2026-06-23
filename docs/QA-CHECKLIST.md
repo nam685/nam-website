@@ -192,6 +192,20 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Non-admin: upload box is not visible.
 - [ ] Uploading a non-1v1 recording (team game, single-player, vs-AI) results in a "skipped" response and no new game appears publicly.
 
+### AoE 2 tab — v2 match-analysis view (aoe2coach reconstruction)
+
+- [ ] Expanding a v2-analyzed game renders a **strategic-map minimap**: a blue (you) base and red (opponent) base, building dots, walls as line segments, forward buildings ringed in violet, and amber engagement markers; the legend lists you / opponent / forward bldg / engagement.
+- [ ] The minimap footnote reads "shows where things were *built*, not what survived".
+- [ ] A **build-order** section lists 1–3 candidates, each with a name, a confidence %, and matched (✓) / missed (✗) signal chips; it shows "confident" or a low-confidence/off-meta note.
+- [ ] A **timeline** shows age-arrival guide-lines (Feudal/Castle/Imperial) and dotted markers in eco/military/university/production lanes; hovering a marker shows its name + mm:ss.
+- [ ] An **efficiency** panel shows TC idle, longest villager gap, and an APM eco/military/other split bar.
+- [ ] A **mistakes** list shows flagged items with severity + confidence-tier badge + a "Fix" line + a learn-more deep-link; a game with no flagged mistakes shows "No mistakes detected" (never an invented one).
+- [ ] An **economy** panel shows per-age villager allocation bars carrying a `~est` badge; when collected totals are self-suppressed it says so and shows only the qualitative shape; an absent economy renders an honest "unavailable" placeholder, not a blank.
+- [ ] A **produced-counts** strip labels army/villagers as "produced" (never "live"), and lists engine-only stats (units killed/lost, live army, % map explored, resources collected) as greyed "unavailable" badges.
+- [ ] The coach commentary (WHAT HAPPENED + ANALYSIS) renders below the panels.
+- [ ] A match analyzed before the v2 upgrade (no reconstruction) still expands cleanly — metric tiles + coach text only, no broken/empty viz panels, no console errors.
+- [ ] Raw `/api/aoe2/<id>/` response includes `reconstruction`, `map_geometry`, `classifier`, `mistakes`, `economy`, `map_images`, and `coach_tier`; still no player names or chat anywhere.
+
 ## Performance
 
 - [ ] Pages load within 3 seconds on first visit
