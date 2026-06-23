@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   apmSplitSegments,
   clipEmbedUrl,
+  diamondCorners,
   fitMapViewBox,
   fmtMmss,
   formatDuration,
   formatUptime,
   gameSharePath,
+  mapCoordToDiamond,
   mapCoordToSvg,
   mistakeTier,
   openingColor,
@@ -215,5 +217,38 @@ describe("v2 viz helpers", () => {
       expect(fmtMmss(null)).toBe("—");
       expect(fmtMmss(undefined)).toBe("—");
     });
+  });
+});
+
+describe("mapCoordToDiamond (wide isometric minimap)", () => {
+  const M = 120;
+  const W = 320;
+  const H = 160;
+
+  it("maps the four world corners to N/E/S/W of a 2:1 diamond", () => {
+    expect(mapCoordToDiamond(0, 0, M, W, H)).toEqual({ px: 160, py: 0 }); // top / North
+    expect(mapCoordToDiamond(M, M, M, W, H)).toEqual({ px: 160, py: 160 }); // bottom / South
+    expect(mapCoordToDiamond(M, 0, M, W, H)).toEqual({ px: 0, py: 80 }); // left / West
+    expect(mapCoordToDiamond(0, M, M, W, H)).toEqual({ px: 320, py: 80 }); // right / East
+  });
+
+  it("places game-2 bases correctly: ME west of OPP, OPP further south", () => {
+    const me = mapCoordToDiamond(49.7, 28.9, M, W, H); // Burgundians (nom)
+    const opp = mapCoordToDiamond(35, 90, M, W, H); // Bengalis
+    expect(me.px).toBeLessThan(W / 2); // ME on the west half
+    expect(opp.px).toBeGreaterThan(me.px); // OPP further east
+    expect(opp.py).toBeGreaterThan(me.py); // OPP further south  -> south-east
+  });
+
+  it("defaults mapDim to 120 when missing and clamps in-bounds", () => {
+    const p = mapCoordToDiamond(60, 60, null, W, H);
+    expect(p.px).toBeGreaterThanOrEqual(0);
+    expect(p.px).toBeLessThanOrEqual(W);
+    expect(p.py).toBeGreaterThanOrEqual(0);
+    expect(p.py).toBeLessThanOrEqual(H);
+  });
+
+  it("diamondCorners lists N,E,S,W for the box", () => {
+    expect(diamondCorners(320, 160)).toBe("160,0 320,80 160,160 0,80");
   });
 });

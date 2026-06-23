@@ -1,6 +1,6 @@
 "use client";
 
-import { fitMapViewBox, mapCoordToSvg, MapGeometry } from "@/lib/aoe2";
+import { diamondCorners, mapCoordToDiamond, MapGeometry } from "@/lib/aoe2";
 
 /**
  * V1 — the headline building-map minimap (#5 spec). A clean SVG schematic drawn from EXACT BUILD
@@ -10,7 +10,8 @@ import { fitMapViewBox, mapCoordToSvg, MapGeometry } from "@/lib/aoe2";
  *
  * The minimap shows where things were *built*, not what survived (a razed building still shows).
  */
-const SVG = 320;
+const SVG_W = 320;
+const SVG_H = 160; // AoE2 minimap is a wide diamond (~2:1)
 const ME = "var(--accent)";
 const OPP = "#e04848";
 const FORWARD = "#b478f5";
@@ -44,32 +45,19 @@ export default function Aoe2BuildingMap({
     );
   }
 
-  const allBld = [
-    ...meBld,
-    ...meFwd,
-    ...oppBld,
-    ...(me.base_centroid ? [me.base_centroid as { x: number; y: number }] : []),
-    ...(opp.base_centroid
-      ? [opp.base_centroid as { x: number; y: number }]
-      : []),
-    ...engagements.map((e) => ({ x: e.x, y: e.y })),
-  ];
-  const vb = fitMapViewBox(
-    allBld,
-    [...meWalls, ...oppWalls],
-    4,
-    geometry.map_dim,
-  );
-  const p = (x: number, y: number) => mapCoordToSvg(x, y, vb, SVG);
+  // Coords project directly onto the fixed diamond (full map extent) — no auto-fit needed.
+  const p = (x: number, y: number) =>
+    mapCoordToDiamond(x, y, geometry.map_dim, SVG_W, SVG_H);
+  const corners = diamondCorners(SVG_W, SVG_H);
 
   return (
     <div>
       <svg
-        viewBox={`0 0 ${SVG} ${SVG}`}
+        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         width="100%"
         style={{
-          maxWidth: SVG,
-          aspectRatio: "1 / 1",
+          maxWidth: SVG_W,
+          aspectRatio: "2 / 1",
           background: "#0c0f14",
           border: "1px solid #1d232c",
           borderRadius: "4px",
@@ -78,13 +66,17 @@ export default function Aoe2BuildingMap({
         role="img"
         aria-label="strategic building map"
       >
-        {/* faint grid */}
-        {[0.25, 0.5, 0.75].map((f) => (
-          <g key={f} stroke="#161b22" strokeWidth={1}>
-            <line x1={SVG * f} y1={0} x2={SVG * f} y2={SVG} />
-            <line x1={0} y1={SVG * f} x2={SVG} y2={SVG * f} />
-          </g>
-        ))}
+        {/* diamond boundary + N–S / E–W centre lines */}
+        <polygon
+          points={corners}
+          fill="#0a0d12"
+          stroke="#222a34"
+          strokeWidth={1}
+        />
+        <g stroke="#161b22" strokeWidth={1}>
+          <line x1={SVG_W / 2} y1={0} x2={SVG_W / 2} y2={SVG_H} />
+          <line x1={0} y1={SVG_H / 2} x2={SVG_W} y2={SVG_H / 2} />
+        </g>
 
         {/* walls */}
         {meWalls.map((w, i) => {

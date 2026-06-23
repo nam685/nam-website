@@ -309,6 +309,33 @@ export function mapCoordToSvg(
   return { px: clamp(px), py: clamp(py) };
 }
 
+/**
+ * Project a game tile coord (x, y) onto AoE2's isometric minimap — a wide diamond (2:1), NOT a
+ * square. The world square [0,M]² rotates 45°: world (0,0)=top(N), (M,M)=bottom(S), (M,0)=left(W),
+ * (0,M)=right(E). The vertical axis is compressed to half so the diamond reads ~twice as wide as
+ * tall, matching the in-game minimap. Anchored against a real game (ME west / OPP south-east).
+ */
+export function mapCoordToDiamond(
+  x: number,
+  y: number,
+  mapDim: number | null | undefined,
+  width: number,
+  height: number,
+): { px: number; py: number } {
+  const M = mapDim && mapDim > 0 ? mapDim : 120;
+  const u = y - x; // [-M, M] — west is negative
+  const v = x + y; // [0, 2M] — south is larger
+  const px = ((u + M) / (2 * M)) * width;
+  const py = (v / (2 * M)) * height;
+  const clamp = (a: number, hi: number) => (a < 0 ? 0 : a > hi ? hi : a);
+  return { px: clamp(px, width), py: clamp(py, height) };
+}
+
+/** SVG polygon `points` for the minimap diamond boundary (N, E, S, W) in a width×height box. */
+export function diamondCorners(width: number, height: number): string {
+  return `${width / 2},0 ${width},${height / 2} ${width / 2},${height} 0,${height / 2}`;
+}
+
 /** Marker x-position on a 0→durationS timeline of pixel `width`. Clamps t_s into range. */
 export function timelineX(
   tS: number,
