@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
@@ -53,12 +52,12 @@ type Detail = Aoe2MatchSummary & {
   clip_start_seconds: number | null;
 };
 
-type TabKey = "coach" | "economy" | "army" | "mistakes";
+type TabKey = "coach" | "economy" | "military" | "review";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "coach", label: "Coach" },
   { key: "economy", label: "Economy" },
-  { key: "army", label: "Army & Stats" },
-  { key: "mistakes", label: "Mistakes" },
+  { key: "military", label: "Military" },
+  { key: "review", label: "Review" },
 ];
 
 export default function Aoe2Tab() {
@@ -159,12 +158,7 @@ export default function Aoe2Tab() {
       {stats && (
         <div style={statsHeader}>
           <Stat label="ELO" value={stats.current_elo ?? "—"} />
-          {stats.current_rank && (
-            <Stat label="Rank" value={`#${stats.current_rank}`} />
-          )}
           <Stat label="W / L" value={`${stats.wins} / ${stats.losses}`} />
-          <Stat label="Games" value={stats.total} />
-          <Stat label="Top civ" value={stats.favourite_civ ?? "—"} />
         </div>
       )}
 
@@ -553,8 +547,8 @@ function MatchDetail({
       <div style={{ animation: "fadeIn 0.25s ease both" }}>
         {tab === "coach" && <CoachTab detail={detail} />}
         {tab === "economy" && <Aoe2EconomyTab economy={detail.economy} />}
-        {tab === "army" && <ArmyStatsTab detail={detail} />}
-        {tab === "mistakes" && <MistakesTab detail={detail} />}
+        {tab === "military" && <MilitaryTab detail={detail} />}
+        {tab === "review" && <ReviewTab detail={detail} />}
       </div>
     </div>
   );
@@ -567,7 +561,6 @@ function CoachTab({ detail }: { detail: Detail }) {
   const recon = detail.reconstruction;
   const meta = recon?.meta as Record<string, unknown> | undefined;
   const ages = recon?.ages ?? {};
-  const top = detail.classifier?.candidates?.[0];
   const eff = recon?.efficiency ?? {};
 
   const basics: { label: string; value: string }[] = [
@@ -604,41 +597,14 @@ function CoachTab({ detail }: { detail: Detail }) {
 
   return (
     <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
-      {/* Left: verdict + build guess */}
+      {/* Left: build-order guess + verdict */}
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-        {top && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginBottom: "0.5rem",
-            }}
-          >
+        {detail.classifier?.candidates?.length ? (
+          <div style={{ marginBottom: "0.75rem" }}>
             <span style={sectionLabel}>Likely build</span>
-            {top.build_id ? (
-              <Link
-                href={`/plays/aoe2/builds/${top.build_id}`}
-                style={{
-                  fontSize: "0.85rem",
-                  color: ACCENT,
-                  textDecoration: "underline",
-                  textUnderlineOffset: "2px",
-                }}
-                title="Learn this build →"
-              >
-                {top.name}
-              </Link>
-            ) : (
-              <span style={{ fontSize: "0.85rem", color: ACCENT }}>
-                {top.name}
-              </span>
-            )}
-            <span style={{ fontSize: "0.6rem", color: "#777" }}>
-              {Math.round((top.confidence ?? 0) * 100)}%
-            </span>
+            <Aoe2Classifier classifier={detail.classifier} />
           </div>
-        )}
+        ) : null}
         {coachText ? (
           <Aoe2Markdown source={coachText} />
         ) : (
@@ -689,36 +655,35 @@ function CoachTab({ detail }: { detail: Detail }) {
   );
 }
 
-/* ── Army & Stats — build-order guess (top) + the unified full-width production
-   graph (areas above, upgrade/unit icon row below, age lines) + APM/efficiency. ── */
-function ArmyStatsTab({ detail }: { detail: Detail }) {
+/* ── Military — the unified full-width production graph (areas above, upgrade/unit
+   icon row below, age lines). Build-order guess now lives on the Coach tab. ── */
+function MilitaryTab({ detail }: { detail: Detail }) {
   const recon = detail.reconstruction;
   if (!recon) return <Empty />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-      {/* Build-order guess (classifier) — to the TOP of the tab */}
-      {detail.classifier?.candidates?.length ? (
-        <div>
-          <div style={sectionLabel}>Build order</div>
-          <Aoe2Classifier classifier={detail.classifier} />
-        </div>
-      ) : null}
-
       {/* Unified full-width production graph (areas + event icon row + age lines) */}
       <Aoe2ProductionChart recon={recon} />
-
-      {/* APM split + efficiency */}
-      <Aoe2EfficiencyPanel recon={recon} />
     </div>
   );
 }
 
-/* ── Mistakes — its own tab. ── */
-function MistakesTab({ detail }: { detail: Detail }) {
+/* ── Review — the efficiency stats (TC idle, longest villager gap, APM split) ABOVE
+   the mistakes list. The summative "how did I play" tab. ── */
+function ReviewTab({ detail }: { detail: Detail }) {
+  const recon = detail.reconstruction;
   return (
-    <div>
-      <div style={sectionLabel}>Mistakes</div>
-      <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.4rem" }}>
+      {recon && (
+        <div>
+          <div style={sectionLabel}>Stats</div>
+          <Aoe2EfficiencyPanel recon={recon} />
+        </div>
+      )}
+      <div>
+        <div style={sectionLabel}>Mistakes</div>
+        <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
+      </div>
     </div>
   );
 }
@@ -740,9 +705,11 @@ function fmtAge(v: unknown): string {
 /* ── styles ── */
 const statsHeader: React.CSSProperties = {
   display: "flex",
-  gap: "1.5rem",
+  gap: "2.5rem",
   marginBottom: "1rem",
   flexWrap: "wrap",
+  justifyContent: "center",
+  textAlign: "center",
 };
 const statLabel: React.CSSProperties = {
   fontSize: "0.55rem",

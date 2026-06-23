@@ -345,3 +345,18 @@ export function aoe2IconUrl(name: string | null | undefined): string | null {
   const f = AOE2_ICON_BY_NAME[name];
   return f ? `/aoe2-icons/${f}` : null;
 }
+
+// The four gatherable resources, with their real AoE2 DE resource-pile icons (sourced from
+// SiegeEngineers/aoe2techtree img/<resource>.png, same-origin / CSP-safe) — used as the colored
+// legend in the economy graphs. Colors match the in-game resource hues.
+export const AOE2_RESOURCE_ICON: Record<string, string> = {
+  food: "/aoe2-icons/resource_food.png",
+  wood: "/aoe2-icons/resource_wood.png",
+  gold: "/aoe2-icons/resource_gold.png",
+  stone: "/aoe2-icons/resource_stone.png",
+};
+
+/** Resolve a resource name (food/wood/gold/stone) to its bundled resource-pile icon URL. */
+export function aoe2ResourceIconUrl(resource: string): string | null {
+  return AOE2_RESOURCE_ICON[resource] ?? null;
+}

@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { Classifier } from "@/lib/aoe2";
 
 /**
  * Build-order guess from the #3 deterministic classifier: the single top-ranked build with its
- * confidence and matched/missed signals. Honest about low confidence (the classifier itself flags
- * it). All exact (command-derived) → solid, no estimate badge.
+ * matched/missed signals. All exact (command-derived) → solid, no estimate badge. No confidence
+ * label — just the top guess and the signals behind it.
  */
 export default function Aoe2Classifier({
   classifier,
@@ -19,24 +20,6 @@ export default function Aoe2Classifier({
     <div>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          marginBottom: "0.4rem",
-        }}
-      >
-        {classifier.is_confident ? (
-          <span style={{ fontSize: "0.5rem", color: "#22c55e" }}>
-            confident
-          </span>
-        ) : (
-          <span style={{ fontSize: "0.5rem", color: "#f0c440" }}>
-            {classifier.unknown ? "off-meta / uncertain" : "low confidence"}
-          </span>
-        )}
-      </div>
-      <div
-        style={{
           border: "1px solid #1d232c",
           borderRadius: "4px",
           padding: "0.5rem 0.6rem",
@@ -44,12 +27,24 @@ export default function Aoe2Classifier({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.85rem", color: "var(--accent)" }}>
-            {top.name}
-          </span>
-          <span style={{ fontSize: "0.6rem", color: "#777" }}>
-            {Math.round((top.confidence ?? 0) * 100)}%
-          </span>
+          {top.build_id ? (
+            <Link
+              href={`/plays/aoe2/builds/${top.build_id}`}
+              style={{
+                fontSize: "0.85rem",
+                color: "var(--accent)",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+              title="Learn this build →"
+            >
+              {top.name}
+            </Link>
+          ) : (
+            <span style={{ fontSize: "0.85rem", color: "var(--accent)" }}>
+              {top.name}
+            </span>
+          )}
         </div>
         {(top.matched_signals?.length ?? 0) > 0 && (
           <div
