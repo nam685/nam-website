@@ -89,6 +89,9 @@ AOE2_IGN = env("AOE2_IGN", default="nom")
 AOE2_RELIC_HOST = env("AOE2_RELIC_HOST", default="https://aoe-api.worldsedgelink.com")
 AOE2_CLAUDE_BIN = env("AOE2_CLAUDE_BIN", default="claude")
 AOE2_COACH_MODEL = env("AOE2_COACH_MODEL", default="opus")
+# Reasoning effort for the agentic coach. "high" (not "xhigh") — xhigh's per-run thinking-token load
+# makes the Max subscription silently downgrade opus->haiku under rate limits.
+AOE2_COACH_EFFORT = env("AOE2_COACH_EFFORT", default="high")
 AOE2_TZ_OFFSET_HOURS = env.int("AOE2_TZ_OFFSET_HOURS", default=7)  # VN offset (UTC+7)
 
 MEDIA_URL = "/media/"
