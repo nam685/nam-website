@@ -23,6 +23,7 @@ urlpatterns = [
     path("aoe2/<int:match_id>/feature/", views.aoe2_feature),
     path("aoe2/<int:match_id>/delete/", views.aoe2_delete),
     path("aoe2/<int:match_id>/reanalyze/", views.aoe2_reanalyze),
+    path("aoe2/<int:match_id>/coach/", views.aoe2_coach),
     path("aoe2/<int:match_id>/", views.aoe2_detail),
     path("bets/", views.bets_list),
     path("bets/create/", views.bets_create),

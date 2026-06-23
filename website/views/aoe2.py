@@ -12,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..auth import require_admin
 from ..models import Aoe2Match
-from ..tasks import analyze_match
+from ..tasks import analyze_match, coach_match
 from ..utils import parse_json_body, parse_pagination
 
 # Matches: "MP Replay v... @YYYY.MM.DD HHMMSS (N).aoe2record"
@@ -135,7 +135,10 @@ def aoe2_upload(request):
 
     match = Aoe2Match.objects.create(file_hash=file_hash, played_at=played_at)
     match.rec_file.save(fname or f"{file_hash}.aoe2record", ContentFile(raw), save=True)
-    analyze_match.delay(match.id)
+    # `coach=0` → preprocess only (deterministic), skip the LLM coach (bulk "preprocess now, coach
+    # lazy"). Default coaches inline as before. The watcher never sets it; bulk backfills do.
+    run_coach = (request.POST.get("coach", "1") or "1").lower() not in ("0", "false", "no")
+    analyze_match.delay(match.id, run_coach=run_coach)
     return JsonResponse({"id": match.id, "status": match.analysis_status}, status=201)
 
 
@@ -167,7 +170,21 @@ def aoe2_reanalyze(request, match_id):
         return JsonResponse({"error": "POST required"}, status=405)
     if not Aoe2Match.objects.filter(id=match_id).exists():
         return JsonResponse({"error": "Not found"}, status=404)
-    analyze_match.delay(match_id)
+    run_coach = (request.POST.get("coach", "1") or "1").lower() not in ("0", "false", "no")
+    analyze_match.delay(match_id, run_coach=run_coach)
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_admin
+def aoe2_coach(request, match_id):
+    """Run (or re-run) ONLY the LLM coach for an already-preprocessed match — the lazy half of
+    preprocess-now. Enqueues coach_match, which saves the coach fields only on success."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    if not Aoe2Match.objects.filter(id=match_id).exists():
+        return JsonResponse({"error": "Not found"}, status=404)
+    coach_match.delay(match_id)
     return JsonResponse({"ok": True})
 
 

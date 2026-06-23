@@ -457,14 +457,17 @@ def enrich_ladder():
 
 
 @app.task(max_retries=0)
-def analyze_match(match_id):
-    """Parse a stored rec into metrics.
+def analyze_match(match_id, run_coach=True):
+    """Parse a stored rec into metrics + the v2 preprocessing bundle.
 
     Gates:
     - ranked 1v1 only: non-ranked or non-1v1 → analysis_status="skipped" (not shown publicly).
     - ranked detection: header["de"]["rated"] boolean, verified reliable across all DE recs.
 
-    Failures → status="error" with error_detail stored.
+    `run_coach` (default True): when False, run ONLY the deterministic preprocessing (reconstruction,
+    economy, classifier, mistakes, strategic map) and skip the LLM coach — the "preprocess now, coach
+    lazy" path for bulk backfills (the opus coach is the slow / session-limited stage). Run the coach
+    later with `coach_match`. Failures → status="error" with error_detail stored.
     """
     try:
         match = Aoe2Match.objects.get(id=match_id)
@@ -500,9 +503,15 @@ def analyze_match(match_id):
             logger.exception("aoe2coach v2 bundle failed for %s — falling back to v1 coach", match_id)
 
         # Stage 4: LLM coach — graceful; failure must not block the rich data being saved.
-        # With a bundle, the agentic opus coach v2 runs over the per-match workspace.
-        coach_analysis, coach_model, opening, coach_tier = _run_coach(dual_log, metrics, rec.my_result, bundle=bundle)
-        metrics["opening"] = opening
+        # With a bundle, the agentic opus coach v2 runs over the per-match workspace. Skipped entirely
+        # when run_coach is False (preprocess-now / coach-lazy) — coach it later with coach_match.
+        if run_coach:
+            coach_analysis, coach_model, opening, coach_tier = _run_coach(
+                dual_log, metrics, rec.my_result, bundle=bundle
+            )
+            metrics["opening"] = opening
+        else:
+            coach_analysis, coach_model, coach_tier = "", "", ""
 
         match.map_name = rec.map_name
         match.duration_seconds = rec.duration_ms // 1000
@@ -530,3 +539,42 @@ def analyze_match(match_id):
         match.analysis_status = Aoe2Match.Status.ERROR
         match.error_detail = str(exc)[:2000]
         match.save(update_fields=["analysis_status", "error_detail"])
+
+
+@app.task(max_retries=0)
+def coach_match(match_id):
+    """Run ONLY the LLM coach for an already-preprocessed match (the lazy half of preprocess-now).
+
+    Rebuilds the v2 bundle (re-parse + build_bundle is deterministic and cheap — it gives the coach
+    the reconstruction object, classifier candidates, and freshly-rendered map PNGs it needs) and runs
+    `_run_coach` over it, reusing the stored salient log + metrics. Saves the coach fields ONLY ON
+    SUCCESS, so a session-limited / failed run never wipes an existing coach analysis. No-op for
+    matches that aren't done or aren't ranked-1v1.
+    """
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return
+    try:
+        rec = parse_rec(match.rec_file.path, dj_settings.AOE2_PROFILE_ID)
+        if not rec.is_ranked or not rec.is_1v1 or rec.me is None or rec.opponent is None:
+            return
+        bundle = None
+        try:
+            bundle = build_bundle(rec, dj_settings.MEDIA_ROOT, match.id)
+        except Exception:  # noqa: BLE001
+            logger.exception("coach_match bundle rebuild failed for %s — coaching facts-only", match_id)
+        dual_log = (match.timeline or {}).get("salient_log", "")
+        metrics = match.metrics or {}
+        coach_analysis, coach_model, opening, coach_tier = _run_coach(dual_log, metrics, rec.my_result, bundle=bundle)
+        if not coach_analysis:
+            logger.warning("coach_match got empty coach for %s (rate-limited?) — leaving existing untouched", match_id)
+            return
+        metrics["opening"] = opening
+        match.coach_analysis = coach_analysis
+        match.coach_model = coach_model
+        match.coach_tier = coach_tier
+        match.metrics = metrics
+        match.save(update_fields=["coach_analysis", "coach_model", "coach_tier", "metrics"])
+    except Exception:  # noqa: BLE001 — never crash the worker; the deterministic data is already saved
+        logger.exception("coach_match failed for %s", match_id)
