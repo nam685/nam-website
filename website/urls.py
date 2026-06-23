@@ -14,6 +14,8 @@ urlpatterns = [
     path("audiobooks/<slug:slug>/upload-chunk/", views.audiobook_upload_chunk),
     path("audiobooks/<slug:slug>/publish/", views.audiobook_publish),
     path("aoe2/", views.aoe2_list),
+    path("aoe2/builds/", views.aoe2_builds_list),
+    path("aoe2/builds/<str:build_id>/", views.aoe2_build_detail),
     path("aoe2/upload/", views.aoe2_upload),
     path("aoe2/stats/", views.aoe2_stats),
     path("aoe2/sync-status/", views.aoe2_sync_status),

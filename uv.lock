@@ -58,7 +58,7 @@ wheels = [
 [[package]]
 name = "aoe2coach"
 version = "0.1.0"
-source = { git = "https://github.com/nam685/aoe2coach.git?rev=cd4f71d#cd4f71d5a5442886b318ac2ce991b861aadc7096" }
+source = { git = "https://github.com/nam685/aoe2coach.git?rev=6d8e2dc#6d8e2dc65725ba20cd6f00138b4890c048647f6d" }
 dependencies = [
     { name = "mgz-fast" },
     { name = "pillow" },
@@ -797,7 +797,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aoe2coach", git = "https://github.com/nam685/aoe2coach.git?rev=cd4f71d" },
+    { name = "aoe2coach", git = "https://github.com/nam685/aoe2coach.git?rev=6d8e2dc" },
     { name = "celery", extras = ["redis"], specifier = ">=5.4" },
     { name = "django", specifier = ">=6.0" },
     { name = "django-cors-headers", specifier = ">=4.6" },

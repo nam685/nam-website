@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
@@ -618,9 +619,24 @@ function CoachTab({ detail }: { detail: Detail }) {
             }}
           >
             <span style={sectionLabel}>Likely build</span>
-            <span style={{ fontSize: "0.85rem", color: ACCENT }}>
-              {top.name}
-            </span>
+            {top.build_id ? (
+              <Link
+                href={`/plays/aoe2/builds/${top.build_id}`}
+                style={{
+                  fontSize: "0.85rem",
+                  color: ACCENT,
+                  textDecoration: "underline",
+                  textUnderlineOffset: "2px",
+                }}
+                title="Learn this build →"
+              >
+                {top.name}
+              </Link>
+            ) : (
+              <span style={{ fontSize: "0.85rem", color: ACCENT }}>
+                {top.name}
+              </span>
+            )}
             <span style={{ fontSize: "0.6rem", color: "#777" }}>
               {Math.round((top.confidence ?? 0) * 100)}%
             </span>

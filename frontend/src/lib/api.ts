@@ -1,3 +1,5 @@
+import type { BuildDetail, BuildSummary } from "@/lib/aoe2";
+
 /** API base URL for client-side fetches (empty = relative URL via Caddy proxy) */
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -72,10 +74,44 @@ export async function fetchRadioTracks(
   }
 }
 
+/* ── AoE2 build-order library ──────────────────────────── */
+
+/** Fetch the public build-order library list (server-side). Empty on error. */
+export async function fetchAoe2Builds(): Promise<BuildSummary[]> {
+  try {
+    const res = await fetch(`${API_INTERNAL}/api/aoe2/builds/`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.builds ?? []) as BuildSummary[];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch a single build's full detail (server-side). Null if unknown / error. */
+export async function fetchAoe2Build(id: string): Promise<BuildDetail | null> {
+  try {
+    const res = await fetch(
+      `${API_INTERNAL}/api/aoe2/builds/${encodeURIComponent(id)}/`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as BuildDetail;
+  } catch {
+    return null;
+  }
+}
+
 /* ── Listens graph ─────────────────────────────────────── */
 
 export type GraphNodeType = "artist" | "album" | "track";
-export type GraphEdgeType = "similar_artist" | "similar_track" | "colisten" | "structural";
+export type GraphEdgeType =
+  | "similar_artist"
+  | "similar_track"
+  | "colisten"
+  | "structural";
 
 export interface GraphNode {
   key: string;

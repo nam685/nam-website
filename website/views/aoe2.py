@@ -3,6 +3,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from aoe2coach.buildorders import build_ids, load_one
 from django.conf import settings as dj_settings
 from django.core.cache import cache
 from django.db.models import Count
@@ -237,3 +238,33 @@ def aoe2_feature(request, match_id):
     match.featured = new_state
     match.save(update_fields=["featured"])
     return JsonResponse({"ok": True, "featured": match.featured})
+
+
+# ── Build-order reference library (public, read-only) ──────────────────────
+# Backed by the aoe2coach.buildorders package data (11 curated Hera builds). Powers the public
+# /plays/aoe2/builds library the coach deep-links into. No auth — these are shareable learn pages.
+
+
+def aoe2_builds_list(_request):
+    """Public list of every build: [{id, name, family, summary}] for the library index."""
+    builds = []
+    for bid in build_ids():
+        b = load_one(bid)
+        builds.append(
+            {
+                "id": b["id"],
+                "name": b["name"],
+                "family": b["family"],
+                "summary": (b.get("summary") or "").strip(),
+            }
+        )
+    return JsonResponse({"builds": builds})
+
+
+def aoe2_build_detail(_request, build_id):
+    """Public full build dict (steps, age_targets, eco_split, whats_next, signature, source)."""
+    try:
+        build = load_one(build_id)
+    except (FileNotFoundError, ValueError):
+        return JsonResponse({"error": "Not found"}, status=404)
+    return JsonResponse(build)
