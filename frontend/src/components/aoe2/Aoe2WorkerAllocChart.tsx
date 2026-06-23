@@ -62,9 +62,7 @@ export default function Aoe2WorkerAllocChart({
 
   return (
     <div>
-      <div style={labelStyle}>
-        Worker allocation — villager counts per resource (x = villagers)
-      </div>
+      <div style={labelStyle}>Worker allocation</div>
       <div
         style={{
           display: "flex",
@@ -193,11 +191,6 @@ export default function Aoe2WorkerAllocChart({
           </LegendRow>
         </div>
       </div>
-      <div style={footNote}>
-        worker COUNTS (gather-intent + production sim). The farms line is
-        reseed-excluded distinct farms — each ≈ one farmer, so it floors and
-        drives the food count.
-      </div>
     </div>
   );
 }
@@ -268,11 +261,6 @@ const legendCol: React.CSSProperties = {
   flexDirection: "column",
   gap: "0.35rem",
   paddingTop: "0.2rem",
-};
-const footNote: React.CSSProperties = {
-  fontSize: "0.5rem",
-  color: "#555",
-  marginTop: "0.4rem",
 };
 const tickText: React.CSSProperties = {
   fontSize: "9px",

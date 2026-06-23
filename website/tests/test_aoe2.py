@@ -518,6 +518,14 @@ def test_analyze_match_run_coach_false_skips_coach(settings, monkeypatch):
     assert m.reconstruction == {"meta": {"map": "Arabia"}}
     assert m.economy == {"estimate": True}
 
+    # Re-preprocessing must NOT wipe an existing coach analysis (only refresh deterministic data).
+    m.coach_analysis = "prior opus analysis"
+    m.coach_model = "claude-opus-4-8"
+    m.save(update_fields=["coach_analysis", "coach_model"])
+    analyze_match(m.id, run_coach=False)
+    m.refresh_from_db()
+    assert m.coach_analysis == "prior opus analysis" and m.coach_model == "claude-opus-4-8"
+
 
 @pytest.mark.django_db
 def test_coach_match_saves_on_success_and_guards_empty(settings, monkeypatch):

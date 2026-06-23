@@ -504,14 +504,9 @@ def analyze_match(match_id, run_coach=True):
 
         # Stage 4: LLM coach — graceful; failure must not block the rich data being saved.
         # With a bundle, the agentic opus coach v2 runs over the per-match workspace. Skipped entirely
-        # when run_coach is False (preprocess-now / coach-lazy) — coach it later with coach_match.
-        if run_coach:
-            coach_analysis, coach_model, opening, coach_tier = _run_coach(
-                dual_log, metrics, rec.my_result, bundle=bundle
-            )
-            metrics["opening"] = opening
-        else:
-            coach_analysis, coach_model, coach_tier = "", "", ""
+        # when run_coach is False (preprocess-now / coach-lazy) — coach it later with coach_match. When
+        # skipped we leave the EXISTING coach fields untouched (a re-preprocess never wipes a prior
+        # analysis); a brand-new match simply keeps its empty defaults.
 
         match.map_name = rec.map_name
         match.duration_seconds = rec.duration_ms // 1000
@@ -520,7 +515,6 @@ def analyze_match(match_id, run_coach=True):
         match.opponent_civ = rec.opponent["civ_name"]
         match.my_result = rec.my_result
         match.timeline = timeline_payload
-        match.metrics = metrics
         if bundle is not None:
             match.reconstruction = bundle.get("reconstruction", {})
             match.map_geometry = bundle.get("map_geometry", {})
@@ -528,9 +522,15 @@ def analyze_match(match_id, run_coach=True):
             match.mistakes = bundle.get("mistakes", [])
             match.economy = bundle.get("economy", {})
             match.map_images = bundle.get("map_images", [])
-        match.coach_analysis = coach_analysis
-        match.coach_model = coach_model
-        match.coach_tier = coach_tier
+        if run_coach:
+            coach_analysis, coach_model, opening, coach_tier = _run_coach(
+                dual_log, metrics, rec.my_result, bundle=bundle
+            )
+            metrics["opening"] = opening
+            match.coach_analysis = coach_analysis
+            match.coach_model = coach_model
+            match.coach_tier = coach_tier
+        match.metrics = metrics
         match.analyzed_at = dj_timezone.now()
         match.analysis_status = Aoe2Match.Status.DONE
         match.save()

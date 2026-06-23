@@ -29,7 +29,6 @@ export default function Aoe2EconomyTab({
 
   const wa = economy.worker_allocation;
   const rb = economy.resource_balance;
-  const flags = rb?.floating?.flags ?? [];
   const hasGraphs =
     (wa?.series?.length ?? 0) > 0 || (rb?.series?.length ?? 0) > 0;
 
@@ -55,51 +54,6 @@ export default function Aoe2EconomyTab({
       {(rb?.series?.length ?? 0) > 0 && (
         <Aoe2ResourceBalanceChart resourceBalance={rb} />
       )}
-
-      {/* Floating flags — a heuristic gap between gathering intent and spend. */}
-      <div>
-        <div style={labelStyle}>Floating (intent vs spend)</div>
-        <div
-          style={{
-            marginTop: "0.4rem",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.4rem",
-          }}
-        >
-          {flags.length > 0 ? (
-            flags.map((fl) => (
-              <span
-                key={fl.resource}
-                title={`gathering intent ${Math.round(fl.worker_share * 100)}% vs spend ${Math.round(
-                  fl.spend_share * 100,
-                )}% — excess ${Math.round(fl.excess * 100)}%`}
-                style={{
-                  fontSize: "0.62rem",
-                  color: "#f0c440",
-                  background: "#2a2310",
-                  border: "1px solid #4a3c14",
-                  borderRadius: 3,
-                  padding: "0.1rem 0.45rem",
-                }}
-              >
-                ⚠ floating {fl.resource} (+{Math.round(fl.excess * 100)}%)
-              </span>
-            ))
-          ) : (
-            <span style={{ fontSize: "0.62rem", color: "#22c55e" }}>
-              no sustained floating detected
-            </span>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "0.55rem",
-  color: "#666",
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-};

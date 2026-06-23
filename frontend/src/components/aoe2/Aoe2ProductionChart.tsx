@@ -359,11 +359,6 @@ export default function Aoe2ProductionChart({
           ))}
         </div>
       </div>
-
-      <div style={{ fontSize: "0.5rem", color: "#555", marginTop: "0.4rem" }}>
-        areas = cumulative units produced (queued upper bound, excludes deaths);
-        icon row below the axis = upgrades &amp; techs researched over time.
-      </div>
     </div>
   );
 }
