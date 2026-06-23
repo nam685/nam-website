@@ -22,11 +22,9 @@ import Aoe2BuildingMap from "./aoe2/Aoe2BuildingMap";
 import Aoe2Classifier from "./aoe2/Aoe2Classifier";
 import Aoe2EconomyTab from "./aoe2/Aoe2EconomyTab";
 import Aoe2EfficiencyPanel from "./aoe2/Aoe2EfficiencyPanel";
-import Aoe2Icon from "./aoe2/Aoe2Icon";
 import Aoe2Markdown from "./aoe2/Aoe2Markdown";
 import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
 import Aoe2ProductionChart from "./aoe2/Aoe2ProductionChart";
-import Aoe2Timeline from "./aoe2/Aoe2Timeline";
 
 const ACCENT = "var(--accent)";
 
@@ -55,12 +53,11 @@ type Detail = Aoe2MatchSummary & {
   clip_start_seconds: number | null;
 };
 
-type TabKey = "coach" | "economy" | "army" | "technology" | "mistakes";
+type TabKey = "coach" | "economy" | "army" | "mistakes";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "coach", label: "Coach" },
   { key: "economy", label: "Economy" },
   { key: "army", label: "Army & Stats" },
-  { key: "technology", label: "Technology" },
   { key: "mistakes", label: "Mistakes" },
 ];
 
@@ -557,7 +554,6 @@ function MatchDetail({
         {tab === "coach" && <CoachTab detail={detail} />}
         {tab === "economy" && <Aoe2EconomyTab economy={detail.economy} />}
         {tab === "army" && <ArmyStatsTab detail={detail} />}
-        {tab === "technology" && <TechnologyTab detail={detail} />}
         {tab === "mistakes" && <MistakesTab detail={detail} />}
       </div>
     </div>
@@ -717,57 +713,6 @@ function ArmyStatsTab({ detail }: { detail: Detail }) {
   );
 }
 
-/* ── Technology — event timeline (icons) + ages + tech timings ── */
-function TechnologyTab({ detail }: { detail: Detail }) {
-  const recon = detail.reconstruction;
-  if (!recon) return <Empty />;
-  const techs = recon.techs ?? {};
-  const groups: { name: string; rows: { name: string; t_s: number }[] }[] = [
-    { name: "Economy", rows: techs.eco ?? [] },
-    { name: "Military", rows: techs.military ?? [] },
-    { name: "University", rows: techs.university ?? [] },
-  ].filter((g) => g.rows.length > 0);
-
-  return (
-    <div>
-      <Aoe2Timeline recon={recon} />
-      <div style={{ ...techCols, marginTop: "1rem" }}>
-        {groups.map((g) => (
-          <div key={g.name}>
-            <div style={sectionLabel}>{g.name}</div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.25rem",
-              }}
-            >
-              {g.rows.map((t, i) => (
-                <div
-                  key={`${t.name}-${i}`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
-                  }}
-                >
-                  <Aoe2Icon name={t.name} size={16} />
-                  <span style={{ fontSize: "0.7rem", color: "#ccc", flex: 1 }}>
-                    {t.name}
-                  </span>
-                  <span style={{ fontSize: "0.65rem", color: "#777" }}>
-                    {fmtAge(t.t_s)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ── Mistakes — its own tab. ── */
 function MistakesTab({ detail }: { detail: Detail }) {
   return (
@@ -818,11 +763,6 @@ const basicsGrid: React.CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))",
   gap: "0.6rem 0.9rem",
   marginTop: "0.75rem",
-};
-const techCols: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "1.25rem",
 };
 const tabBar: React.CSSProperties = {
   display: "flex",

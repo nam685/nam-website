@@ -32,12 +32,48 @@ export default function Aoe2ProductionChart({
 
   const { times, series, yMax, durationS: dur } = chart;
 
+  // ── Negative-band tech LANES: eco / military / university, each on its own row
+  //    (like the original Technology timeline) so dense clusters don't collide on a
+  //    single line. Built first so geometry below can size to the number of lanes. ──
+  const techs = recon.techs ?? {};
+  const LANE_DEFS = [
+    { key: "eco", name: "Eco", color: "#22c55e" },
+    { key: "military", name: "Military", color: "#e04848" },
+    { key: "university", name: "University", color: "#a855f7" },
+  ] as const;
+
   // ── Geometry: a wide viewBox that scales to 100% of the detail pane. ───────
   const W = 1100;
-  const PAD = { top: 14, right: 18, bottom: 0, left: 40 };
-  const AREA_H = 200; // stacked-area band (above the axis)
+  const PAD = { top: 26, right: 18, bottom: 0, left: 40 };
+  const AREA_H = 300; // stacked-area band (above the axis) — tall so thin army
+  //   bands (e.g. 6 scouts) read clearly against the much larger villager mass.
   const TIME_BAND = 18; // m:ss tick labels, in their own band below the axis
-  const ICON_ROW_H = 30; // negative-band event icon row
+  const LANE_H = 28; // height of each below-axis tech lane
+  const EVENT_ICON = 22;
+
+  // De-dupe per (name, ~time bucket) defensively, then bucket into lanes by category.
+  const BUCKET_S = Math.max(15, Math.round(dur / 60));
+  const dedupe = (rows: { name: string; t_s: number }[]) => {
+    const seen = new Set<string>();
+    return rows
+      .filter((e) => typeof e.t_s === "number" && e.t_s >= 0 && e.t_s <= dur)
+      .sort((a, b) => a.t_s - b.t_s)
+      .filter((e) => {
+        const key = `${e.name}@${Math.round(e.t_s / BUCKET_S)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
+  const laneData = LANE_DEFS.map((l) => ({
+    ...l,
+    markers: dedupe(
+      (techs[l.key as keyof typeof techs] as { name: string; t_s: number }[]) ??
+        [],
+    ),
+  })).filter((l) => l.markers.length > 0);
+
+  const ICON_ROW_H = laneData.length * LANE_H + 6; // negative band sized to lane count
   const H = PAD.top + AREA_H + TIME_BAND + ICON_ROW_H + 14;
 
   const axisY = PAD.top + AREA_H; // y of the zero line (the x-axis)
@@ -86,33 +122,8 @@ export default function Aoe2ProductionChart({
     }))
     .filter((a) => typeof a.t === "number" && a.t > 0 && a.t <= dur);
 
-  // ── Negative band: event icon row — units produced + techs, deduped per
-  //    (name, ~time bucket) so a flurry of same-unit queues collapses to one icon. ──
-  const eventIconY = axisY + TIME_BAND + ICON_ROW_H / 2;
-  const techs = recon.techs ?? {};
-  const rawEvents: { t: number; name: string }[] = [
-    ...(recon.production?.produced_units ?? []).map((u) => ({
-      t: u.t_s,
-      name: u.name,
-    })),
-    ...(techs.eco ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-    ...(techs.military ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-    ...(techs.university ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-  ].filter((e) => typeof e.t === "number" && e.t >= 0 && e.t <= dur);
-
-  // Collapse near-duplicate same-name events (keep earliest) so the row stays legible.
-  const BUCKET_S = Math.max(15, Math.round(dur / 60));
-  const seen = new Set<string>();
-  const events = rawEvents
-    .sort((a, b) => a.t - b.t)
-    .filter((e) => {
-      const key = `${e.name}@${Math.round(e.t / BUCKET_S)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-  const EVENT_ICON = 16;
+  // y of the top of the tech-lane band (just under the time-label band).
+  const lanesTopY = axisY + TIME_BAND;
 
   return (
     <div>
@@ -132,7 +143,7 @@ export default function Aoe2ProductionChart({
             width="100%"
             style={{ display: "block", width: "100%" }}
             role="img"
-            aria-label="Full-width production graph: stacked area of units produced over time above the axis, an upgrade/unit event icon row below, with age-up guide-lines."
+            aria-label="Full-width production graph: stacked area of units produced over time above the axis, an upgrade/tech research icon row below, with age-up guide-lines."
           >
             {/* Y gridlines + labels */}
             {yTicks.map((v) => (
@@ -171,10 +182,10 @@ export default function Aoe2ProductionChart({
                 {a.icon && (
                   <image
                     href={a.icon}
-                    x={xOf(a.t) - 8}
-                    y={PAD.top - 2}
-                    width={16}
-                    height={16}
+                    x={xOf(a.t) - 12}
+                    y={2}
+                    width={24}
+                    height={24}
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <title>
@@ -230,57 +241,73 @@ export default function Aoe2ProductionChart({
               </g>
             ))}
 
-            {/* Negative band: event icon row (units produced + upgrades/techs) */}
-            <text
-              x={PAD.left - 6}
-              y={eventIconY + 3}
-              textAnchor="end"
-              style={tickText}
-            >
-              ↧
-            </text>
-            {events.map((e, i) => {
-              const url = aoe2IconUrl(e.name);
-              const cx = xOf(e.t);
-              return url ? (
-                <image
-                  key={`${e.name}-${i}`}
-                  href={url}
-                  x={cx - EVENT_ICON / 2}
-                  y={eventIconY - EVENT_ICON / 2}
-                  width={EVENT_ICON}
-                  height={EVENT_ICON}
-                  preserveAspectRatio="xMidYMid meet"
-                >
-                  <title>
-                    {e.name} — {fmtMmss(e.t)}
-                  </title>
-                </image>
-              ) : (
-                // Unknown name → "?" chip (anticipates future content), never a bare dot.
-                <g key={`${e.name}-${i}`}>
-                  <rect
-                    x={cx - EVENT_ICON / 2}
-                    y={eventIconY - EVENT_ICON / 2}
-                    width={EVENT_ICON}
-                    height={EVENT_ICON}
-                    rx={2}
-                    fill="#161b22"
-                    stroke="#232a33"
-                  />
+            {/* Negative band: upgrade/tech research LANES (the former Technology
+                timeline) — eco / military / university, one row each. */}
+            {laneData.map((lane, li) => {
+              const cy = lanesTopY + li * LANE_H + LANE_H / 2;
+              return (
+                <g key={lane.key}>
                   <text
-                    x={cx}
-                    y={eventIconY + 3.5}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fontWeight={700}
-                    fill="#8a8f98"
+                    x={PAD.left - 6}
+                    y={cy + 3}
+                    textAnchor="end"
+                    style={{ ...tickText, fill: lane.color }}
                   >
-                    ?
+                    {lane.name}
                   </text>
-                  <title>
-                    {e.name} — {fmtMmss(e.t)}
-                  </title>
+                  <line
+                    x1={PAD.left}
+                    y1={cy}
+                    x2={W - PAD.right}
+                    y2={cy}
+                    stroke="#16191f"
+                    strokeWidth={1}
+                  />
+                  {lane.markers.map((m, mi) => {
+                    const url = aoe2IconUrl(m.name);
+                    const cx = xOf(m.t_s);
+                    return url ? (
+                      <image
+                        key={`${m.name}-${mi}`}
+                        href={url}
+                        x={cx - EVENT_ICON / 2}
+                        y={cy - EVENT_ICON / 2}
+                        width={EVENT_ICON}
+                        height={EVENT_ICON}
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        <title>
+                          {m.name} — {fmtMmss(m.t_s)}
+                        </title>
+                      </image>
+                    ) : (
+                      // Unknown name → "?" chip (anticipates future content), never a bare dot.
+                      <g key={`${m.name}-${mi}`}>
+                        <rect
+                          x={cx - EVENT_ICON / 2}
+                          y={cy - EVENT_ICON / 2}
+                          width={EVENT_ICON}
+                          height={EVENT_ICON}
+                          rx={2}
+                          fill="#161b22"
+                          stroke="#232a33"
+                        />
+                        <text
+                          x={cx}
+                          y={cy + 4}
+                          textAnchor="middle"
+                          fontSize={13}
+                          fontWeight={700}
+                          fill={lane.color}
+                        >
+                          ?
+                        </text>
+                        <title>
+                          {m.name} — {fmtMmss(m.t_s)}
+                        </title>
+                      </g>
+                    );
+                  })}
                 </g>
               );
             })}
@@ -332,7 +359,7 @@ export default function Aoe2ProductionChart({
 
       <div style={{ fontSize: "0.5rem", color: "#555", marginTop: "0.4rem" }}>
         areas = cumulative units produced (queued upper bound, excludes deaths);
-        icon row below the axis = unit &amp; upgrade events over time.
+        icon row below the axis = upgrades &amp; techs researched over time.
       </div>
     </div>
   );
