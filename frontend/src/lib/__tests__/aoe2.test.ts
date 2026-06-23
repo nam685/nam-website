@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   apmSplitSegments,
+  buildProductionSeries,
   clipEmbedUrl,
   diamondCorners,
   fitMapViewBox,
@@ -377,5 +378,117 @@ describe("parseMarkdown", () => {
   it("returns an empty list for empty input", () => {
     expect(parseMarkdown("")).toEqual([]);
     expect(parseMarkdown(null)).toEqual([]);
+  });
+});
+
+describe("buildProductionSeries", () => {
+  it("returns null with no data", () => {
+    expect(buildProductionSeries(undefined, 100)).toBeNull();
+    expect(buildProductionSeries({ produced_units: [] }, 100)).toBeNull();
+    expect(buildProductionSeries({ produced_units: [] }, 0)).toBeNull();
+  });
+
+  it("derives villager series from produced_units when no curve", () => {
+    const chart = buildProductionSeries(
+      {
+        produced_units: [
+          { name: "Villager", amount: 1, t_s: 5 },
+          { name: "Villager", amount: 1, t_s: 35 },
+          { name: "Villager", amount: 1, t_s: 65 },
+        ],
+      },
+      90,
+      { stepS: 30 },
+    );
+    expect(chart).not.toBeNull();
+    const vil = chart!.series.find((s) => s.isVillager)!;
+    expect(vil.name).toBe("Villagers");
+    expect(vil.total).toBe(3);
+    // times: 0,30,60,90 → cumulative 0,1,2,3
+    expect(chart!.times).toEqual([0, 30, 60, 90]);
+    expect(vil.values).toEqual([0, 1, 2, 3]);
+  });
+
+  it("prefers explicit villager_curve over derived counts", () => {
+    const chart = buildProductionSeries(
+      {
+        produced_units: [{ name: "Villager", amount: 1, t_s: 5 }],
+        villager_curve: [
+          { t_s: 0, villagers: 3 },
+          { t_s: 30, villagers: 7 },
+        ],
+      },
+      60,
+      { stepS: 30 },
+    );
+    const vil = chart!.series.find((s) => s.isVillager)!;
+    // at t=0 →3, t=30 →7, t=60 →7 (last known)
+    expect(vil.values).toEqual([3, 7, 7]);
+  });
+
+  it("stacks villagers first, then army types by total desc", () => {
+    const chart = buildProductionSeries(
+      {
+        produced_units: [
+          { name: "Villager", amount: 1, t_s: 10 },
+          { name: "Archer", amount: 2, t_s: 20 },
+          { name: "Knight", amount: 5, t_s: 20 },
+        ],
+      },
+      60,
+      { stepS: 30 },
+    );
+    const names = chart!.series.map((s) => s.name);
+    expect(names[0]).toBe("Villagers");
+    // Knight (5) ranks above Archer (2)
+    expect(names.slice(1)).toEqual(["Knight", "Archer"]);
+    expect(chart!.series[0].isVillager).toBe(true);
+    expect(chart!.series.every((s, i) => i === 0 || !s.isVillager)).toBe(true);
+  });
+
+  it("folds beyond-topN army types into Other", () => {
+    const produced_units = [
+      { name: "A", amount: 10, t_s: 5 },
+      { name: "B", amount: 9, t_s: 5 },
+      { name: "C", amount: 8, t_s: 5 },
+      { name: "D", amount: 7, t_s: 5 },
+      { name: "E", amount: 6, t_s: 5 },
+      { name: "F", amount: 5, t_s: 5 },
+      { name: "G", amount: 4, t_s: 5 },
+    ];
+    const chart = buildProductionSeries({ produced_units }, 30, {
+      stepS: 30,
+      topN: 5,
+    });
+    const names = chart!.series.map((s) => s.name);
+    expect(names).toEqual(["A", "B", "C", "D", "E", "Other"]);
+    const other = chart!.series.find((s) => s.name === "Other")!;
+    expect(other.total).toBe(5 + 4); // F + G
+  });
+
+  it("each army series has a distinct color and yMax is the stacked top", () => {
+    const chart = buildProductionSeries(
+      {
+        produced_units: [
+          { name: "Villager", amount: 4, t_s: 10 },
+          { name: "Archer", amount: 3, t_s: 10 },
+        ],
+      },
+      30,
+      { stepS: 30 },
+    );
+    const colors = chart!.series.map((s) => s.color);
+    expect(new Set(colors).size).toBe(colors.length);
+    expect(chart!.yMax).toBe(7); // 4 villagers + 3 archers stacked
+  });
+
+  it("extends the timeline to the last event when duration is short", () => {
+    const chart = buildProductionSeries(
+      { produced_units: [{ name: "Villager", amount: 1, t_s: 200 }] },
+      50,
+      { stepS: 30 },
+    );
+    expect(chart!.durationS).toBe(200);
+    expect(chart!.times[chart!.times.length - 1]).toBe(200);
   });
 });
