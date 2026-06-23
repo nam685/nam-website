@@ -9,6 +9,7 @@ import {
   clipEmbedUrl,
   Economy,
   formatDuration,
+  formatOpening,
   gameSharePath,
   MapGeometry,
   Mistake,
@@ -259,7 +260,7 @@ export default function Aoe2Tab() {
                           color: "#0e0e0e",
                         }}
                       >
-                        {m.opening}
+                        {formatOpening(m.opening)}
                       </span>
                     )}
                     {m.my_rating_change != null && (
@@ -597,7 +598,6 @@ function CoachTab({ detail }: { detail: Detail }) {
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
         {detail.classifier?.candidates?.length ? (
           <div style={{ marginBottom: "0.75rem" }}>
-            <span style={sectionLabel}>Likely build</span>
             <Aoe2Classifier classifier={detail.classifier} />
           </div>
         ) : null}

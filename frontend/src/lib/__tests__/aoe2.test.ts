@@ -16,6 +16,7 @@ import {
   fitMapViewBox,
   fmtMmss,
   formatDuration,
+  formatOpening,
   formatUptime,
   gameSharePath,
   groupBuildsByFamily,
@@ -652,5 +653,16 @@ describe("economy charts", () => {
     expect(buildWorkerAllocChart({})).toBeNull();
     expect(buildWorkerAllocChart(undefined)).toBeNull();
     expect(buildResourceBalanceChart({ series: [] })).toBeNull();
+  });
+});
+
+describe("formatOpening", () => {
+  it("title-cases and strips -/_ separators", () => {
+    expect(formatOpening("fast_castle")).toBe("Fast Castle");
+    expect(formatOpening("scouts into knights")).toBe("Scouts Into Knights");
+    expect(formatOpening("archers (1-range)")).toBe("Archers (1 Range)");
+    expect(formatOpening("Drush fast castle")).toBe("Drush Fast Castle");
+    expect(formatOpening("")).toBe("");
+    expect(formatOpening(null)).toBe("");
   });
 });
