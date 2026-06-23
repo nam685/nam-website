@@ -1,13 +1,12 @@
 "use client";
 
 import { Reconstruction } from "@/lib/aoe2";
-import DataBadge from "./DataBadge";
 
 /**
  * V5 — produced-counts strip (#5 spec). The word "produced" is MANDATORY in every label: these are
  * cumulative-queued upper bounds on live counts, never "live army"/"units killed" (combat deaths
- * are not in the replay). Tier-C engine-only stats are shown as honest "unavailable" placeholders
- * so the gap vs the in-game Statistics screen is owned, not silently dropped.
+ * are not in the replay). Engine-only stats are simply omitted — a single dim footer disclaimer on
+ * the detail pane owns the gap, rather than noisy per-stat "unavailable" badges.
  */
 export default function Aoe2ProducedStrip({
   recon,
@@ -60,37 +59,6 @@ export default function Aoe2ProducedStrip({
             </div>
           </div>
         )}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: "0.6rem",
-          flexWrap: "wrap",
-          marginTop: "0.6rem",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ fontSize: "0.55rem", color: "#555" }}>
-          Not in a replay:
-        </span>
-        {[
-          "units killed / lost",
-          "live army size",
-          "% map explored",
-          "resources collected",
-        ].map((s) => (
-          <span
-            key={s}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            <span style={{ fontSize: "0.6rem", color: "#555" }}>{s}</span>
-            <DataBadge tier="unavailable" />
-          </span>
-        ))}
       </div>
     </div>
   );

@@ -303,6 +303,20 @@ export default function Aoe2Tab() {
             ) : (
               <p style={{ color: "#555", fontSize: "0.8rem" }}>Loading…</p>
             )}
+            {detail && detail.id === selectedId && (
+              <p
+                style={{
+                  marginTop: "1.25rem",
+                  fontSize: "0.6rem",
+                  color: "#4a4a4a",
+                  fontStyle: "italic",
+                }}
+              >
+                Best-effort reconstruction from the replay command log — some
+                details (unit kills/losses, live counts, map vision) can&apos;t
+                be recovered.
+              </p>
+            )}
           </div>
         </div>
       )}
