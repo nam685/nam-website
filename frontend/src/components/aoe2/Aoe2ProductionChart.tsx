@@ -34,16 +34,67 @@ export default function Aoe2ProductionChart({
 
   // ── Geometry: a wide viewBox that scales to 100% of the detail pane. ───────
   const W = 1100;
-  const PAD = { top: 14, right: 18, bottom: 0, left: 40 };
-  const AREA_H = 200; // stacked-area band (above the axis)
+  const PAD = { top: 26, right: 18, bottom: 0, left: 40 };
+  const AREA_H = 300; // stacked-area band (above the axis) — tall so thin army
+  //   bands (e.g. 6 scouts) read clearly against the much larger villager mass.
   const TIME_BAND = 18; // m:ss tick labels, in their own band below the axis
-  const ICON_ROW_H = 30; // negative-band event icon row
+  const LANE_H = 26; // height of each below-axis tech row
+  const EVENT_ICON = 22;
+  const plotW = W - PAD.left - PAD.right;
+  const xOf = (t: number) => PAD.left + (dur > 0 ? (t / dur) * plotW : 0);
+
+  // ── Negative band: UPGRADES / TECHS over time (the former Technology tab) drawn as
+  //    real icons. Units already are the stacked areas above, so the negative band
+  //    adds the *other* dimension — what was researched, and when. Rows carry NO
+  //    category meaning: techs are packed greedily into as many rows as needed so two
+  //    icons never overlap horizontally (later icon spills to the next free row). ──
+  const techs = recon.techs ?? {};
+  const TECH_COLOR: Record<string, string> = {
+    eco: "#22c55e",
+    military: "#e04848",
+    university: "#a855f7",
+  };
+  const allTechs = (
+    [
+      ["eco", techs.eco],
+      ["military", techs.military],
+      ["university", techs.university],
+    ] as const
+  )
+    .flatMap(([cat, rows]) =>
+      (rows ?? []).map((e) => ({ name: e.name, t_s: e.t_s, cat })),
+    )
+    .filter((e) => typeof e.t_s === "number" && e.t_s >= 0 && e.t_s <= dur)
+    .sort((a, b) => a.t_s - b.t_s);
+
+  // De-dupe exact (name, ~time bucket) duplicates, then greedily pack into rows so no
+  // two icons in the same row are closer than EVENT_ICON px (a small gap is enforced).
+  const BUCKET_S = Math.max(15, Math.round(dur / 60));
+  const seenTech = new Set<string>();
+  const GAP = EVENT_ICON + 2;
+  const rowLastX: number[] = []; // right-edge x of the last icon placed in each row
+  const techRows: { name: string; t_s: number; cat: string; row: number }[] =
+    [];
+  for (const e of allTechs) {
+    const key = `${e.name}@${Math.round(e.t_s / BUCKET_S)}`;
+    if (seenTech.has(key)) continue;
+    seenTech.add(key);
+    const cx = xOf(e.t_s);
+    let row = rowLastX.findIndex((lastX) => cx - lastX >= GAP);
+    if (row === -1) {
+      row = rowLastX.length;
+      rowLastX.push(cx);
+    } else {
+      rowLastX[row] = cx;
+    }
+    techRows.push({ ...e, row });
+  }
+  const nRows = Math.max(1, rowLastX.length);
+
+  const ICON_ROW_H = nRows * LANE_H + 6; // negative band sized to the packed row count
   const H = PAD.top + AREA_H + TIME_BAND + ICON_ROW_H + 14;
 
   const axisY = PAD.top + AREA_H; // y of the zero line (the x-axis)
-  const plotW = W - PAD.left - PAD.right;
-
-  const xOf = (t: number) => PAD.left + (dur > 0 ? (t / dur) * plotW : 0);
   const yOf = (v: number) => axisY - (v / yMax) * AREA_H; // value → y above axis
 
   // Stacked area bands (accumulate from the bottom).
@@ -86,33 +137,8 @@ export default function Aoe2ProductionChart({
     }))
     .filter((a) => typeof a.t === "number" && a.t > 0 && a.t <= dur);
 
-  // ── Negative band: event icon row — units produced + techs, deduped per
-  //    (name, ~time bucket) so a flurry of same-unit queues collapses to one icon. ──
-  const eventIconY = axisY + TIME_BAND + ICON_ROW_H / 2;
-  const techs = recon.techs ?? {};
-  const rawEvents: { t: number; name: string }[] = [
-    ...(recon.production?.produced_units ?? []).map((u) => ({
-      t: u.t_s,
-      name: u.name,
-    })),
-    ...(techs.eco ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-    ...(techs.military ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-    ...(techs.university ?? []).map((e) => ({ t: e.t_s, name: e.name })),
-  ].filter((e) => typeof e.t === "number" && e.t >= 0 && e.t <= dur);
-
-  // Collapse near-duplicate same-name events (keep earliest) so the row stays legible.
-  const BUCKET_S = Math.max(15, Math.round(dur / 60));
-  const seen = new Set<string>();
-  const events = rawEvents
-    .sort((a, b) => a.t - b.t)
-    .filter((e) => {
-      const key = `${e.name}@${Math.round(e.t / BUCKET_S)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-  const EVENT_ICON = 16;
+  // y of the top of the tech-lane band (just under the time-label band).
+  const lanesTopY = axisY + TIME_BAND;
 
   return (
     <div>
@@ -132,7 +158,7 @@ export default function Aoe2ProductionChart({
             width="100%"
             style={{ display: "block", width: "100%" }}
             role="img"
-            aria-label="Full-width production graph: stacked area of units produced over time above the axis, an upgrade/unit event icon row below, with age-up guide-lines."
+            aria-label="Full-width production graph: stacked area of units produced over time above the axis, an upgrade/tech research icon row below, with age-up guide-lines."
           >
             {/* Y gridlines + labels */}
             {yTicks.map((v) => (
@@ -171,10 +197,10 @@ export default function Aoe2ProductionChart({
                 {a.icon && (
                   <image
                     href={a.icon}
-                    x={xOf(a.t) - 8}
-                    y={PAD.top - 2}
-                    width={16}
-                    height={16}
+                    x={xOf(a.t) - 12}
+                    y={2}
+                    width={24}
+                    height={24}
                     preserveAspectRatio="xMidYMid meet"
                   >
                     <title>
@@ -230,38 +256,42 @@ export default function Aoe2ProductionChart({
               </g>
             ))}
 
-            {/* Negative band: event icon row (units produced + upgrades/techs) */}
+            {/* Negative band: upgrade/tech research icons over time (the former
+                Technology timeline). Rows are an overlap-avoidance device only — they
+                carry no category meaning; each icon's hue still encodes its category
+                (eco green / military red / university violet). */}
             <text
               x={PAD.left - 6}
-              y={eventIconY + 3}
+              y={lanesTopY + LANE_H / 2 + 3}
               textAnchor="end"
               style={tickText}
             >
-              ↧
+              ⚒
             </text>
-            {events.map((e, i) => {
-              const url = aoe2IconUrl(e.name);
-              const cx = xOf(e.t);
+            {techRows.map((m, i) => {
+              const cy = lanesTopY + m.row * LANE_H + LANE_H / 2;
+              const cx = xOf(m.t_s);
+              const url = aoe2IconUrl(m.name);
               return url ? (
                 <image
-                  key={`${e.name}-${i}`}
+                  key={`${m.name}-${i}`}
                   href={url}
                   x={cx - EVENT_ICON / 2}
-                  y={eventIconY - EVENT_ICON / 2}
+                  y={cy - EVENT_ICON / 2}
                   width={EVENT_ICON}
                   height={EVENT_ICON}
                   preserveAspectRatio="xMidYMid meet"
                 >
                   <title>
-                    {e.name} — {fmtMmss(e.t)}
+                    {m.name} — {fmtMmss(m.t_s)}
                   </title>
                 </image>
               ) : (
                 // Unknown name → "?" chip (anticipates future content), never a bare dot.
-                <g key={`${e.name}-${i}`}>
+                <g key={`${m.name}-${i}`}>
                   <rect
                     x={cx - EVENT_ICON / 2}
-                    y={eventIconY - EVENT_ICON / 2}
+                    y={cy - EVENT_ICON / 2}
                     width={EVENT_ICON}
                     height={EVENT_ICON}
                     rx={2}
@@ -270,16 +300,16 @@ export default function Aoe2ProductionChart({
                   />
                   <text
                     x={cx}
-                    y={eventIconY + 3.5}
+                    y={cy + 4}
                     textAnchor="middle"
-                    fontSize={10}
+                    fontSize={13}
                     fontWeight={700}
-                    fill="#8a8f98"
+                    fill={TECH_COLOR[m.cat] ?? "#8a8f98"}
                   >
                     ?
                   </text>
                   <title>
-                    {e.name} — {fmtMmss(e.t)}
+                    {m.name} — {fmtMmss(m.t_s)}
                   </title>
                 </g>
               );
@@ -332,7 +362,7 @@ export default function Aoe2ProductionChart({
 
       <div style={{ fontSize: "0.5rem", color: "#555", marginTop: "0.4rem" }}>
         areas = cumulative units produced (queued upper bound, excludes deaths);
-        icon row below the axis = unit &amp; upgrade events over time.
+        icon row below the axis = upgrades &amp; techs researched over time.
       </div>
     </div>
   );
