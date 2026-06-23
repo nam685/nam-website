@@ -41,7 +41,7 @@ describe("aoe2 helpers", () => {
     expect(openingColor("anything")).toMatch(/^#/);
   });
   it("builds a game share path", () => {
-    expect(gameSharePath(42)).toBe("/plays?game=42");
+    expect(gameSharePath(42)).toBe("/plays/aoe2?game=42");
   });
 });
 

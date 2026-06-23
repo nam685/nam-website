@@ -176,17 +176,20 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 ## Plays — AoE 2 tab
 
-- [ ] `/plays` → "Chess" and "AoE 2" tabs both render; clicking each switches the content.
-- [ ] AoE 2 tab: stats header shows current ELO, W/L record, total games, and top civilization.
-- [ ] Two-pane layout: a selectable game list on the left, a tabbed detail pane on the right.
+- [ ] `/plays` redirects to `/plays/chess`; the full-width "Chess" / "AoE 2" selector spans the content width and clicking each navigates to `/plays/chess` and `/plays/aoe2` respectively (URL path reflects the active game).
+- [ ] The game selector sits flush under the top nav (no large gap above it).
+- [ ] AoE 2 section: stats header shows current ELO, W/L record, total games, and top civilization.
+- [ ] Full-width two-pane layout: a selectable game list on the left, a tabbed detail pane on the right, spanning the full page (no narrow max-width column).
 - [ ] Featured game (or `?game=`, or newest) is selected by default; selecting another game swaps the detail pane.
 - [ ] The detail pane opens on the **Coach** tab by default.
-- [ ] Switching detail tabs (Coach / Economy / Military / Technology / Society) does NOT re-fetch or reload data.
+- [ ] Switching detail tabs (Coach / Economy / Army & Stats / Technology / Mistakes) does NOT re-fetch or reload data.
+- [ ] **Technology** tab: each tech/unit icon matches its name (e.g. Horse Collar shows a collar, Knight shows a knight) — no wrong art; unmapped names show a monogram glyph.
+- [ ] **Army & Stats** tab combines army produced, villager curve, APM/efficiency, and build order; **Mistakes** is its own separate tab.
 - [ ] On desktop each tab's content fits without the detail pane scrolling.
 - [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
 - [ ] No chat text appears anywhere in the UI or in raw API responses (`/api/aoe2/` and `/api/aoe2/<id>/`).
-- [ ] Visiting `/plays?game=<id>` deep-links to the AoE 2 tab with that game selected.
-- [ ] ⋮ menu copies a share link (`/plays?game=<id>`) to the clipboard.
+- [ ] Visiting `/plays/aoe2?game=<id>` (and the legacy `/plays?game=<id>`, which redirects) deep-links to the AoE 2 section with that game selected.
+- [ ] ⋮ menu copies a share link (`/plays/aoe2?game=<id>`) to the clipboard.
 - [ ] Admin: file upload box is visible; uploading a valid `.aoe2record` processes and shows the game.
 - [ ] Non-admin: upload box is not visible.
 - [ ] Uploading a non-1v1 recording (team game, single-player, vs-AI) results in a "skipped" response and no new game appears publicly.

@@ -46,7 +46,7 @@ export function openingColor(opening: string): string {
 }
 
 export function gameSharePath(id: number): string {
-  return `/plays?game=${id}`;
+  return `/plays/aoe2?game=${id}`;
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { API } from "@/lib/api";
 import type { LichessStatus } from "@/lib/api";
 import { fetchAdminNonce, store } from "@/lib/auth";
@@ -21,9 +22,19 @@ const Aoe2Tab = dynamic(() => import("@/components/Aoe2Tab"), { ssr: false });
 const ACCENT = "var(--accent)";
 
 type Tab = "explorer" | "play" | "empires";
+/** Which game this page is showing — reflected in the URL path (/plays/<section>). */
+export type PlaysSection = "chess" | "aoe2";
 
-export default function PlaysClient() {
-  const [tab, setTab] = useState<Tab>("explorer");
+export default function PlaysClient({
+  section = "chess",
+}: {
+  section?: PlaysSection;
+}) {
+  const router = useRouter();
+  // The chess sub-tab (Explorer / Play). For aoe2, `tab` is "empires".
+  const [tab, setTab] = useState<Tab>(
+    section === "aoe2" ? "empires" : "explorer",
+  );
   const [isAdmin, setIsAdmin] = useState(false);
   const [lichessStatus, setLichessStatus] = useState<LichessStatus | null>(
     null,
@@ -32,11 +43,10 @@ export default function PlaysClient() {
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [myColor, setMyColor] = useState<"white" | "black">("white");
 
-  // Open Empires tab when ?game= param is present
+  // Keep the active sub-tab in sync with the route section.
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("game"))
-      setTab("empires");
-  }, []);
+    setTab(section === "aoe2" ? "empires" : "explorer");
+  }, [section]);
 
   // Check admin status
   useEffect(() => {
@@ -111,33 +121,43 @@ export default function PlaysClient() {
   return (
     <div
       className="page"
-      style={{ maxWidth: "72rem", position: "relative", zIndex: 1 }}
+      style={{
+        // AoE2's two-pane (games nav + detail) uses the full page width;
+        // chess stays in the comfortable reading column.
+        maxWidth: section === "aoe2" ? "none" : "72rem",
+        // Pull the game selector up close to the top nav (no extra gap).
+        paddingTop: "0.5rem",
+        position: "relative",
+        zIndex: 1,
+      }}
     >
-      {/* Top-level tab bar: chess | AoE 2 */}
+      {/* Top-level game selector: chess | AoE 2 — spans the full content width,
+          and the active game is reflected in the URL path (/plays/chess|aoe2). */}
       <div
         style={{
           display: "flex",
           gap: "0.25rem",
-          marginTop: "1rem",
           borderBottom: "1px solid #1a1a1a",
         }}
       >
         <button
-          onClick={() => setTab("explorer")}
+          onClick={() => router.push("/plays/chess")}
           style={{
             ...tabBtnStyle,
-            borderBottomColor: tab !== "empires" ? ACCENT : "transparent",
-            color: tab !== "empires" ? ACCENT : "#555",
+            flex: 1,
+            borderBottomColor: section === "chess" ? ACCENT : "transparent",
+            color: section === "chess" ? ACCENT : "#555",
           }}
         >
           chess
         </button>
         <button
-          onClick={() => setTab("empires")}
+          onClick={() => router.push("/plays/aoe2")}
           style={{
             ...tabBtnStyle,
-            borderBottomColor: tab === "empires" ? ACCENT : "transparent",
-            color: tab === "empires" ? ACCENT : "#555",
+            flex: 1,
+            borderBottomColor: section === "aoe2" ? ACCENT : "transparent",
+            color: section === "aoe2" ? ACCENT : "#555",
           }}
         >
           AoE 2
@@ -145,7 +165,7 @@ export default function PlaysClient() {
       </div>
 
       {/* Secondary bar: Explorer | Play (only when chess is active) */}
-      {tab !== "empires" && (
+      {section === "chess" && (
         <div
           style={{
             display: "flex",
@@ -190,13 +210,13 @@ export default function PlaysClient() {
           )}
         </div>
       )}
-      {tab === "empires" && <div style={{ marginBottom: "1.5rem" }} />}
+      {section === "aoe2" && <div style={{ marginBottom: "1.5rem" }} />}
 
       {/* Explorer tab */}
-      {tab === "explorer" && <OpeningExplorer />}
+      {section === "chess" && tab === "explorer" && <OpeningExplorer />}
 
       {/* Empires tab */}
-      {tab === "empires" && <Aoe2Tab />}
+      {section === "aoe2" && <Aoe2Tab />}
 
       {/* Play tab */}
       {tab === "play" && isAdmin && (

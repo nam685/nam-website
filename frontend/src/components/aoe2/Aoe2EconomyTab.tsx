@@ -217,8 +217,8 @@ export default function Aoe2EconomyTab({
         </div>
         <div style={note}>
           Spending near-exact (BUILD + train + research). Floating = mid-game
-          gather-intent minus spend (heuristic). Collected totals & relic gold{" "}
-          <DataBadge tier="unavailable" /> — never fabricated.
+          gather-intent minus spend (heuristic). Collected totals aren&apos;t
+          estimated.
         </div>
       </section>
     </div>

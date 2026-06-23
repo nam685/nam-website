@@ -54,13 +54,13 @@ type Detail = Aoe2MatchSummary & {
   clip_start_seconds: number | null;
 };
 
-type TabKey = "coach" | "economy" | "military" | "technology" | "society";
+type TabKey = "coach" | "economy" | "army" | "technology" | "mistakes";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "coach", label: "Coach" },
   { key: "economy", label: "Economy" },
-  { key: "military", label: "Military" },
+  { key: "army", label: "Army & Stats" },
   { key: "technology", label: "Technology" },
-  { key: "society", label: "Society / APM" },
+  { key: "mistakes", label: "Mistakes" },
 ];
 
 export default function Aoe2Tab() {
@@ -303,6 +303,20 @@ export default function Aoe2Tab() {
             ) : (
               <p style={{ color: "#555", fontSize: "0.8rem" }}>Loading…</p>
             )}
+            {detail && detail.id === selectedId && (
+              <p
+                style={{
+                  marginTop: "1.25rem",
+                  fontSize: "0.6rem",
+                  color: "#4a4a4a",
+                  fontStyle: "italic",
+                }}
+              >
+                Best-effort reconstruction from the replay command log — some
+                details (unit kills/losses, live counts, map vision) can&apos;t
+                be recovered.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -539,9 +553,9 @@ function MatchDetail({
       <div style={{ animation: "fadeIn 0.25s ease both" }}>
         {tab === "coach" && <CoachTab detail={detail} />}
         {tab === "economy" && <Aoe2EconomyTab economy={detail.economy} />}
-        {tab === "military" && <MilitaryTab detail={detail} />}
+        {tab === "army" && <ArmyStatsTab detail={detail} />}
         {tab === "technology" && <TechnologyTab detail={detail} />}
-        {tab === "society" && <SocietyTab detail={detail} />}
+        {tab === "mistakes" && <MistakesTab detail={detail} />}
       </div>
     </div>
   );
@@ -661,15 +675,25 @@ function CoachTab({ detail }: { detail: Detail }) {
   );
 }
 
-/* ── Military — produced army (engine-only stats labeled/omitted) ── */
-function MilitaryTab({ detail }: { detail: Detail }) {
+/* ── Army & Stats — produced army + build order + villager curve + APM /
+   efficiency (engine-only stats labeled/omitted). ── */
+function ArmyStatsTab({ detail }: { detail: Detail }) {
   const recon = detail.reconstruction;
   if (!recon) return <Empty />;
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+      {/* Army + villagers produced (engine-only stats labeled "unavailable") */}
       <Aoe2ProducedStrip recon={recon} />
+
+      {/* Villager-count curve */}
+      <VillagerCurve recon={recon} />
+
+      {/* APM split + efficiency */}
+      <Aoe2EfficiencyPanel recon={recon} />
+
+      {/* Build order (classifier) */}
       {detail.classifier?.candidates?.length ? (
-        <div style={{ marginTop: "1.25rem" }}>
+        <div>
           <div style={sectionLabel}>Build order</div>
           <Aoe2Classifier classifier={detail.classifier} />
         </div>
@@ -729,33 +753,12 @@ function TechnologyTab({ detail }: { detail: Detail }) {
   );
 }
 
-/* ── Society / APM — villager curve, efficiency + APM, mistakes ── */
-function SocietyTab({ detail }: { detail: Detail }) {
-  const recon = detail.reconstruction;
-  if (!recon) return <Empty />;
-  const counts = recon.counts ?? {};
+/* ── Mistakes — its own tab. ── */
+function MistakesTab({ detail }: { detail: Detail }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
-        <div>
-          <div style={statLabel}>Villagers produced</div>
-          <div
-            style={{ fontSize: "1.3rem", color: "#ddd" }}
-            title="cumulative queued — upper bound, not a live count (live max is engine-only)"
-          >
-            {counts.villagers_produced ?? "—"}
-          </div>
-          <div style={{ fontSize: "0.5rem", color: "#555" }}>
-            live max is engine-only (not in replay)
-          </div>
-        </div>
-        <VillagerCurve recon={recon} />
-      </div>
-      <Aoe2EfficiencyPanel recon={recon} />
-      <div>
-        <div style={sectionLabel}>Mistakes</div>
-        <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
-      </div>
+    <div>
+      <div style={sectionLabel}>Mistakes</div>
+      <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
     </div>
   );
 }
