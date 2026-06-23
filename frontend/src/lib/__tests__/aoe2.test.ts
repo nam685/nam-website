@@ -12,8 +12,12 @@ import {
   mapCoordToSvg,
   mistakeTier,
   openingColor,
+  parseInline,
+  parseMarkdown,
   resultLabel,
   sanitizeCoachText,
+  stripCoachScaffolding,
+  tcIdlePct,
   tierStroke,
   timelineX,
 } from "../aoe2";
@@ -296,5 +300,82 @@ describe("sanitizeCoachText", () => {
 
   it("trims surrounding blank lines", () => {
     expect(sanitizeCoachText("\n\n  real content  \n\n")).toBe("real content");
+  });
+});
+
+describe("tcIdlePct", () => {
+  it("computes pre-cap idle percentage rounded", () => {
+    expect(tcIdlePct(765, 2805)).toBe(27);
+    expect(tcIdlePct(0, 2805)).toBe(0);
+    expect(tcIdlePct(2805, 2805)).toBe(100);
+  });
+  it("clamps over-window idle to 100 and floors at 0", () => {
+    expect(tcIdlePct(3000, 2805)).toBe(100);
+  });
+  it("returns null when the window is missing or zero", () => {
+    expect(tcIdlePct(100, null)).toBeNull();
+    expect(tcIdlePct(100, 0)).toBeNull();
+    expect(tcIdlePct(null, 2805)).toBeNull();
+  });
+});
+
+describe("stripCoachScaffolding", () => {
+  it("returns empty string for nullish input", () => {
+    expect(stripCoachScaffolding(null)).toBe("");
+    expect(stripCoachScaffolding(undefined)).toBe("");
+  });
+  it("unwraps a tagged final block", () => {
+    expect(
+      stripCoachScaffolding("<final>\n## Verdict\nGood game\n</final>"),
+    ).toBe("## Verdict\nGood game");
+  });
+  it("unwraps a fenced markdown block wrapping the whole body", () => {
+    expect(stripCoachScaffolding("```markdown\nHello **world**\n```")).toBe(
+      "Hello **world**",
+    );
+  });
+  it("drops leading agent tool-noise lines", () => {
+    expect(
+      stripCoachScaffolding(
+        "Reading facts.json…\nThinking about the game.\n## Verdict\nNice",
+      ),
+    ).toBe("## Verdict\nNice");
+  });
+  it("leaves already-clean text unchanged (idempotent)", () => {
+    const clean = "## Verdict\nYou went archers.";
+    expect(stripCoachScaffolding(clean)).toBe(clean);
+    expect(stripCoachScaffolding(stripCoachScaffolding(clean))).toBe(clean);
+  });
+});
+
+describe("parseInline", () => {
+  it("splits bold and code runs from text", () => {
+    expect(parseInline("hit **18** vils with `Loom`")).toEqual([
+      { t: "text", v: "hit " },
+      { t: "bold", v: "18" },
+      { t: "text", v: " vils with " },
+      { t: "code", v: "Loom" },
+    ]);
+  });
+  it("returns a single text span for plain lines", () => {
+    expect(parseInline("plain line")).toEqual([{ t: "text", v: "plain line" }]);
+  });
+});
+
+describe("parseMarkdown", () => {
+  it("parses headings, bullets, ordered lists and paragraphs", () => {
+    const md =
+      "# Verdict\nYou played well.\n\n- point one\n- point two\n\n1. first\n2. second";
+    const blocks = parseMarkdown(md);
+    expect(blocks[0]).toMatchObject({ t: "h", level: 1 });
+    expect(blocks[1]).toMatchObject({ t: "p" });
+    expect(blocks[2]).toMatchObject({ t: "ul" });
+    expect((blocks[2] as { items: unknown[] }).items).toHaveLength(2);
+    expect(blocks[3]).toMatchObject({ t: "ol" });
+    expect((blocks[3] as { items: unknown[] }).items).toHaveLength(2);
+  });
+  it("returns an empty list for empty input", () => {
+    expect(parseMarkdown("")).toEqual([]);
+    expect(parseMarkdown(null)).toEqual([]);
   });
 });

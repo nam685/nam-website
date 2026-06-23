@@ -6,9 +6,10 @@ import React from "react";
  * Tiny, dependency-free, CSP-safe Markdown renderer for the coach commentary.
  *
  * Supports the small subset the coach actually emits: ATX headings (#–######), unordered lists
- * (-, *, +), ordered lists (1.), inline **bold** / *italic* / `code`, and paragraphs with line
- * breaks. Everything is escaped first, so no raw HTML from the source can ever reach the DOM
- * (no XSS). No external resources are loaded — purely structural React elements + inline styles.
+ * (-, *, +), ordered lists (1.), inline **bold** / *italic* / `code`, paragraphs with line
+ * breaks, and horizontal rules. Everything is rendered as real React elements (no
+ * dangerouslySetInnerHTML), so no raw HTML from the source can ever reach the DOM (no XSS) and
+ * no external resources are loaded (CSP-safe).
  */
 
 type Block =
@@ -87,8 +88,8 @@ function parseBlocks(src: string): Block[] {
 }
 
 /**
- * Render inline markdown (**bold**, *italic*, `code`) within already-escaped text into React
- * nodes. Operates on plain strings, so there is no HTML injection surface.
+ * Render inline markdown (**bold**, *italic*, `code`) within plain text into React nodes.
+ * Operates on plain strings, so there is no HTML injection surface.
  */
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
@@ -105,16 +106,22 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
     const tok = match[0];
     const key = `${keyPrefix}-${n++}`;
     if (tok.startsWith("**")) {
-      nodes.push(<strong key={key}>{tok.slice(2, -2)}</strong>);
+      nodes.push(
+        <strong key={key} style={{ color: "#e8e8e8", fontWeight: 700 }}>
+          {tok.slice(2, -2)}
+        </strong>,
+      );
     } else if (tok.startsWith("`")) {
       nodes.push(
         <code
           key={key}
           style={{
-            background: "#11161d",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: "0.9em",
+            color: "var(--accent)",
+            background: "#13181f",
             padding: "0.05rem 0.3rem",
             borderRadius: "3px",
-            fontSize: "0.9em",
           }}
         >
           {tok.slice(1, -1)}
@@ -146,22 +153,27 @@ function renderParagraph(text: string, key: string): React.ReactNode {
   );
 }
 
-export default function Aoe2Markdown({ text }: { text: string }) {
-  const blocks = parseBlocks(text);
+export default function Aoe2Markdown({ source }: { source: string }) {
+  const blocks = parseBlocks(source ?? "");
+  if (blocks.length === 0) return null;
   return (
-    <>
+    <div style={{ color: "#c4c4c4", fontSize: "0.82rem", lineHeight: 1.6 }}>
       {blocks.map((b, i) => {
         const key = `b${i}`;
         if (b.kind === "heading") {
-          const size = Math.max(0.8, 1.15 - (b.level - 1) * 0.1);
+          const size =
+            b.level <= 1 ? "1rem" : b.level === 2 ? "0.9rem" : "0.8rem";
           return (
             <div
               key={key}
               style={{
-                fontSize: `${size}rem`,
-                color: "#e8e8e8",
+                fontFamily: "var(--font-headline)",
+                fontSize: size,
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
                 fontWeight: 600,
-                margin: "0.8rem 0 0.4rem",
+                margin: i === 0 ? "0 0 0.4rem" : "0.85rem 0 0.4rem",
               }}
             >
               {renderInline(b.text, `${key}-h`)}
@@ -186,13 +198,13 @@ export default function Aoe2Markdown({ text }: { text: string }) {
             <ListTag
               key={key}
               style={{
-                margin: "0 0 0.6rem",
+                margin: "0 0 0.5rem",
                 paddingLeft: "1.2rem",
                 listStyle: b.kind === "ul" ? "disc" : "decimal",
               }}
             >
               {b.items.map((it, j) => (
-                <li key={j} style={{ marginBottom: "0.2rem" }}>
+                <li key={j} style={{ margin: "0.15rem 0" }}>
                   {renderInline(it, `${key}-i${j}`)}
                 </li>
               ))}
@@ -201,6 +213,6 @@ export default function Aoe2Markdown({ text }: { text: string }) {
         }
         return renderParagraph(b.text, key);
       })}
-    </>
+    </div>
   );
 }

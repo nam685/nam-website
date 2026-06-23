@@ -25,7 +25,6 @@ export default function Aoe2Classifier({
           marginBottom: "0.4rem",
         }}
       >
-        <span style={{ fontSize: "0.6rem", color: "#888" }}>Build order</span>
         {classifier.is_confident ? (
           <span style={{ fontSize: "0.5rem", color: "#22c55e" }}>
             confident

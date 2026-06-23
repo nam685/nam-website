@@ -9,19 +9,19 @@ import {
   clipEmbedUrl,
   Economy,
   formatDuration,
-  formatUptime,
   gameSharePath,
   MapGeometry,
   Mistake,
   openingColor,
   Reconstruction,
   resultLabel,
-  sanitizeCoachText,
+  stripCoachScaffolding,
 } from "@/lib/aoe2";
 import Aoe2BuildingMap from "./aoe2/Aoe2BuildingMap";
 import Aoe2Classifier from "./aoe2/Aoe2Classifier";
-import Aoe2EconomyChart from "./aoe2/Aoe2EconomyChart";
+import Aoe2EconomyTab from "./aoe2/Aoe2EconomyTab";
 import Aoe2EfficiencyPanel from "./aoe2/Aoe2EfficiencyPanel";
+import Aoe2Icon from "./aoe2/Aoe2Icon";
 import Aoe2Markdown from "./aoe2/Aoe2Markdown";
 import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
 import Aoe2ProducedStrip from "./aoe2/Aoe2ProducedStrip";
@@ -43,7 +43,6 @@ type Detail = Aoe2MatchSummary & {
   timeline: Record<string, unknown>;
   coach_analysis: string;
   coach_tier?: string;
-  // aoe2coach v2 rich data (optional → old matches degrade to the flat metric tiles).
   reconstruction?: Reconstruction;
   map_geometry?: MapGeometry;
   classifier?: Classifier;
@@ -55,12 +54,22 @@ type Detail = Aoe2MatchSummary & {
   clip_start_seconds: number | null;
 };
 
+type TabKey = "coach" | "economy" | "military" | "technology" | "society";
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "coach", label: "Coach" },
+  { key: "economy", label: "Economy" },
+  { key: "military", label: "Military" },
+  { key: "technology", label: "Technology" },
+  { key: "society", label: "Society / APM" },
+];
+
 export default function Aoe2Tab() {
   const [matches, setMatches] = useState<Aoe2MatchSummary[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [tab, setTab] = useState<TabKey>("coach");
 
   useEffect(() => {
     fetch(`${API}/api/aoe2/`)
@@ -72,7 +81,6 @@ export default function Aoe2Tab() {
           const param = Number(
             new URLSearchParams(window.location.search).get("game"),
           );
-          // Precedence: ?game= > featured > newest
           const byParam = list.find((m) => m.id === param);
           const featured = list.find((m) => m.featured);
           const target = byParam ?? featured ?? list[0];
@@ -94,12 +102,13 @@ export default function Aoe2Tab() {
     }
   }, []);
 
-  // Load detail only for the selected (expanded) game.
+  // Load detail for the selected game; reset to the Coach tab on a new game.
   useEffect(() => {
     if (selectedId === null) {
       setDetail(null);
       return;
     }
+    setTab("coach");
     fetch(`${API}/api/aoe2/${selectedId}/`)
       .then((r) => r.json())
       .then(setDetail)
@@ -123,7 +132,6 @@ export default function Aoe2Tab() {
   }
 
   function refreshMatch(id: number) {
-    // Re-fetch the specific match in the list + its detail.
     fetch(`${API}/api/aoe2/${id}/`)
       .then((r) => r.json())
       .then((d: Detail) => {
@@ -149,14 +157,7 @@ export default function Aoe2Tab() {
     <div>
       {/* Stats header */}
       {stats && (
-        <div
-          style={{
-            display: "flex",
-            gap: "1.5rem",
-            marginBottom: "1.5rem",
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={statsHeader}>
           <Stat label="ELO" value={stats.current_elo ?? "—"} />
           {stats.current_rank && (
             <Stat label="Rank" value={`#${stats.current_rank}`} />
@@ -169,7 +170,7 @@ export default function Aoe2Tab() {
 
       {/* Admin upload */}
       {isAdmin && (
-        <div style={{ marginBottom: "1.5rem" }}>
+        <div style={{ marginBottom: "1rem" }}>
           <label style={uploadBtnStyle}>
             Upload .aoe2record
             <input
@@ -183,85 +184,156 @@ export default function Aoe2Tab() {
         </div>
       )}
 
-      {/* Accordion match list */}
-      {matches.length === 0 && (
+      {matches.length === 0 ? (
         <p style={{ color: "#555", fontStyle: "italic", fontSize: "0.85rem" }}>
           No games yet.
         </p>
-      )}
-      {matches.map((m) => {
-        const selected = m.id === selectedId;
-        return (
-          <div key={m.id} style={{ borderBottom: "1px solid #1a1a1a" }}>
-            <button
-              onClick={() => setSelectedId(selected ? null : m.id)}
-              style={{ ...rowStyle, color: selected ? ACCENT : "#ccc" }}
-            >
-              <span style={{ flex: 1, textAlign: "left" }}>
-                {m.featured && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      marginRight: "0.35rem",
-                      color: ACCENT,
-                      fontSize: "0.6rem",
-                    }}
-                    title="Featured"
-                  >
-                    ★
-                  </span>
-                )}
-                {m.my_civ} vs {m.opponent_civ}
-              </span>
-              <span style={{ color: "#777" }}>{m.map_name}</span>
-              {m.opening && (
-                <span
+      ) : (
+        /* Two-pane: selectable game list (left) + tabbed detail (right). */
+        <div className="aoe2-shell">
+          <aside className="aoe2-list">
+            {matches.map((m) => {
+              const sel = m.id === selectedId;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedId(m.id)}
+                  className="aoe2-list-row"
                   style={{
-                    fontSize: "0.6rem",
-                    padding: "0.1rem 0.4rem",
-                    borderRadius: "3px",
-                    background: openingColor(m.opening),
-                    color: "#0e0e0e",
+                    borderLeft: sel
+                      ? `2px solid ${ACCENT}`
+                      : "2px solid transparent",
+                    background: sel ? "#0f1419" : "transparent",
                   }}
                 >
-                  {m.opening}
-                </span>
-              )}
-              {m.my_rating_change !== null &&
-                m.my_rating_change !== undefined && (
-                  <span
+                  <div
                     style={{
-                      fontSize: "0.65rem",
-                      color:
-                        m.my_rating_change > 0
-                          ? "#22c55e"
-                          : m.my_rating_change < 0
-                            ? "#ef4444"
-                            : "#888",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
                     }}
                   >
-                    {m.my_rating_change > 0 ? "+" : ""}
-                    {m.my_rating_change}
-                  </span>
-                )}
-              <span style={{ width: "4.5rem", textAlign: "right" }}>
-                {resultLabel(m.my_result)}
-              </span>
-            </button>
-            {selected && detail && detail.id === m.id && (
+                    {m.featured && (
+                      <span style={{ color: ACCENT, fontSize: "0.6rem" }}>
+                        ★
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontSize: "0.78rem",
+                        color: sel ? ACCENT : "#ccc",
+                        flex: 1,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {m.my_civ} vs {m.opponent_civ}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.6rem",
+                        color:
+                          m.my_result === "win"
+                            ? "#22c55e"
+                            : m.my_result === "loss"
+                              ? "#ef4444"
+                              : "#888",
+                      }}
+                    >
+                      {resultLabel(m.my_result)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      marginTop: "0.2rem",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.6rem", color: "#777" }}>
+                      {m.map_name}
+                    </span>
+                    {m.opening && (
+                      <span
+                        style={{
+                          fontSize: "0.55rem",
+                          padding: "0.05rem 0.3rem",
+                          borderRadius: "3px",
+                          background: openingColor(m.opening),
+                          color: "#0e0e0e",
+                        }}
+                      >
+                        {m.opening}
+                      </span>
+                    )}
+                    {m.my_rating_change != null && (
+                      <span
+                        style={{
+                          fontSize: "0.6rem",
+                          marginLeft: "auto",
+                          color:
+                            m.my_rating_change > 0
+                              ? "#22c55e"
+                              : m.my_rating_change < 0
+                                ? "#ef4444"
+                                : "#888",
+                        }}
+                      >
+                        {m.my_rating_change > 0 ? "+" : ""}
+                        {m.my_rating_change}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </aside>
+
+          <div className="aoe2-detail">
+            {detail && detail.id === selectedId ? (
               <MatchDetail
                 detail={detail}
+                tab={tab}
+                onTab={setTab}
                 isAdmin={isAdmin}
-                onRefresh={() => refreshMatch(m.id)}
+                onRefresh={() => refreshMatch(detail.id)}
               />
+            ) : (
+              <p style={{ color: "#555", fontSize: "0.8rem" }}>Loading…</p>
             )}
           </div>
-        );
-      })}
+        </div>
+      )}
 
-      <div style={{ textAlign: "center", marginTop: "3rem" }}>
+      <div style={{ textAlign: "center", marginTop: "2rem" }}>
         <span style={taglineStyle}>built different — analyzed differently</span>
       </div>
+
+      <style>{`
+        .aoe2-shell { display: flex; gap: 1rem; align-items: flex-start; }
+        .aoe2-list {
+          width: 240px; flex-shrink: 0; max-height: 78vh; overflow-y: auto;
+          border-right: 1px solid #1a1a1a; padding-right: 0.5rem;
+          display: flex; flex-direction: column; gap: 1px;
+        }
+        .aoe2-list-row {
+          width: 100%; text-align: left; background: transparent; border: none;
+          cursor: pointer; padding: 0.5rem 0.6rem; display: block;
+        }
+        .aoe2-list-row:hover { background: #0d1117 !important; }
+        .aoe2-detail { flex: 1; min-width: 0; }
+        @media (max-width: 720px) {
+          .aoe2-shell { flex-direction: column; }
+          .aoe2-list {
+            width: 100%; flex-direction: row; max-height: none; overflow-x: auto;
+            border-right: none; border-bottom: 1px solid #1a1a1a;
+            padding-right: 0; padding-bottom: 0.5rem;
+          }
+          .aoe2-list-row { min-width: 200px; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -269,19 +341,8 @@ export default function Aoe2Tab() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div
-        style={{
-          fontSize: "0.6rem",
-          color: "#666",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{ fontSize: "1.4rem", color: "var(--accent)", fontWeight: 700 }}
-      >
+      <div style={statLabel}>{label}</div>
+      <div style={{ fontSize: "1.3rem", color: ACCENT, fontWeight: 700 }}>
         {value}
       </div>
     </div>
@@ -290,10 +351,14 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 
 function MatchDetail({
   detail,
+  tab,
+  onTab,
   isAdmin,
   onRefresh,
 }: {
   detail: Detail;
+  tab: TabKey;
+  onTab: (next: TabKey) => void;
   isAdmin: boolean;
   onRefresh: () => void;
 }) {
@@ -304,15 +369,11 @@ function MatchDetail({
   const [clipTitle, setClipTitle] = useState(detail.clip_title || "");
   const [clipNote, setClipNote] = useState(detail.clip_note || "");
   const [clipStart, setClipStart] = useState(
-    detail.clip_start_seconds !== null &&
-      detail.clip_start_seconds !== undefined
-      ? String(detail.clip_start_seconds)
-      : "",
+    detail.clip_start_seconds != null ? String(detail.clip_start_seconds) : "",
   );
   const [clipSaving, setClipSaving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on outside click.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -331,7 +392,7 @@ function MatchDetail({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard unavailable — ignore
+      /* clipboard unavailable */
     }
   }
 
@@ -366,71 +427,63 @@ function MatchDetail({
     onRefresh();
   }
 
-  const m = detail.metrics as Record<string, number | null | string>;
-
-  // Convert stored watch URL to embed URL for the iframe.
-  const embedUrl = detail.clip_url
-    ? clipEmbedUrl(
-        detail.clip_url,
-        typeof window !== "undefined" ? window.location.hostname : "localhost",
-      )
-    : null;
-
   return (
-    <div style={{ padding: "1rem 0 1.5rem" }}>
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          justifyContent: "flex-end",
-        }}
-      >
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          aria-label="More"
-          style={dotsBtnStyle}
-        >
-          ⋮
-        </button>
-        {menuOpen && (
-          <div ref={menuRef} style={menuStyle}>
-            <button onClick={copyShare} style={menuItemStyle}>
-              {copied ? "Copied!" : "Share link"}
+    <div>
+      {/* Tab bar + admin menu */}
+      <div style={tabBar}>
+        <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => onTab(t.key)}
+              style={{
+                ...tabBtn,
+                color: tab === t.key ? "#0e0e0e" : "#aaa",
+                background: tab === t.key ? ACCENT : "transparent",
+                borderColor: tab === t.key ? ACCENT : "#2a2a2a",
+              }}
+            >
+              {t.label}
             </button>
-            {isAdmin && (
-              <>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setClipFormOpen((o) => !o);
-                  }}
-                  style={menuItemStyle}
-                >
-                  {detail.clip_url ? "Edit clip" : "Attach clip"}
-                </button>
-                <button onClick={toggleFeature} style={menuItemStyle}>
-                  {detail.featured ? "Unfeature" : "Feature"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
+          ))}
+        </div>
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="More"
+            style={dotsBtnStyle}
+          >
+            ⋮
+          </button>
+          {menuOpen && (
+            <div ref={menuRef} style={menuStyle}>
+              <button onClick={copyShare} style={menuItemStyle}>
+                {copied ? "Copied!" : "Share link"}
+              </button>
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setClipFormOpen((o) => !o);
+                    }}
+                    style={menuItemStyle}
+                  >
+                    {detail.clip_url ? "Edit clip" : "Attach clip"}
+                  </button>
+                  <button onClick={toggleFeature} style={menuItemStyle}>
+                    {detail.featured ? "Unfeature" : "Feature"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Admin clip form */}
       {isAdmin && clipFormOpen && (
-        <div
-          style={{
-            background: "#111",
-            border: "1px solid #2a2a2a",
-            borderRadius: "4px",
-            padding: "0.75rem",
-            marginBottom: "1rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.5rem",
-          }}
-        >
+        <div style={clipForm}>
           <input
             type="url"
             placeholder="YouTube or Twitch URL"
@@ -482,254 +535,338 @@ function MatchDetail({
         </div>
       )}
 
-      {detail.featured && (
-        <div
-          style={{
-            fontSize: "0.6rem",
-            color: "var(--accent)",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            marginBottom: "0.5rem",
-          }}
-        >
-          ★ Featured game
-        </div>
-      )}
+      {/* Tab content — sized to fit without scrolling on desktop. */}
+      <div style={{ animation: "fadeIn 0.25s ease both" }}>
+        {tab === "coach" && <CoachTab detail={detail} />}
+        {tab === "economy" && <Aoe2EconomyTab economy={detail.economy} />}
+        {tab === "military" && <MilitaryTab detail={detail} />}
+        {tab === "technology" && <TechnologyTab detail={detail} />}
+        {tab === "society" && <SocietyTab detail={detail} />}
+      </div>
+    </div>
+  );
+}
 
-      <div
-        style={{
-          display: "flex",
-          gap: "1.5rem",
-          flexWrap: "wrap",
-          marginBottom: "1rem",
-        }}
-      >
-        <Metric
-          label="Feudal"
-          value={formatUptime(m.feudal_uptime_s as number | null)}
-        />
-        <Metric
-          label="Castle"
-          value={formatUptime(m.castle_uptime_s as number | null)}
-        />
-        <Metric
-          label="Imperial"
-          value={formatUptime(m.imperial_uptime_s as number | null)}
-        />
-        <Metric label="APM" value={String(m.apm ?? "—")} />
-        <Metric label="Villagers" value={String(m.villager_count ?? "—")} />
-        <Metric
-          label="Length"
-          value={formatDuration(detail.duration_seconds)}
-        />
-        {detail.my_elo !== null && detail.my_elo !== undefined && (
-          <Metric label="ELO after" value={String(detail.my_elo)} />
+/* ── Coach (default) — the headline: verdict + minimap + basic stats ── */
+function CoachTab({ detail }: { detail: Detail }) {
+  const coachText = stripCoachScaffolding(detail.coach_analysis);
+  const m = detail.metrics as Record<string, number | null | string>;
+  const recon = detail.reconstruction;
+  const meta = recon?.meta as Record<string, unknown> | undefined;
+  const ages = recon?.ages ?? {};
+  const top = detail.classifier?.candidates?.[0];
+  const eff = recon?.efficiency ?? {};
+
+  const basics: { label: string; value: string }[] = [
+    { label: "Result", value: resultLabel(detail.my_result) },
+    {
+      label: "Matchup",
+      value: `${detail.my_civ} vs ${detail.opponent_civ}`,
+    },
+    { label: "Map", value: detail.map_name || "—" },
+    { label: "Length", value: formatDuration(detail.duration_seconds) },
+    {
+      label: "Feudal",
+      value: fmtAge(ages["feudal_arrival_s"]),
+    },
+    { label: "Castle", value: fmtAge(ages["castle_arrival_s"]) },
+    { label: "Imperial", value: fmtAge(ages["imperial_arrival_s"]) },
+    {
+      label: "APM",
+      value:
+        eff.apm_total != null ? String(eff.apm_total) : String(m.apm ?? "—"),
+    },
+  ];
+  if (detail.my_elo != null)
+    basics.push({ label: "ELO", value: String(detail.my_elo) });
+  if (meta?.opp_rating != null)
+    basics.push({ label: "Opp ELO", value: String(meta.opp_rating) });
+
+  const embedUrl = detail.clip_url
+    ? clipEmbedUrl(
+        detail.clip_url,
+        typeof window !== "undefined" ? window.location.hostname : "localhost",
+      )
+    : null;
+
+  return (
+    <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
+      {/* Left: verdict + build guess */}
+      <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+        {top && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <span style={sectionLabel}>Likely build</span>
+            <span style={{ fontSize: "0.85rem", color: ACCENT }}>
+              {top.name}
+            </span>
+            <span style={{ fontSize: "0.6rem", color: "#777" }}>
+              {Math.round((top.confidence ?? 0) * 100)}%
+            </span>
+          </div>
+        )}
+        {coachText ? (
+          <Aoe2Markdown source={coachText} />
+        ) : (
+          <p style={{ fontSize: "0.8rem", color: "#666", fontStyle: "italic" }}>
+            No coach analysis for this match yet.
+          </p>
         )}
       </div>
 
-      {/* aoe2coach v2 visualization panels (#5). Lazy-mounted with the selected match; each guards
-          its own data so an old match (no reconstruction) simply shows the metric tiles + coach. */}
-      <Aoe2Viz detail={detail} />
-
-      {(() => {
-        const coach = sanitizeCoachText(detail.coach_analysis);
-        if (!coach) return null;
-        return (
-          <div style={{ marginTop: "1.5rem" }}>
-            <div
-              style={{
-                fontSize: "0.55rem",
-                color: "#666",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                marginBottom: "0.5rem",
-              }}
-            >
-              Coach
+      {/* Right: strategic minimap + basic stats grid */}
+      <div style={{ flex: "0 0 340px", maxWidth: "100%" }}>
+        {detail.map_geometry && (
+          <Aoe2BuildingMap geometry={detail.map_geometry} />
+        )}
+        <div style={basicsGrid}>
+          {basics.map((b) => (
+            <div key={b.label}>
+              <div style={statLabel}>{b.label}</div>
+              <div style={{ fontSize: "0.85rem", color: "#ddd" }}>
+                {b.value}
+              </div>
             </div>
+          ))}
+        </div>
+        {embedUrl && (
+          <div style={{ marginTop: "0.75rem" }}>
+            {detail.clip_title && (
+              <div
+                style={{
+                  fontSize: "0.65rem",
+                  color: "#888",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                {detail.clip_title}
+              </div>
+            )}
+            <iframe
+              src={embedUrl}
+              style={{ width: "100%", aspectRatio: "16/9", border: "none" }}
+              allowFullScreen
+              title={detail.clip_title || "clip"}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Military — produced army (engine-only stats labeled/omitted) ── */
+function MilitaryTab({ detail }: { detail: Detail }) {
+  const recon = detail.reconstruction;
+  if (!recon) return <Empty />;
+  return (
+    <div>
+      <Aoe2ProducedStrip recon={recon} />
+      {detail.classifier?.candidates?.length ? (
+        <div style={{ marginTop: "1.25rem" }}>
+          <div style={sectionLabel}>Build order</div>
+          <Aoe2Classifier classifier={detail.classifier} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── Technology — event timeline (icons) + ages + tech timings ── */
+function TechnologyTab({ detail }: { detail: Detail }) {
+  const recon = detail.reconstruction;
+  if (!recon) return <Empty />;
+  const techs = recon.techs ?? {};
+  const groups: { name: string; rows: { name: string; t_s: number }[] }[] = [
+    { name: "Economy", rows: techs.eco ?? [] },
+    { name: "Military", rows: techs.military ?? [] },
+    { name: "University", rows: techs.university ?? [] },
+  ].filter((g) => g.rows.length > 0);
+
+  return (
+    <div>
+      <Aoe2Timeline recon={recon} />
+      <div style={{ ...techCols, marginTop: "1rem" }}>
+        {groups.map((g) => (
+          <div key={g.name}>
+            <div style={sectionLabel}>{g.name}</div>
             <div
               style={{
-                fontSize: "0.8rem",
-                color: "#bbb",
-                lineHeight: 1.7,
-                borderLeft: "2px solid var(--accent)",
-                paddingLeft: "0.75rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.25rem",
               }}
             >
-              <Aoe2Markdown text={coach} />
+              {g.rows.map((t, i) => (
+                <div
+                  key={`${t.name}-${i}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                  }}
+                >
+                  <Aoe2Icon name={t.name} size={16} />
+                  <span style={{ fontSize: "0.7rem", color: "#ccc", flex: 1 }}>
+                    {t.name}
+                  </span>
+                  <span style={{ fontSize: "0.65rem", color: "#777" }}>
+                    {fmtAge(t.t_s)}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-        );
-      })()}
-
-      {embedUrl && (
-        <div style={{ marginTop: "0.75rem" }}>
-          {detail.clip_title && (
-            <div
-              style={{
-                fontSize: "0.7rem",
-                color: "#888",
-                marginBottom: "0.3rem",
-              }}
-            >
-              {detail.clip_title}
-            </div>
-          )}
-          <iframe
-            src={embedUrl}
-            style={{
-              width: "100%",
-              maxWidth: "640px",
-              aspectRatio: "16/9",
-              border: "none",
-            }}
-            allowFullScreen
-            title={detail.clip_title || "clip"}
-          />
-          {detail.clip_note && (
-            <div
-              style={{
-                fontSize: "0.65rem",
-                color: "#666",
-                marginTop: "0.3rem",
-              }}
-            >
-              {detail.clip_note}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function VizSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{ marginTop: "1.25rem", animation: "fadeUp 0.4s ease both" }}>
-      <div
-        style={{
-          fontSize: "0.55rem",
-          color: "#666",
-          textTransform: "uppercase",
-          letterSpacing: "0.1em",
-          marginBottom: "0.5rem",
-        }}
-      >
-        {title}
+        ))}
       </div>
-      {children}
     </div>
   );
 }
 
-function Aoe2Viz({ detail }: { detail: Detail }) {
+/* ── Society / APM — villager curve, efficiency + APM, mistakes ── */
+function SocietyTab({ detail }: { detail: Detail }) {
   const recon = detail.reconstruction;
-  const geo = detail.map_geometry;
-  const hasRecon = !!recon && Object.keys(recon).length > 0;
-  const hasGeo =
-    !!geo &&
-    ((geo.me?.buildings?.length ?? 0) > 0 ||
-      (geo.opp?.buildings?.length ?? 0) > 0 ||
-      !!geo.me?.base_centroid);
-  const candidates = detail.classifier?.candidates ?? [];
-
-  // Nothing rich to show (an old, pre-v2 match) → render nothing; the metric tiles + coach stand.
-  if (!hasRecon && !hasGeo && candidates.length === 0) return null;
-
+  if (!recon) return <Empty />;
+  const counts = recon.counts ?? {};
   return (
-    <div>
-      {hasGeo && (
-        <VizSection title="Strategic map">
-          <Aoe2BuildingMap geometry={geo!} />
-        </VizSection>
-      )}
-
-      {candidates.length > 0 && (
-        <VizSection title="Build order">
-          <Aoe2Classifier classifier={detail.classifier!} />
-        </VizSection>
-      )}
-
-      {hasRecon && (
-        <>
-          <VizSection title="Timeline">
-            <Aoe2Timeline recon={recon!} />
-          </VizSection>
-
-          <VizSection title="Efficiency">
-            <Aoe2EfficiencyPanel
-              recon={recon!}
-              durationS={detail.duration_seconds}
-            />
-          </VizSection>
-
-          <VizSection title="Mistakes">
-            <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
-          </VizSection>
-
-          <VizSection title="Economy">
-            <Aoe2EconomyChart economy={detail.economy} />
-          </VizSection>
-
-          <VizSection title="Produced counts">
-            <Aoe2ProducedStrip recon={recon!} />
-          </VizSection>
-        </>
-      )}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div
-        style={{
-          fontSize: "0.55rem",
-          color: "#666",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-        }}
-      >
-        {label}
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+      <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+        <div>
+          <div style={statLabel}>Villagers produced</div>
+          <div
+            style={{ fontSize: "1.3rem", color: "#ddd" }}
+            title="cumulative queued — upper bound, not a live count (live max is engine-only)"
+          >
+            {counts.villagers_produced ?? "—"}
+          </div>
+          <div style={{ fontSize: "0.5rem", color: "#555" }}>
+            live max is engine-only (not in replay)
+          </div>
+        </div>
+        <VillagerCurve recon={recon} />
       </div>
-      <div style={{ fontSize: "1rem", color: "#ddd" }}>{value}</div>
+      <Aoe2EfficiencyPanel recon={recon} />
+      <div>
+        <div style={sectionLabel}>Mistakes</div>
+        <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
+      </div>
     </div>
   );
 }
 
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.75rem",
-  width: "100%",
-  padding: "0.7rem 0.25rem",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
-  fontSize: "0.8rem",
-};
+/* Compact villager-count curve sparkline (exact, simulated pops). */
+function VillagerCurve({ recon }: { recon: Reconstruction }) {
+  const curve = recon.production?.villager_curve ?? [];
+  if (curve.length < 2) return null;
+  const W = 220;
+  const H = 48;
+  const maxV = Math.max(...curve.map((p) => p.villagers), 1);
+  const maxT = Math.max(...curve.map((p) => p.t_s), 1);
+  const pts = curve
+    .map((p) => `${(p.t_s / maxT) * W},${H - (p.villagers / maxV) * H}`)
+    .join(" ");
+  return (
+    <div>
+      <div style={statLabel}>Villager curve</div>
+      <svg
+        width={W}
+        height={H}
+        style={{ display: "block", marginTop: "0.2rem" }}
+      >
+        <polyline points={pts} fill="none" stroke={ACCENT} strokeWidth={1.5} />
+      </svg>
+      <div style={{ fontSize: "0.5rem", color: "#555" }}>
+        simulated from production (excludes deaths)
+      </div>
+    </div>
+  );
+}
 
+function Empty() {
+  return (
+    <p style={{ fontSize: "0.8rem", color: "#666", fontStyle: "italic" }}>
+      No reconstruction data for this match.
+    </p>
+  );
+}
+
+function fmtAge(v: unknown): string {
+  if (typeof v !== "number" || v <= 0) return "—";
+  const s = Math.floor(v);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/* ── styles ── */
+const statsHeader: React.CSSProperties = {
+  display: "flex",
+  gap: "1.5rem",
+  marginBottom: "1rem",
+  flexWrap: "wrap",
+};
+const statLabel: React.CSSProperties = {
+  fontSize: "0.55rem",
+  color: "#666",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+};
+const sectionLabel: React.CSSProperties = {
+  fontSize: "0.55rem",
+  color: "#666",
+  textTransform: "uppercase",
+  letterSpacing: "0.1em",
+  marginBottom: "0.4rem",
+  display: "block",
+};
+const basicsGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))",
+  gap: "0.6rem 0.9rem",
+  marginTop: "0.75rem",
+};
+const techCols: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "1.25rem",
+};
+const tabBar: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderBottom: "1px solid #1a1a1a",
+  paddingBottom: "0.6rem",
+  marginBottom: "1rem",
+  gap: "0.5rem",
+};
+const tabBtn: React.CSSProperties = {
+  fontFamily: "var(--font-headline)",
+  fontSize: "0.62rem",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  padding: "0.3rem 0.6rem",
+  border: "1px solid",
+  borderRadius: "3px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
 const uploadBtnStyle: React.CSSProperties = {
   fontFamily: "var(--font-headline)",
   fontSize: "0.7rem",
   letterSpacing: "0.1em",
   textTransform: "uppercase",
   padding: "0.4rem 0.8rem",
-  background: "var(--accent)",
+  background: ACCENT,
   color: "#0e0e0e",
   border: "none",
   borderRadius: "3px",
   cursor: "pointer",
   fontWeight: 700,
 };
-
 const taglineStyle: React.CSSProperties = {
   fontFamily: "var(--font-headline)",
   fontSize: "0.6rem",
@@ -737,7 +874,6 @@ const taglineStyle: React.CSSProperties = {
   letterSpacing: "0.2em",
   textTransform: "lowercase",
 };
-
 const dotsBtnStyle: React.CSSProperties = {
   background: "transparent",
   border: "none",
@@ -747,7 +883,6 @@ const dotsBtnStyle: React.CSSProperties = {
   cursor: "pointer",
   padding: "0.1rem 0.4rem",
 };
-
 const menuStyle: React.CSSProperties = {
   position: "absolute",
   top: "1.6rem",
@@ -758,13 +893,12 @@ const menuStyle: React.CSSProperties = {
   padding: "0.25rem",
   zIndex: 10,
 };
-
 const menuItemStyle: React.CSSProperties = {
   fontFamily: "var(--font-headline)",
   fontSize: "0.65rem",
   letterSpacing: "0.08em",
   textTransform: "uppercase",
-  color: "var(--accent)",
+  color: ACCENT,
   background: "transparent",
   border: "none",
   cursor: "pointer",
@@ -774,7 +908,16 @@ const menuItemStyle: React.CSSProperties = {
   width: "100%",
   textAlign: "left",
 };
-
+const clipForm: React.CSSProperties = {
+  background: "#111",
+  border: "1px solid #2a2a2a",
+  borderRadius: "4px",
+  padding: "0.75rem",
+  marginBottom: "1rem",
+  display: "flex",
+  flexDirection: "column",
+  gap: "0.5rem",
+};
 const inputStyle: React.CSSProperties = {
   background: "#0a0a0a",
   border: "1px solid #2a2a2a",

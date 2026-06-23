@@ -178,33 +178,32 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 
 - [ ] `/plays` → "Chess" and "AoE 2" tabs both render; clicking each switches the content.
 - [ ] AoE 2 tab: stats header shows current ELO, W/L record, total games, and top civilization.
-- [ ] Newest game is expanded by default on load.
-- [ ] Clicking a collapsed game expands it and collapses the previously expanded one (single-selection).
-- [ ] The optional highlight-clip `<iframe>` mounts only for the currently expanded game; collapsed rows render no iframe.
-- [ ] Expanded game shows metrics: Feudal/Castle/Imperial uptimes, APM, a villager count, and match length.
-- [ ] No idle-TC stat appears anywhere in the UI (it was intentionally removed).
-- [ ] Opening classification label is present in the expanded game view.
+- [ ] Two-pane layout: a selectable game list on the left, a tabbed detail pane on the right.
+- [ ] Featured game (or `?game=`, or newest) is selected by default; selecting another game swaps the detail pane.
+- [ ] The detail pane opens on the **Coach** tab by default.
+- [ ] Switching detail tabs (Coach / Economy / Military / Technology / Society) does NOT re-fetch or reload data.
+- [ ] On desktop each tab's content fits without the detail pane scrolling.
 - [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
 - [ ] No chat text appears anywhere in the UI or in raw API responses (`/api/aoe2/` and `/api/aoe2/<id>/`).
-- [ ] Visiting `/plays?game=<id>` deep-links to the AoE 2 tab with that game expanded.
-- [ ] ⋮ menu on the expanded game copies a share link (`/plays?game=<id>`) to the clipboard.
+- [ ] Visiting `/plays?game=<id>` deep-links to the AoE 2 tab with that game selected.
+- [ ] ⋮ menu copies a share link (`/plays?game=<id>`) to the clipboard.
 - [ ] Admin: file upload box is visible; uploading a valid `.aoe2record` processes and shows the game.
 - [ ] Non-admin: upload box is not visible.
 - [ ] Uploading a non-1v1 recording (team game, single-player, vs-AI) results in a "skipped" response and no new game appears publicly.
 
-### AoE 2 tab — v2 match-analysis view (aoe2coach reconstruction)
+### AoE 2 tab — detail tabs (aoe2coach v2)
 
-- [ ] Expanding a v2-analyzed game renders a **strategic-map minimap**: a blue (you) base and red (opponent) base, building dots, walls as line segments, forward buildings ringed in violet, and amber engagement markers; the legend lists you / opponent / forward bldg / engagement.
-- [ ] The minimap footnote reads "shows where things were *built*, not what survived".
-- [ ] A **build-order** section lists 1–3 candidates, each with a name, a confidence %, and matched (✓) / missed (✗) signal chips; it shows "confident" or a low-confidence/off-meta note.
-- [ ] A **timeline** shows age-arrival guide-lines (Feudal/Castle/Imperial) and dotted markers in eco/military/university/production lanes; hovering a marker shows its name + mm:ss.
-- [ ] An **efficiency** panel shows TC idle, longest villager gap, and an APM eco/military/other split bar.
-- [ ] A **mistakes** list shows flagged items with severity + confidence-tier badge + a "Fix" line + a learn-more deep-link; a game with no flagged mistakes shows "No mistakes detected" (never an invented one).
-- [ ] An **economy** panel shows per-age villager allocation bars carrying a `~est` badge; when collected totals are self-suppressed it says so and shows only the qualitative shape; an absent economy renders an honest "unavailable" placeholder, not a blank.
-- [ ] A **produced-counts** strip labels army/villagers as "produced" (never "live"), and lists engine-only stats (units killed/lost, live army, % map explored, resources collected) as greyed "unavailable" badges.
-- [ ] The coach commentary (WHAT HAPPENED + ANALYSIS) renders below the panels.
-- [ ] A match analyzed before the v2 upgrade (no reconstruction) still expands cleanly — metric tiles + coach text only, no broken/empty viz panels, no console errors.
-- [ ] Raw `/api/aoe2/<id>/` response includes `reconstruction`, `map_geometry`, `classifier`, `mistakes`, `economy`, `map_images`, and `coach_tier`; still no player names or chat anywhere.
+- [ ] **Coach** tab shows: the coach verdict rendered as Markdown (headings, bold, lists — no raw `#`/`**` or agent scaffolding), the top build-order guess with a confidence %, the strategic-map minimap, and a basics grid (result, matchup, map, length, Feudal/Castle/Imperial, APM, ELO).
+- [ ] The minimap (you = blue, opponent = red) shows building dots, walls, forward buildings ringed, engagement markers, and base centroids; footnote reads "shows where things were *built*, not what survived".
+- [ ] **Economy** tab shows TWO clearly separated blocks with their units labeled: "Worker allocation — villager COUNTS per resource" (per-age stacked bars) and "Resource balance — resource AMOUNTS spent" (per-resource spend bars). Counts and amounts are never conflated.
+- [ ] Economy: floating flags render (e.g. "⚠ floating wood (+49%)") when present; collected totals and relic gold show "unavailable"; both blocks carry a `~est` badge.
+- [ ] **Military** tab labels army/villagers as "produced" (never "live") and lists engine-only stats (units killed/lost, live army size, % map explored, resources collected) as greyed "unavailable" badges; build-order candidates show matched (✓) / missed (✗) signal chips.
+- [ ] **Technology** tab timeline shows age-arrival guide-lines and tech/production markers; markers use real AoE2 DE icons where bundled, with a clean glyph fallback otherwise. Per-tech timing columns (Economy/Military/University) render an icon + name + mm:ss per row.
+- [ ] **Society / APM** tab shows villagers produced (with "live max is engine-only" note), a villager-count curve, an efficiency panel, and the mistakes list.
+- [ ] Efficiency: TC idle is shown as a **pre-cap %** labeled "idle before 200 pop, age-ups excluded" (not an absolute mm:ss).
+- [ ] Mistakes list shows severity + confidence-tier badge + "Fix" + learn-more deep-link; a game with none shows "No mistakes detected" (never an invented one).
+- [ ] A match analyzed before the v2 upgrade (no reconstruction) still renders cleanly — coach text + basics, no broken/empty panels, no console errors.
+- [ ] Raw `/api/aoe2/<id>/` response includes `reconstruction` (with `efficiency.precap_window_s`), `map_geometry`, `classifier`, `mistakes`, `economy` (with `worker_allocation` + `resource_balance`), `map_images`, and `coach_tier`; still no player names or chat anywhere.
 
 ## Performance
 
