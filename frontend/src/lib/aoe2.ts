@@ -224,6 +224,23 @@ export function openingColor(opening: string): string {
   return OPENING_COLORS[opening] ?? "#64748b";
 }
 
+/**
+ * Standardize an opening tag for DISPLAY: drop `-`/`_` separators (→ spaces) and capitalize the first
+ * letter of each word, leaving any existing capitals intact. e.g. "fast_castle" → "Fast Castle",
+ * "scouts into knights" → "Scouts Into Knights", "archers (1-range)" → "Archers (1 Range)". Pass the
+ * RAW tag to openingColor (which keys off the raw value); only the rendered text is formatted.
+ */
+export function formatOpening(opening: string | null | undefined): string {
+  if (!opening) return "";
+  return opening
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((w) => w.replace(/[A-Za-z]/, (c) => c.toUpperCase())) // capitalize each word's first letter
+    .join(" ");
+}
+
 export function gameSharePath(id: number): string {
   return `/plays/aoe2?game=${id}`;
 }
