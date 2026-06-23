@@ -9,7 +9,9 @@ import { aoe2IconUrl } from "@/lib/aoe2Icons";
  * the tech/unit/age (bundled, same-origin); names without a bundled icon fall back to a small
  * colored glyph dot so every marker still renders. All exact → solid, no estimate badge.
  */
-const WIDTH = 560;
+// Wide viewBox so the timeline spans the full detail-pane width with markers
+// well spread out; the SVG scales to 100% of its container (no max-width cap).
+const WIDTH = 1100;
 const LANE_H = 30;
 const LABEL_W = 64;
 const ICON = 16;
@@ -81,7 +83,7 @@ export default function Aoe2Timeline({ recon }: { recon: Reconstruction }) {
     <svg
       viewBox={`0 0 ${WIDTH} ${totalH}`}
       width="100%"
-      style={{ maxWidth: WIDTH, display: "block" }}
+      style={{ width: "100%", display: "block" }}
       role="img"
       aria-label="match timeline"
     >
