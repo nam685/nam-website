@@ -453,6 +453,7 @@ export type ResourceBalancePoint = {
   vils: number;
   t_s: number;
   spent: Record<string, number>; // cumulative near-exact resource AMOUNTS spent by t_s
+  floating?: Record<string, number>; // estimated floating (gathered-but-unspent) signal by t_s
 };
 
 export type Economy = {
@@ -1043,18 +1044,67 @@ export function buildWorkerAllocChart(
   return finishEconChart(points);
 }
 
-/** Build the real-time-indexed resource-balance chart (x = t_s seconds, cumulative spend). */
+// The resource-balance chart is two-tone per resource: cumulative SPENT (dark, exact) + estimated
+// FLOATING (bright) on top. Each point carries both maps; the total stacked height is spent+floating.
+export type BalanceChartPoint = {
+  x: number; // t_s seconds
+  t_s: number;
+  spent: Record<string, number>;
+  floating: Record<string, number>;
+};
+export type BalanceChart = {
+  points: BalanceChartPoint[];
+  resources: string[]; // present resources, in ECON_RESOURCES order
+  xMin: number;
+  xMax: number;
+  maxStackTotal: number;
+};
+
+/** Build the real-time-indexed resource-balance chart (x = t_s seconds): spent + floating per point. */
 export function buildResourceBalanceChart(
   rb: ResourceBalance | null | undefined,
-): EconChart | null {
+): BalanceChart | null {
   const series = rb?.series;
   if (!series || series.length === 0) return null;
-  const points: EconChartPoint[] = series.map((p) => ({
+  const points: BalanceChartPoint[] = series.map((p) => ({
     x: p.t_s,
     t_s: p.t_s,
-    values: p.spent ?? {},
+    spent: p.spent ?? {},
+    floating: p.floating ?? {},
   }));
-  return finishEconChart(points);
+  const present = new Set<string>();
+  let maxStackTotal = 0;
+  for (const p of points) {
+    let sum = 0;
+    for (const r of ECON_RESOURCES) {
+      const s = p.spent[r] ?? 0;
+      const f = p.floating[r] ?? 0;
+      if (s > 0 || f > 0) present.add(r);
+      sum += s + f;
+    }
+    if (sum > maxStackTotal) maxStackTotal = sum;
+  }
+  const resources = ECON_RESOURCES.filter((r) => present.has(r));
+  if (resources.length === 0) return null;
+  return {
+    points,
+    resources,
+    xMin: points[0]?.x ?? 0,
+    xMax: points[points.length - 1]?.x ?? 0,
+    maxStackTotal: Math.max(maxStackTotal, 1),
+  };
+}
+
+/** Lighten a #rrggbb hex toward white by `amt` (0..1) — used for the bright "floating" band. */
+export function lightenHex(hex: string, amt: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amt);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
 }
 
 function finishEconChart(points: EconChartPoint[]): EconChart | null {

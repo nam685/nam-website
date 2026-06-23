@@ -4,23 +4,25 @@ import {
   buildResourceBalanceChart,
   ECON_RESOURCE_COLOR,
   fmtMmss,
+  lightenHex,
   niceTicks,
   ResourceBalance,
 } from "@/lib/aoe2";
 import { aoe2ResourceIconUrl } from "@/lib/aoe2Icons";
 
 /**
- * Resource-balance graph — cumulative near-exact SPEND per resource over REAL TIME, styled like the
- * Army production graph (full width, ~half height, icon legend on the right).
+ * Resource-balance graph — TWO-TONE stacked area per resource over REAL TIME, styled like the Army
+ * production graph (full width, ~half height, icon legend on the right).
  *
- *   • X-axis = REAL TIME (m:ss). Spend is inherently temporal, so the owner asked for a time axis
- *     here (vs the villager-count axis of the worker-allocation graph).
- *   • Stacked AREA (a line/area like the army graph, NOT bars): food / wood / gold / stone, bottom-up.
- *   • Y-axis is LOG-scaled: each band spans logFrac(cumLower)→logFrac(cumUpper), so early small spends
- *     stay visible against the late-game totals.
+ *   • X-axis = REAL TIME (m:ss). Spend is inherently temporal.
+ *   • Per resource, TWO stacked sub-bands: a DARK band = cumulative SPENT (near-exact) and a BRIGHT
+ *     band on top = estimated FLOATING (gathered-but-unspent signal). A wide bright patch = that
+ *     resource floated, and stayed floating, for a long stretch. Shade doubles as confidence:
+ *     dark = exact spend, bright = estimate.
+ *   • Linear y — honest proportions.
  *
- * Spend is near-exact (BUILD + train + research costs); collected/bank totals stay suppressed.
- * Pure SVG, same-origin icons — CSP-safe.
+ * Floating = max(0, total_spent × worker_share − spent): an honest signal anchored to near-exact spend
+ * × the trusted worker-share, NOT a fabricated bank total. Pure SVG, same-origin icons — CSP-safe.
  */
 export default function Aoe2ResourceBalanceChart({
   resourceBalance,
@@ -43,25 +45,43 @@ export default function Aoe2ResourceBalanceChart({
   // LINEAR y-axis — honest proportions of the cumulative spend split.
   const yOf = (v: number) => axisY - (v / maxStackTotal) * AREA_H;
 
-  // Stacked bands (food bottom-up): each band is the polygon between cumLower and cumUpper across
-  // all time points.
-  const cumLower = points.map(() => 0);
-  const bands = resources.map((r) => {
-    const lowerY = points.map((p, i) => yOf(cumLower[i]));
-    for (let i = 0; i < points.length; i++)
-      cumLower[i] += points[i].values[r] ?? 0;
-    const upperY = points.map((p, i) => yOf(cumLower[i]));
-    const top = points.map((p, i) => `${xOf(p.x)},${upperY[i]}`).join(" ");
-    const bottom = points
-      .map((p, i) => `${xOf(p.x)},${lowerY[i]}`)
-      .reverse()
-      .join(" ");
-    return {
-      r,
-      path: `${top} ${bottom}`,
-      total: points[points.length - 1].values[r] ?? 0,
-    };
-  });
+  // Two-tone stacked bands: per resource, a DARK spent band then a BRIGHT floating band, bottom-up,
+  // so each resource is a contiguous two-tone block (spent at the base, floating riding on top).
+  const cum = points.map(() => 0);
+  const last = points[points.length - 1];
+  const bands: { key: string; color: string; path: string }[] = [];
+  for (const r of resources) {
+    for (const kind of ["spent", "floating"] as const) {
+      const lowerY = points.map((_, i) => yOf(cum[i]));
+      for (let i = 0; i < points.length; i++) {
+        const v =
+          kind === "spent"
+            ? (points[i].spent[r] ?? 0)
+            : (points[i].floating[r] ?? 0);
+        cum[i] += v;
+      }
+      const upperY = points.map((_, i) => yOf(cum[i]));
+      const top = points.map((p, i) => `${xOf(p.x)},${upperY[i]}`).join(" ");
+      const bottom = points
+        .map((p, i) => `${xOf(p.x)},${lowerY[i]}`)
+        .reverse()
+        .join(" ");
+      bands.push({
+        key: `${r}-${kind}`,
+        color:
+          kind === "spent"
+            ? ECON_RESOURCE_COLOR[r]
+            : lightenHex(ECON_RESOURCE_COLOR[r], 0.55),
+        path: `${top} ${bottom}`,
+      });
+    }
+  }
+  // Legend: one row per resource, spent total + (if any) floating total in the bright shade.
+  const legend = resources.map((r) => ({
+    r,
+    spent: last.spent[r] ?? 0,
+    floating: last.floating[r] ?? 0,
+  }));
 
   const tickCount = 6;
   const xTicks = Array.from({ length: tickCount + 1 }, (_, i) =>
@@ -72,7 +92,8 @@ export default function Aoe2ResourceBalanceChart({
   return (
     <div>
       <div style={labelStyle}>
-        Resource balance — cumulative spend per resource (x = time)
+        Resource balance — spent (dark) + floating (bright) per resource (x =
+        time)
       </div>
       <div
         style={{
@@ -88,7 +109,7 @@ export default function Aoe2ResourceBalanceChart({
             width="100%"
             style={{ display: "block", width: "100%" }}
             role="img"
-            aria-label="Resource balance: stacked area of cumulative spend per resource over time, log y-axis."
+            aria-label="Resource balance: two-tone stacked area per resource over time — dark spent, bright floating."
           >
             {yGrid.map((v) => (
               <g key={`y-${v}`}>
@@ -113,12 +134,12 @@ export default function Aoe2ResourceBalanceChart({
 
             {bands.map((b) => (
               <polygon
-                key={b.r}
+                key={b.key}
                 points={b.path}
-                fill={ECON_RESOURCE_COLOR[b.r]}
-                fillOpacity={0.82}
-                stroke={ECON_RESOURCE_COLOR[b.r]}
-                strokeWidth={0.75}
+                fill={b.color}
+                fillOpacity={0.85}
+                stroke={b.color}
+                strokeWidth={0.5}
                 strokeOpacity={0.9}
               />
             ))}
@@ -156,7 +177,7 @@ export default function Aoe2ResourceBalanceChart({
         </div>
 
         <div style={legendCol}>
-          {bands.map((b) => (
+          {legend.map((b) => (
             <span
               key={b.r}
               style={{
@@ -167,29 +188,53 @@ export default function Aoe2ResourceBalanceChart({
                 color: "#bbb",
                 textTransform: "capitalize",
               }}
-              title={`${b.r} — ${Math.round(b.total).toLocaleString()} spent`}
+              title={`${b.r} — ${Math.round(b.spent).toLocaleString()} spent${
+                b.floating > 0
+                  ? ` · ~${Math.round(b.floating).toLocaleString()} floating`
+                  : ""
+              }`}
             >
               <span
                 style={{
+                  display: "inline-flex",
                   width: 12,
                   height: 10,
                   borderRadius: 2,
-                  background: ECON_RESOURCE_COLOR[b.r],
+                  overflow: "hidden",
                   flexShrink: 0,
                 }}
-              />
+              >
+                <span
+                  style={{ flex: 1, background: ECON_RESOURCE_COLOR[b.r] }}
+                />
+                <span
+                  style={{
+                    flex: 1,
+                    background: lightenHex(ECON_RESOURCE_COLOR[b.r], 0.55),
+                  }}
+                />
+              </span>
               <ResIcon resource={b.r} />
               <span style={{ flex: 1, whiteSpace: "nowrap" }}>{b.r}</span>
               <span style={{ color: "#777" }}>
-                {Math.round(b.total).toLocaleString()}
+                {Math.round(b.spent).toLocaleString()}
+                {b.floating > 0 && (
+                  <span
+                    style={{ color: lightenHex(ECON_RESOURCE_COLOR[b.r], 0.4) }}
+                  >
+                    {" "}
+                    +{Math.round(b.floating).toLocaleString()}
+                  </span>
+                )}
               </span>
             </span>
           ))}
         </div>
       </div>
       <div style={footNote}>
-        cumulative SPEND (BUILD + train + research) — near-exact. Collected/bank
-        totals are suppressed (never fabricated).
+        dark = cumulative SPEND (near-exact) · bright = FLOATING (~est:
+        gathered-but-unspent = effort minus spend). A wide bright patch = that
+        resource floated. Collected/bank totals aren&apos;t fabricated.
       </div>
     </div>
   );
