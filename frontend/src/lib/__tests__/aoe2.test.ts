@@ -13,6 +13,7 @@ import {
   mistakeTier,
   openingColor,
   resultLabel,
+  sanitizeCoachText,
   tierStroke,
   timelineX,
 } from "../aoe2";
@@ -226,10 +227,10 @@ describe("mapCoordToDiamond (wide isometric minimap)", () => {
   const H = 160;
 
   it("maps the four world corners to N/E/S/W of a 2:1 diamond", () => {
-    expect(mapCoordToDiamond(0, 0, M, W, H)).toEqual({ px: 160, py: 0 }); // top / North
-    expect(mapCoordToDiamond(M, M, M, W, H)).toEqual({ px: 160, py: 160 }); // bottom / South
-    expect(mapCoordToDiamond(M, 0, M, W, H)).toEqual({ px: 0, py: 80 }); // left / West
-    expect(mapCoordToDiamond(0, M, M, W, H)).toEqual({ px: 320, py: 80 }); // right / East
+    expect(mapCoordToDiamond(M, 0, M, W, H)).toEqual({ px: 160, py: 0 }); // top / North
+    expect(mapCoordToDiamond(0, M, M, W, H)).toEqual({ px: 160, py: 160 }); // bottom / South
+    expect(mapCoordToDiamond(0, 0, M, W, H)).toEqual({ px: 0, py: 80 }); // left / West
+    expect(mapCoordToDiamond(M, M, M, W, H)).toEqual({ px: 320, py: 80 }); // right / East
   });
 
   it("places game-2 bases correctly: ME west of OPP, OPP further south", () => {
@@ -250,5 +251,50 @@ describe("mapCoordToDiamond (wide isometric minimap)", () => {
 
   it("diamondCorners lists N,E,S,W for the box", () => {
     expect(diamondCorners(320, 160)).toBe("160,0 320,80 160,160 0,80");
+  });
+});
+
+describe("sanitizeCoachText", () => {
+  it("returns empty for nullish", () => {
+    expect(sanitizeCoachText(null)).toBe("");
+    expect(sanitizeCoachText(undefined)).toBe("");
+    expect(sanitizeCoachText("")).toBe("");
+  });
+
+  it("strips a leading agent preamble line", () => {
+    const raw =
+      "Now I have all I need. Here is the coaching report:\n\n## Opening\nYou went Scouts.";
+    expect(sanitizeCoachText(raw)).toBe("## Opening\nYou went Scouts.");
+  });
+
+  it("strips the real 'Now I have all the data. Let me compose the report.' preamble", () => {
+    const raw =
+      "Now I have all the data. Let me compose the report.\n\n## What happened\nYou won.";
+    expect(sanitizeCoachText(raw)).toBe("## What happened\nYou won.");
+  });
+
+  it("strips a standalone 'Here is the report:' preamble", () => {
+    const raw = "Here is the report:\n\nYou idled your TC.";
+    expect(sanitizeCoachText(raw)).toBe("You idled your TC.");
+  });
+
+  it("strips a trailing sign-off", () => {
+    const raw = "Solid game overall.\n\nHope this helps! Good luck.";
+    expect(sanitizeCoachText(raw)).toBe("Solid game overall.");
+  });
+
+  it("never alters the analysis body", () => {
+    const body =
+      "## Feudal\nYour TC idled 38%.\n\n- Add a second TC\n- Wall your base";
+    expect(sanitizeCoachText(body)).toBe(body);
+  });
+
+  it("does not strip a body line that merely mentions a report", () => {
+    const raw = "The game report from your last match shows good macro.";
+    expect(sanitizeCoachText(raw)).toBe(raw);
+  });
+
+  it("trims surrounding blank lines", () => {
+    expect(sanitizeCoachText("\n\n  real content  \n\n")).toBe("real content");
   });
 });

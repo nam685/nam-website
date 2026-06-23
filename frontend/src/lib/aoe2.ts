@@ -311,8 +311,9 @@ export function mapCoordToSvg(
 
 /**
  * Project a game tile coord (x, y) onto AoE2's isometric minimap — a wide diamond (2:1), NOT a
- * square. The world square [0,M]² rotates 45°: world (0,0)=top(N), (M,M)=bottom(S), (M,0)=left(W),
- * (0,M)=right(E). The vertical axis is compressed to half so the diamond reads ~twice as wide as
+ * square. The world square [0,M]² rotates 45° and is flipped across the y=-x diagonal so the world
+ * axes land on the in-game corners: world (M,0)=top(N), (0,M)=bottom(S), (0,0)=left(W),
+ * (M,M)=right(E). The vertical axis is compressed to half so the diamond reads ~twice as wide as
  * tall, matching the in-game minimap. Anchored against a real game (ME west / OPP south-east).
  */
 export function mapCoordToDiamond(
@@ -323,10 +324,12 @@ export function mapCoordToDiamond(
   height: number,
 ): { px: number; py: number } {
   const M = mapDim && mapDim > 0 ? mapDim : 120;
-  const u = y - x; // [-M, M] — west is negative
-  const v = x + y; // [0, 2M] — south is larger
-  const px = ((u + M) / (2 * M)) * width;
-  const py = (v / (2 * M)) * height;
+  // Flipped across the y=-x diagonal so the world axes land on the in-game minimap corners:
+  // (M,0)=N, (0,M)=S, (0,0)=W, (M,M)=E.
+  const sum = x + y; // [0, 2M]
+  const diff = y - x; // [-M, M]
+  const px = (sum / (2 * M)) * width;
+  const py = ((diff + M) / (2 * M)) * height;
   const clamp = (a: number, hi: number) => (a < 0 ? 0 : a > hi ? hi : a);
   return { px: clamp(px, width), py: clamp(py, height) };
 }
@@ -389,4 +392,55 @@ export function fmtMmss(s: number | null | undefined): string {
   if (s === null || s === undefined || !Number.isFinite(s)) return "—";
   const sec = Math.max(0, Math.floor(s));
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Conservative display-time sanitizer for stored coach commentary. The text occasionally carries
+ * agent scaffolding (e.g. "Now I have all I need. Here is the coaching report:") at the very start
+ * or trivial sign-offs at the very end. We strip only clearly-recognised scaffolding lines at the
+ * boundaries — never the analysis body. Matching is line-by-line, case-insensitive, and only peels
+ * leading/trailing scaffolding (plus the now-empty lines around it).
+ */
+export function sanitizeCoachText(raw: string | null | undefined): string {
+  if (!raw) return "";
+  // Lines that, when they appear at the very top/bottom, are pure agent scaffolding.
+  const SCAFFOLD = [
+    /^(ok(ay)?|alright|great|perfect)?[,.!\s]*now i have (all|everything)( i need| the (data|info|information|details))?[,.!\s]*((let me|i('| wi)?ll) .{0,30}(report|analysis|review)[:.\s]*|here('?s| is)? .{0,30}(report|analysis|review)[:.\s]*)?$/i,
+    /^(let me|i('| wi)?ll) (now )?(compose|write|put together|assemble|provide|give|share) (the |my |you )?.{0,30}(report|analysis|review|feedback|breakdown)[:.\s]*$/i,
+    /^here('?s| is)( the| my)?( final| full)? (coaching )?(report|analysis|review|feedback|breakdown)[:.\s]*$/i,
+    /^here('?s| is)( the| my)?( final| full)? .{0,40}? (report|analysis|review)[:.\s]*$/i,
+    /^(below|the following) is( the| my)?.{0,40}?(report|analysis|review)[:.\s]*$/i,
+    /^let me (provide|give|write|put together).{0,60}$/i,
+    /^i('| wi)?ll (now )?(provide|give|write|put together).{0,60}$/i,
+    /^(coaching )?(report|analysis|review)[:.\s]*$/i,
+    /^that('?s| is)( all| it)?[.!\s]*$/i,
+    /^(hope (this|that) helps|good luck|gl ?hf)\b[\s\S]{0,40}$/i,
+  ];
+  const isScaffold = (line: string) => {
+    const t = line.trim();
+    if (t === "") return false;
+    return SCAFFOLD.some((re) => re.test(t));
+  };
+
+  let lines = raw.replace(/\r\n/g, "\n").split("\n");
+
+  // Peel scaffolding (and blank lines) from the start.
+  while (lines.length > 0) {
+    const first = lines[0].trim();
+    if (first === "" || isScaffold(lines[0])) {
+      lines.shift();
+    } else {
+      break;
+    }
+  }
+  // Peel scaffolding (and blank lines) from the end.
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (last === "" || isScaffold(lines[lines.length - 1])) {
+      lines.pop();
+    } else {
+      break;
+    }
+  }
+  return lines.join("\n").trim();
 }
