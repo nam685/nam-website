@@ -155,11 +155,31 @@ export default function Aoe2Timeline({ recon }: { recon: Reconstruction }) {
                   </title>
                 </image>
               ) : (
-                <circle key={mi} cx={tx(m.t)} cy={y} r={3.5} fill={lane.color}>
+                // Unknown name → "?" chip (anticipates future content), never a bare dot.
+                <g key={mi}>
+                  <rect
+                    x={tx(m.t) - ICON / 2}
+                    y={y - ICON / 2}
+                    width={ICON}
+                    height={ICON}
+                    rx={2}
+                    fill="#161b22"
+                    stroke="#232a33"
+                  />
+                  <text
+                    x={tx(m.t)}
+                    y={y + 3.5}
+                    textAnchor="middle"
+                    fontSize={10}
+                    fontWeight={700}
+                    fill={lane.color}
+                  >
+                    ?
+                  </text>
                   <title>
                     {m.label} — {fmtMmss(m.t)}
                   </title>
-                </circle>
+                </g>
               ),
             )}
           </g>

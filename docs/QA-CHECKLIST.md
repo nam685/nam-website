@@ -183,8 +183,8 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Featured game (or `?game=`, or newest) is selected by default; selecting another game swaps the detail pane.
 - [ ] The detail pane opens on the **Coach** tab by default.
 - [ ] Switching detail tabs (Coach / Economy / Army & Stats / Technology / Mistakes) does NOT re-fetch or reload data.
-- [ ] **Technology** tab: each tech/unit icon matches its name (e.g. Horse Collar shows a collar, Knight shows a knight) — no wrong art; unmapped names show a monogram glyph.
-- [ ] **Army & Stats** tab combines army produced, villager curve, APM/efficiency, and build order; **Mistakes** is its own separate tab.
+- [ ] **Technology** tab: each tech/unit icon matches its name (e.g. Horse Collar shows a collar, Knight shows a knight) — no wrong art; every known name shows a real icon (no monogram fallback for coach-vocabulary names), and a genuinely-unknown name shows a "?" chip (never a broken image or a bare dot).
+- [ ] **Army & Stats** tab leads with the build-order guess, then ONE unified full-width production graph (stacked areas above the axis, m:ss time labels in their own band below, an event icon row of units + upgrades below zero, age-up guide-lines, vertical legend on the right), then the APM/efficiency panel. The old "produced strip" text is gone; **Mistakes** is its own separate tab.
 - [ ] On desktop each tab's content fits without the detail pane scrolling.
 - [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
 - [ ] No chat text appears anywhere in the UI or in raw API responses (`/api/aoe2/` and `/api/aoe2/<id>/`).
@@ -200,9 +200,10 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] The minimap (you = blue, opponent = red) shows building dots, walls, forward buildings ringed, engagement markers, and base centroids; footnote reads "shows where things were *built*, not what survived".
 - [ ] **Economy** tab shows TWO clearly separated blocks with their units labeled: "Worker allocation — villager COUNTS per resource" (per-age stacked bars) and "Resource balance — resource AMOUNTS spent" (per-resource spend bars). Counts and amounts are never conflated.
 - [ ] Economy: floating flags render (e.g. "⚠ floating wood (+49%)") when present; collected totals and relic gold show "unavailable"; both blocks carry a `~est` badge.
-- [ ] **Military** tab labels army/villagers as "produced" (never "live") and lists engine-only stats (units killed/lost, live army size, % map explored, resources collected) as greyed "unavailable" badges; build-order candidates show matched (✓) / missed (✗) signal chips.
-- [ ] **Technology** tab timeline shows age-arrival guide-lines and tech/production markers; markers use real AoE2 DE icons where bundled, with a clean glyph fallback otherwise. Per-tech timing columns (Economy/Military/University) render an icon + name + mm:ss per row.
-- [ ] **Society / APM** tab shows villagers produced (with "live max is engine-only" note), a villager-count curve, an efficiency panel, and the mistakes list.
+- [ ] **Army & Stats** production graph labels the areas as "produced" cumulative (never "live"); the unit legend on the right shows swatch + real icon + name + total; the below-zero icon row mixes unit-production and tech/upgrade icons at their times; build-order candidates (at the top of the tab) show matched (✓) / missed (✗) signal chips.
+- [ ] **Technology** tab timeline shows age-arrival guide-lines and tech/production markers; markers use real AoE2 DE icons (100% coverage for coach-vocabulary names), with a "?" chip for genuinely-unknown names. Per-tech timing columns (Economy/Military/University) render an icon + name + mm:ss per row.
+- [ ] APM split reads "APM N — X eco · Y military · Z other" with the caption "commands per minute, by what they controlled" (not the old cryptic "eco N mil N other").
+- [ ] The chess|AoE 2 selector stays full width when **Chess** is selected (the chess *content* below it stays in the reading column); the AoE 2 tab's base font reads a notch larger than before.
 - [ ] Efficiency: TC idle is shown as a **pre-cap %** labeled "idle before 200 pop, age-ups excluded" (not an absolute mm:ss).
 - [ ] Mistakes list shows severity + confidence-tier badge + "Fix" + learn-more deep-link; a game with none shows "No mistakes detected" (never an invented one).
 - [ ] A match analyzed before the v2 upgrade (no reconstruction) still renders cleanly — coach text + basics, no broken/empty panels, no console errors.
