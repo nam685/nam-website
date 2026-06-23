@@ -16,11 +16,13 @@ import {
   openingColor,
   Reconstruction,
   resultLabel,
+  sanitizeCoachText,
 } from "@/lib/aoe2";
 import Aoe2BuildingMap from "./aoe2/Aoe2BuildingMap";
 import Aoe2Classifier from "./aoe2/Aoe2Classifier";
 import Aoe2EconomyChart from "./aoe2/Aoe2EconomyChart";
 import Aoe2EfficiencyPanel from "./aoe2/Aoe2EfficiencyPanel";
+import Aoe2Markdown from "./aoe2/Aoe2Markdown";
 import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
 import Aoe2ProducedStrip from "./aoe2/Aoe2ProducedStrip";
 import Aoe2Timeline from "./aoe2/Aoe2Timeline";
@@ -529,33 +531,36 @@ function MatchDetail({
           its own data so an old match (no reconstruction) simply shows the metric tiles + coach. */}
       <Aoe2Viz detail={detail} />
 
-      {detail.coach_analysis && (
-        <div style={{ marginTop: "1.5rem" }}>
-          <div
-            style={{
-              fontSize: "0.55rem",
-              color: "#666",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              marginBottom: "0.5rem",
-            }}
-          >
-            Coach
+      {(() => {
+        const coach = sanitizeCoachText(detail.coach_analysis);
+        if (!coach) return null;
+        return (
+          <div style={{ marginTop: "1.5rem" }}>
+            <div
+              style={{
+                fontSize: "0.55rem",
+                color: "#666",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                marginBottom: "0.5rem",
+              }}
+            >
+              Coach
+            </div>
+            <div
+              style={{
+                fontSize: "0.8rem",
+                color: "#bbb",
+                lineHeight: 1.7,
+                borderLeft: "2px solid var(--accent)",
+                paddingLeft: "0.75rem",
+              }}
+            >
+              <Aoe2Markdown text={coach} />
+            </div>
           </div>
-          <div
-            style={{
-              fontSize: "0.8rem",
-              color: "#bbb",
-              lineHeight: 1.7,
-              whiteSpace: "pre-wrap",
-              borderLeft: "2px solid var(--accent)",
-              paddingLeft: "0.75rem",
-            }}
-          >
-            {detail.coach_analysis}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {embedUrl && (
         <div style={{ marginTop: "0.75rem" }}>
@@ -658,7 +663,10 @@ function Aoe2Viz({ detail }: { detail: Detail }) {
           </VizSection>
 
           <VizSection title="Efficiency">
-            <Aoe2EfficiencyPanel recon={recon!} />
+            <Aoe2EfficiencyPanel
+              recon={recon!}
+              durationS={detail.duration_seconds}
+            />
           </VizSection>
 
           <VizSection title="Mistakes">

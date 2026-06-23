@@ -3,17 +3,32 @@
 import { apmSplitSegments, fmtMmss, Reconstruction } from "@/lib/aoe2";
 
 /**
- * V3 — efficiency readouts (#5 spec): TC idle, longest villager gap, and an APM eco/mil split bar.
- * All exact → solid, no badge. (TC idle is derived from villager-queue gaps — exact, not estimated.)
+ * V3 — efficiency readouts (#5 spec): TC idle (as % of game duration, like CaptureAge), longest
+ * villager gap, and an APM eco/mil split bar. All exact → solid, no badge. (TC idle is derived from
+ * villager-queue gaps — exact, not estimated.)
  */
 export default function Aoe2EfficiencyPanel({
   recon,
+  durationS,
 }: {
   recon: Reconstruction;
+  durationS?: number | null;
 }) {
   const eff = recon.efficiency ?? {};
   const split = apmSplitSegments(eff.apm_eco, eff.apm_military, eff.apm_total);
   const hasApm = (eff.apm_total ?? 0) > 0;
+
+  // Game duration: prefer the explicit prop, fall back to the reconstruction meta.
+  const metaDur =
+    typeof recon.meta?.duration_s === "number"
+      ? (recon.meta.duration_s as number)
+      : null;
+  const dur = durationS ?? metaDur;
+  const tcIdle = eff.tc_idle_s;
+  const tcIdlePct =
+    tcIdle != null && Number.isFinite(tcIdle) && dur && dur > 0
+      ? Math.round((tcIdle / dur) * 100)
+      : null;
 
   return (
     <div>
@@ -25,7 +40,10 @@ export default function Aoe2EfficiencyPanel({
           marginBottom: "0.6rem",
         }}
       >
-        <Tile label="TC idle" value={fmtMmss(eff.tc_idle_s)} />
+        <Tile
+          label="TC idle"
+          value={tcIdlePct != null ? `${tcIdlePct}%` : fmtMmss(tcIdle)}
+        />
         <Tile
           label="Longest vil gap"
           value={fmtMmss(eff.longest_villager_gap_s)}

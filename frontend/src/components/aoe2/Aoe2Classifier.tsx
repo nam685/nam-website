@@ -3,17 +3,17 @@
 import { Classifier } from "@/lib/aoe2";
 
 /**
- * Build-order candidate(s) from the #3 deterministic classifier: 1-3 ranked builds with confidence
- * and matched/missed signals. Honest about low confidence (the classifier itself flags it). All
- * exact (command-derived) → solid, no estimate badge.
+ * Build-order guess from the #3 deterministic classifier: the single top-ranked build with its
+ * confidence and matched/missed signals. Honest about low confidence (the classifier itself flags
+ * it). All exact (command-derived) → solid, no estimate badge.
  */
 export default function Aoe2Classifier({
   classifier,
 }: {
   classifier: Classifier;
 }) {
-  const candidates = classifier.candidates ?? [];
-  if (candidates.length === 0) return null;
+  const top = classifier.candidates?.[0];
+  if (!top) return null;
 
   return (
     <div>
@@ -36,66 +36,54 @@ export default function Aoe2Classifier({
           </span>
         )}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        {candidates.map((c, i) => (
+      <div
+        style={{
+          border: "1px solid #1d232c",
+          borderRadius: "4px",
+          padding: "0.5rem 0.6rem",
+          background: "#0f1419",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--accent)" }}>
+            {top.name}
+          </span>
+          <span style={{ fontSize: "0.6rem", color: "#777" }}>
+            {Math.round((top.confidence ?? 0) * 100)}%
+          </span>
+        </div>
+        {(top.matched_signals?.length ?? 0) > 0 && (
           <div
-            key={c.build_id}
             style={{
-              border: "1px solid #1d232c",
-              borderRadius: "4px",
-              padding: "0.5rem 0.6rem",
-              background: i === 0 ? "#0f1419" : "transparent",
+              marginTop: "0.25rem",
+              display: "flex",
+              gap: "0.3rem",
+              flexWrap: "wrap",
             }}
           >
-            <div
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <span
-                style={{
-                  fontSize: "0.85rem",
-                  color: i === 0 ? "var(--accent)" : "#bbb",
-                }}
-              >
-                {c.name}
+            {top.matched_signals!.map((s, si) => (
+              <span key={si} style={sigStyle("#0e3a2e", "#34d399")}>
+                ✓ {s}
               </span>
-              <span style={{ fontSize: "0.6rem", color: "#777" }}>
-                {Math.round((c.confidence ?? 0) * 100)}%
-              </span>
-            </div>
-            {(c.matched_signals?.length ?? 0) > 0 && (
-              <div
-                style={{
-                  marginTop: "0.25rem",
-                  display: "flex",
-                  gap: "0.3rem",
-                  flexWrap: "wrap",
-                }}
-              >
-                {c.matched_signals!.map((s, si) => (
-                  <span key={si} style={sigStyle("#0e3a2e", "#34d399")}>
-                    ✓ {s}
-                  </span>
-                ))}
-              </div>
-            )}
-            {i === 0 && (c.missed_signals?.length ?? 0) > 0 && (
-              <div
-                style={{
-                  marginTop: "0.25rem",
-                  display: "flex",
-                  gap: "0.3rem",
-                  flexWrap: "wrap",
-                }}
-              >
-                {c.missed_signals!.slice(0, 4).map((s, si) => (
-                  <span key={si} style={sigStyle("#2a2118", "#c08a4a")}>
-                    ✗ {s}
-                  </span>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
-        ))}
+        )}
+        {(top.missed_signals?.length ?? 0) > 0 && (
+          <div
+            style={{
+              marginTop: "0.25rem",
+              display: "flex",
+              gap: "0.3rem",
+              flexWrap: "wrap",
+            }}
+          >
+            {top.missed_signals!.slice(0, 4).map((s, si) => (
+              <span key={si} style={sigStyle("#2a2118", "#c08a4a")}>
+                ✗ {s}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
