@@ -5,6 +5,7 @@ import {
   buildResourceBalanceChart,
   buildWorkerAllocChart,
   niceTicks,
+  lightenHex,
   type BuildSummary,
   type ResourceBalance,
   type WorkerAllocation,
@@ -625,6 +626,26 @@ describe("economy charts", () => {
     expect(c.xMin).toBe(0);
     expect(c.xMax).toBe(600); // x is time, not villager count
     expect(c.maxStackTotal).toBe(800);
+    expect(c.points[1].floating).toEqual({}); // no floating key → empty
+  });
+
+  it("buildResourceBalanceChart folds floating into the stacked total (two-tone)", () => {
+    const rb: ResourceBalance = {
+      series: [
+        { vils: 3, t_s: 0, spent: {}, floating: {} },
+        { vils: 10, t_s: 600, spent: { wood: 300 }, floating: { wood: 200 } },
+      ],
+    };
+    const c = buildResourceBalanceChart(rb)!;
+    expect(c.resources).toEqual(["wood"]);
+    expect(c.maxStackTotal).toBe(500); // spent 300 + floating 200 stack
+    expect(c.points[1].floating.wood).toBe(200);
+  });
+
+  it("lightenHex mixes a color toward white (bright floating shade)", () => {
+    expect(lightenHex("#000000", 0.5)).toBe("#808080");
+    expect(lightenHex("#3f9e54", 0)).toBe("#3f9e54");
+    expect(lightenHex("#ffffff", 0.5)).toBe("#ffffff");
   });
 
   it("both builders return null without a series (old matches degrade gracefully)", () => {
