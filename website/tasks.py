@@ -32,15 +32,20 @@ def _run_coach(salient_log, metrics, result, bundle=None):
     try:
         model = getattr(dj_settings, "AOE2_COACH_MODEL", "opus")
         claude_bin = getattr(dj_settings, "AOE2_CLAUDE_BIN", "claude")
-        kwargs = {}
+        # Reasoning effort for the agentic coach. Default "high" (NOT xhigh): xhigh's huge per-run
+        # thinking-token load makes the Max sub silently downgrade opus->haiku under rate limits.
+        effort = getattr(dj_settings, "AOE2_COACH_EFFORT", "high")
+        kwargs = {"effort": effort}
         if bundle is not None:
-            kwargs = {
-                "reconstruction": bundle.get("recon_obj") or bundle.get("reconstruction"),
-                "candidates": bundle.get("candidates"),
-                "economy": bundle.get("economy"),
-                "mistakes": bundle.get("mistakes"),
-                "map_pngs": bundle.get("map_png_paths"),
-            }
+            kwargs.update(
+                {
+                    "reconstruction": bundle.get("recon_obj") or bundle.get("reconstruction"),
+                    "candidates": bundle.get("candidates"),
+                    "economy": bundle.get("economy"),
+                    "mistakes": bundle.get("mistakes"),
+                    "map_pngs": bundle.get("map_png_paths"),
+                }
+            )
         out = coach(
             metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin, **kwargs
         )
