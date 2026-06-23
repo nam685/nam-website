@@ -167,7 +167,13 @@ export default function PlaysClient({
 
       {/* Chess content is re-constrained to a comfortable reading column (the
           full-width selector above stays 100% wide for both games). */}
-      <div style={section === "chess" ? { maxWidth: "72rem" } : undefined}>
+      <div
+        style={
+          section === "chess"
+            ? { maxWidth: "72rem", marginInline: "auto" }
+            : undefined
+        }
+      >
         {/* Secondary bar: Explorer | Play (only when chess is active) */}
         {section === "chess" && (
           <div
