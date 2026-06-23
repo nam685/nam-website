@@ -32,54 +32,69 @@ export default function Aoe2ProductionChart({
 
   const { times, series, yMax, durationS: dur } = chart;
 
-  // ── Negative-band tech LANES: eco / military / university, each on its own row
-  //    (like the original Technology timeline) so dense clusters don't collide on a
-  //    single line. Built first so geometry below can size to the number of lanes. ──
-  const techs = recon.techs ?? {};
-  const LANE_DEFS = [
-    { key: "eco", name: "Eco", color: "#22c55e" },
-    { key: "military", name: "Military", color: "#e04848" },
-    { key: "university", name: "University", color: "#a855f7" },
-  ] as const;
-
   // ── Geometry: a wide viewBox that scales to 100% of the detail pane. ───────
   const W = 1100;
   const PAD = { top: 26, right: 18, bottom: 0, left: 40 };
   const AREA_H = 300; // stacked-area band (above the axis) — tall so thin army
   //   bands (e.g. 6 scouts) read clearly against the much larger villager mass.
   const TIME_BAND = 18; // m:ss tick labels, in their own band below the axis
-  const LANE_H = 28; // height of each below-axis tech lane
+  const LANE_H = 26; // height of each below-axis tech row
   const EVENT_ICON = 22;
+  const plotW = W - PAD.left - PAD.right;
+  const xOf = (t: number) => PAD.left + (dur > 0 ? (t / dur) * plotW : 0);
 
-  // De-dupe per (name, ~time bucket) defensively, then bucket into lanes by category.
-  const BUCKET_S = Math.max(15, Math.round(dur / 60));
-  const dedupe = (rows: { name: string; t_s: number }[]) => {
-    const seen = new Set<string>();
-    return rows
-      .filter((e) => typeof e.t_s === "number" && e.t_s >= 0 && e.t_s <= dur)
-      .sort((a, b) => a.t_s - b.t_s)
-      .filter((e) => {
-        const key = `${e.name}@${Math.round(e.t_s / BUCKET_S)}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+  // ── Negative band: UPGRADES / TECHS over time (the former Technology tab) drawn as
+  //    real icons. Units already are the stacked areas above, so the negative band
+  //    adds the *other* dimension — what was researched, and when. Rows carry NO
+  //    category meaning: techs are packed greedily into as many rows as needed so two
+  //    icons never overlap horizontally (later icon spills to the next free row). ──
+  const techs = recon.techs ?? {};
+  const TECH_COLOR: Record<string, string> = {
+    eco: "#22c55e",
+    military: "#e04848",
+    university: "#a855f7",
   };
-  const laneData = LANE_DEFS.map((l) => ({
-    ...l,
-    markers: dedupe(
-      (techs[l.key as keyof typeof techs] as { name: string; t_s: number }[]) ??
-        [],
-    ),
-  })).filter((l) => l.markers.length > 0);
+  const allTechs = (
+    [
+      ["eco", techs.eco],
+      ["military", techs.military],
+      ["university", techs.university],
+    ] as const
+  )
+    .flatMap(([cat, rows]) =>
+      (rows ?? []).map((e) => ({ name: e.name, t_s: e.t_s, cat })),
+    )
+    .filter((e) => typeof e.t_s === "number" && e.t_s >= 0 && e.t_s <= dur)
+    .sort((a, b) => a.t_s - b.t_s);
 
-  const ICON_ROW_H = laneData.length * LANE_H + 6; // negative band sized to lane count
+  // De-dupe exact (name, ~time bucket) duplicates, then greedily pack into rows so no
+  // two icons in the same row are closer than EVENT_ICON px (a small gap is enforced).
+  const BUCKET_S = Math.max(15, Math.round(dur / 60));
+  const seenTech = new Set<string>();
+  const GAP = EVENT_ICON + 2;
+  const rowLastX: number[] = []; // right-edge x of the last icon placed in each row
+  const techRows: { name: string; t_s: number; cat: string; row: number }[] =
+    [];
+  for (const e of allTechs) {
+    const key = `${e.name}@${Math.round(e.t_s / BUCKET_S)}`;
+    if (seenTech.has(key)) continue;
+    seenTech.add(key);
+    const cx = xOf(e.t_s);
+    let row = rowLastX.findIndex((lastX) => cx - lastX >= GAP);
+    if (row === -1) {
+      row = rowLastX.length;
+      rowLastX.push(cx);
+    } else {
+      rowLastX[row] = cx;
+    }
+    techRows.push({ ...e, row });
+  }
+  const nRows = Math.max(1, rowLastX.length);
+
+  const ICON_ROW_H = nRows * LANE_H + 6; // negative band sized to the packed row count
   const H = PAD.top + AREA_H + TIME_BAND + ICON_ROW_H + 14;
 
   const axisY = PAD.top + AREA_H; // y of the zero line (the x-axis)
-  const plotW = W - PAD.left - PAD.right;
-
-  const xOf = (t: number) => PAD.left + (dur > 0 ? (t / dur) * plotW : 0);
   const yOf = (v: number) => axisY - (v / yMax) * AREA_H; // value → y above axis
 
   // Stacked area bands (accumulate from the bottom).
@@ -241,73 +256,61 @@ export default function Aoe2ProductionChart({
               </g>
             ))}
 
-            {/* Negative band: upgrade/tech research LANES (the former Technology
-                timeline) — eco / military / university, one row each. */}
-            {laneData.map((lane, li) => {
-              const cy = lanesTopY + li * LANE_H + LANE_H / 2;
-              return (
-                <g key={lane.key}>
-                  <text
-                    x={PAD.left - 6}
-                    y={cy + 3}
-                    textAnchor="end"
-                    style={{ ...tickText, fill: lane.color }}
-                  >
-                    {lane.name}
-                  </text>
-                  <line
-                    x1={PAD.left}
-                    y1={cy}
-                    x2={W - PAD.right}
-                    y2={cy}
-                    stroke="#16191f"
-                    strokeWidth={1}
+            {/* Negative band: upgrade/tech research icons over time (the former
+                Technology timeline). Rows are an overlap-avoidance device only — they
+                carry no category meaning; each icon's hue still encodes its category
+                (eco green / military red / university violet). */}
+            <text
+              x={PAD.left - 6}
+              y={lanesTopY + LANE_H / 2 + 3}
+              textAnchor="end"
+              style={tickText}
+            >
+              ⚒
+            </text>
+            {techRows.map((m, i) => {
+              const cy = lanesTopY + m.row * LANE_H + LANE_H / 2;
+              const cx = xOf(m.t_s);
+              const url = aoe2IconUrl(m.name);
+              return url ? (
+                <image
+                  key={`${m.name}-${i}`}
+                  href={url}
+                  x={cx - EVENT_ICON / 2}
+                  y={cy - EVENT_ICON / 2}
+                  width={EVENT_ICON}
+                  height={EVENT_ICON}
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <title>
+                    {m.name} — {fmtMmss(m.t_s)}
+                  </title>
+                </image>
+              ) : (
+                // Unknown name → "?" chip (anticipates future content), never a bare dot.
+                <g key={`${m.name}-${i}`}>
+                  <rect
+                    x={cx - EVENT_ICON / 2}
+                    y={cy - EVENT_ICON / 2}
+                    width={EVENT_ICON}
+                    height={EVENT_ICON}
+                    rx={2}
+                    fill="#161b22"
+                    stroke="#232a33"
                   />
-                  {lane.markers.map((m, mi) => {
-                    const url = aoe2IconUrl(m.name);
-                    const cx = xOf(m.t_s);
-                    return url ? (
-                      <image
-                        key={`${m.name}-${mi}`}
-                        href={url}
-                        x={cx - EVENT_ICON / 2}
-                        y={cy - EVENT_ICON / 2}
-                        width={EVENT_ICON}
-                        height={EVENT_ICON}
-                        preserveAspectRatio="xMidYMid meet"
-                      >
-                        <title>
-                          {m.name} — {fmtMmss(m.t_s)}
-                        </title>
-                      </image>
-                    ) : (
-                      // Unknown name → "?" chip (anticipates future content), never a bare dot.
-                      <g key={`${m.name}-${mi}`}>
-                        <rect
-                          x={cx - EVENT_ICON / 2}
-                          y={cy - EVENT_ICON / 2}
-                          width={EVENT_ICON}
-                          height={EVENT_ICON}
-                          rx={2}
-                          fill="#161b22"
-                          stroke="#232a33"
-                        />
-                        <text
-                          x={cx}
-                          y={cy + 4}
-                          textAnchor="middle"
-                          fontSize={13}
-                          fontWeight={700}
-                          fill={lane.color}
-                        >
-                          ?
-                        </text>
-                        <title>
-                          {m.name} — {fmtMmss(m.t_s)}
-                        </title>
-                      </g>
-                    );
-                  })}
+                  <text
+                    x={cx}
+                    y={cy + 4}
+                    textAnchor="middle"
+                    fontSize={13}
+                    fontWeight={700}
+                    fill={TECH_COLOR[m.cat] ?? "#8a8f98"}
+                  >
+                    ?
+                  </text>
+                  <title>
+                    {m.name} — {fmtMmss(m.t_s)}
+                  </title>
                 </g>
               );
             })}
