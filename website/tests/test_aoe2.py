@@ -489,6 +489,74 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
     assert m.metrics.get("opening") == ""
 
 
+@pytest.mark.django_db
+def test_analyze_match_run_coach_false_skips_coach(settings, monkeypatch):
+    """run_coach=False → deterministic preprocessing is saved (done, reconstruction/economy populated)
+    but the LLM coach is NEVER invoked (preprocess-now / coach-lazy)."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr(
+        "website.tasks.build_bundle",
+        lambda *_a, **_kw: {"reconstruction": {"meta": {"map": "Arabia"}}, "economy": {"estimate": True}},
+    )
+    called = []
+    monkeypatch.setattr("website.tasks.coach", lambda *_a, **_kw: called.append(1))
+
+    m = _make_match_with_dummy_file("preprocess-only-hash")
+    analyze_match(m.id, run_coach=False)
+    m.refresh_from_db()
+
+    assert called == []  # coach was never invoked
+    assert m.analysis_status == "done"
+    assert m.coach_analysis == "" and m.coach_model == ""
+    assert m.reconstruction == {"meta": {"map": "Arabia"}}
+    assert m.economy == {"estimate": True}
+
+
+@pytest.mark.django_db
+def test_coach_match_saves_on_success_and_guards_empty(settings, monkeypatch):
+    """coach_match fills the coach on success and never wipes an existing analysis on an empty
+    (e.g. session-limited) result."""
+    from website.tasks import analyze_match, coach_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr("website.tasks.build_bundle", lambda *_a, **_kw: {"reconstruction": {}})
+
+    m = _make_match_with_dummy_file("coach-match-hash")
+    analyze_match(m.id, run_coach=False)  # preprocess only, no coach yet
+
+    # success → fills the coach
+    monkeypatch.setattr(
+        "website.tasks.coach",
+        lambda *_a, **_kw: CoachOutput(
+            raw_text="Good macro.", opening_tag="Scouts", model_used="claude-opus-4-8", tier="agentic"
+        ),
+    )
+    coach_match(m.id)
+    m.refresh_from_db()
+    assert m.coach_analysis == "Good macro." and m.coach_model == "claude-opus-4-8"
+
+    # empty (rate-limited) → must NOT overwrite the existing analysis
+    monkeypatch.setattr(
+        "website.tasks.coach",
+        lambda *_a, **_kw: CoachOutput(raw_text="", opening_tag="", model_used="", tier=""),
+    )
+    coach_match(m.id)
+    m.refresh_from_db()
+    assert m.coach_analysis == "Good macro."  # unchanged
+
+
 def test_run_coach_wrapper_success(settings):
     """The prod wrapper reads settings, calls aoe2coach.coach(), returns (text, model, opening, tier).
 
@@ -1234,7 +1302,7 @@ def test_upload_sets_played_at_from_filename(client, auth_headers, settings):
 
     # We monkeypatch analyze_match.delay to prevent task execution.
     with patch("website.views.aoe2.analyze_match") as mock_task:
-        mock_task.delay = lambda _id: None
+        mock_task.delay = lambda _id, **_kw: None
         resp = client.post("/api/aoe2/upload/", {"rec": f}, **auth_headers)
 
     assert resp.status_code == 201
@@ -1255,7 +1323,7 @@ def test_upload_played_at_none_for_bare_filename(client, auth_headers):
     f.name = "rec.aoe2record"
 
     with patch("website.views.aoe2.analyze_match") as mock_task:
-        mock_task.delay = lambda _id: None
+        mock_task.delay = lambda _id, **_kw: None
         resp = client.post("/api/aoe2/upload/", {"rec": f}, **auth_headers)
 
     assert resp.status_code == 201
