@@ -5,13 +5,25 @@ import { API } from "@/lib/api";
 import { store } from "@/lib/auth";
 import {
   Aoe2MatchSummary,
+  Classifier,
   clipEmbedUrl,
+  Economy,
   formatDuration,
   formatUptime,
   gameSharePath,
+  MapGeometry,
+  Mistake,
   openingColor,
+  Reconstruction,
   resultLabel,
 } from "@/lib/aoe2";
+import Aoe2BuildingMap from "./aoe2/Aoe2BuildingMap";
+import Aoe2Classifier from "./aoe2/Aoe2Classifier";
+import Aoe2EconomyChart from "./aoe2/Aoe2EconomyChart";
+import Aoe2EfficiencyPanel from "./aoe2/Aoe2EfficiencyPanel";
+import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
+import Aoe2ProducedStrip from "./aoe2/Aoe2ProducedStrip";
+import Aoe2Timeline from "./aoe2/Aoe2Timeline";
 
 const ACCENT = "var(--accent)";
 
@@ -28,6 +40,14 @@ type Detail = Aoe2MatchSummary & {
   metrics: Record<string, unknown>;
   timeline: Record<string, unknown>;
   coach_analysis: string;
+  coach_tier?: string;
+  // aoe2coach v2 rich data (optional → old matches degrade to the flat metric tiles).
+  reconstruction?: Reconstruction;
+  map_geometry?: MapGeometry;
+  classifier?: Classifier;
+  mistakes?: Mistake[];
+  economy?: Economy;
+  map_images?: string[];
   clip_title: string;
   clip_note: string;
   clip_start_seconds: number | null;
@@ -505,6 +525,10 @@ function MatchDetail({
         )}
       </div>
 
+      {/* aoe2coach v2 visualization panels (#5). Lazy-mounted with the selected match; each guards
+          its own data so an old match (no reconstruction) simply shows the metric tiles + coach. */}
+      <Aoe2Viz detail={detail} />
+
       {detail.coach_analysis && (
         <div style={{ marginTop: "1.5rem" }}>
           <div
@@ -569,6 +593,86 @@ function MatchDetail({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function VizSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginTop: "1.25rem", animation: "fadeUp 0.4s ease both" }}>
+      <div
+        style={{
+          fontSize: "0.55rem",
+          color: "#666",
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          marginBottom: "0.5rem",
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Aoe2Viz({ detail }: { detail: Detail }) {
+  const recon = detail.reconstruction;
+  const geo = detail.map_geometry;
+  const hasRecon = !!recon && Object.keys(recon).length > 0;
+  const hasGeo =
+    !!geo &&
+    ((geo.me?.buildings?.length ?? 0) > 0 ||
+      (geo.opp?.buildings?.length ?? 0) > 0 ||
+      !!geo.me?.base_centroid);
+  const candidates = detail.classifier?.candidates ?? [];
+
+  // Nothing rich to show (an old, pre-v2 match) → render nothing; the metric tiles + coach stand.
+  if (!hasRecon && !hasGeo && candidates.length === 0) return null;
+
+  return (
+    <div>
+      {hasGeo && (
+        <VizSection title="Strategic map">
+          <Aoe2BuildingMap geometry={geo!} />
+        </VizSection>
+      )}
+
+      {candidates.length > 0 && (
+        <VizSection title="Build order">
+          <Aoe2Classifier classifier={detail.classifier!} />
+        </VizSection>
+      )}
+
+      {hasRecon && (
+        <>
+          <VizSection title="Timeline">
+            <Aoe2Timeline recon={recon!} />
+          </VizSection>
+
+          <VizSection title="Efficiency">
+            <Aoe2EfficiencyPanel recon={recon!} />
+          </VizSection>
+
+          <VizSection title="Mistakes">
+            <Aoe2Mistakes mistakes={detail.mistakes ?? []} />
+          </VizSection>
+
+          <VizSection title="Economy">
+            <Aoe2EconomyChart economy={detail.economy} />
+          </VizSection>
+
+          <VizSection title="Produced counts">
+            <Aoe2ProducedStrip recon={recon!} />
+          </VizSection>
+        </>
       )}
     </div>
   );

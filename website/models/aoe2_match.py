@@ -33,8 +33,25 @@ class Aoe2Match(models.Model):
     timeline = models.JSONField(default=dict, blank=True)
     metrics = models.JSONField(default=dict, blank=True)
 
+    # --- aoe2coach v2 rich data (sub-projects #1/#2/#3/#5/#6) ---
+    # Full #1 Reconstruction dict (meta/ages/techs/production/counts/spatial/population/combat/
+    # efficiency). The frontend viz prefers this when present and falls back to flat `metrics`.
+    reconstruction = models.JSONField(default=dict, blank=True)
+    # Strategic-map geometry for the headline minimap: the raw spatial coords + map_dim + engagements
+    # the frontend needs to draw the schematic (a slim projection of `reconstruction`).
+    map_geometry = models.JSONField(default=dict, blank=True)
+    # #3 deterministic build-order classifier output: {candidates, is_confident, unknown, notes}.
+    classifier = models.JSONField(default=dict, blank=True)
+    # #6 deterministically flagged mistakes (list[Flagged] enriched with source.study deep-links).
+    mistakes = models.JSONField(default=list, blank=True)
+    # #2 Tier-B economy ESTIMATE block (may self-suppress collected totals → qualitative only).
+    economy = models.JSONField(default=dict, blank=True)
+    # Rendered strategic-map PNG media paths (relative to MEDIA_URL): overall first, then engagements.
+    map_images = models.JSONField(default=list, blank=True)
+
     coach_analysis = models.TextField(blank=True, default="")
     coach_model = models.CharField(max_length=64, blank=True, default="")
+    coach_tier = models.CharField(max_length=24, blank=True, default="")
     analyzed_at = models.DateTimeField(null=True, blank=True)
 
     analysis_status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
