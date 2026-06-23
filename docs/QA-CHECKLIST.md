@@ -208,6 +208,16 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] A match analyzed before the v2 upgrade (no reconstruction) still renders cleanly — coach text + basics, no broken/empty panels, no console errors.
 - [ ] Raw `/api/aoe2/<id>/` response includes `reconstruction` (with `efficiency.precap_window_s`), `map_geometry`, `classifier`, `mistakes`, `economy` (with `worker_allocation` + `resource_balance`), `map_images`, and `coach_tier`; still no player names or chat anywhere.
 
+### AoE 2 — build-order library (`/plays/aoe2/builds`)
+
+- [ ] `/plays/aoe2/builds` loads without auth and lists all eleven builds grouped by family (Scouts, Archers, Men-at-Arms, Drush, Knights, Fast Castle, Drush → Fast Castle, Trash); each card shows name + family + one-line summary and links to its learn page.
+- [ ] A build learn page (e.g. `/plays/aoe2/builds/archers-1-range`) shows the name, family badge, recommended civs, summary, and source (Hera guide + page).
+- [ ] The learn page's phase-laned timeline graphic renders Dark Age → Feudal → Castle (→ Imperial) lanes; Feudal/Castle/Imperial lanes show the age target (arrival time / vils at click); each step renders a real AoE2 DE icon where its task maps to one, with a clean monogram glyph fallback otherwise.
+- [ ] The ordered step list (phase, villager count, task) and the "what's next" transitions both render.
+- [ ] An unknown build id (e.g. `/plays/aoe2/builds/not-a-real-build`) returns a 404 page, and `GET /api/aoe2/builds/not-a-real-build/` returns HTTP 404 (not 500).
+- [ ] On the Coach tab, the top build-order guess is a link that navigates to `/plays/aoe2/builds/<build_id>` for the matching learn page.
+- [ ] The build-library pages use the cyan `/plays` accent and the plays page background (no accent flash on uncached load).
+
 ## Performance
 
 - [ ] Pages load within 3 seconds on first visit

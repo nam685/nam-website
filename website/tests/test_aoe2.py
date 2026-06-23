@@ -1411,3 +1411,49 @@ def test_enrich_ladder_lenient_civ_match(settings):
 
     m.refresh_from_db()
     assert m.relic_match_id == 99002, "Should match by time proximity despite civ mismatch"
+
+
+# ---------------------------------------------------------------------------
+# Build-order reference library (public endpoints)
+# ---------------------------------------------------------------------------
+
+
+def test_builds_list_public(client):
+    """GET /api/aoe2/builds/ is public and returns every build with id/name/family/summary."""
+    resp = client.get("/api/aoe2/builds/")
+    assert resp.status_code == 200
+    builds = resp.json()["builds"]
+    # 11 curated Hera builds ship in the aoe2coach package
+    assert len(builds) == 11
+    ids = {b["id"] for b in builds}
+    assert "archers-1-range" in ids
+    assert "knight-rush" in ids
+    for b in builds:
+        assert b["id"] and b["name"] and b["family"]
+        assert "summary" in b
+
+
+def test_build_detail_known_id(client):
+    """GET /api/aoe2/builds/<id>/ returns the full build dict for a known id."""
+    resp = client.get("/api/aoe2/builds/archers-1-range/")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == "archers-1-range"
+    assert data["family"] == "archers"
+    assert data["name"]
+    assert "steps" in data and len(data["steps"]) > 0
+    assert "age_targets" in data
+    assert "whats_next" in data
+    assert "source" in data and data["source"]["guide"]
+
+
+def test_build_detail_unknown_id_404(client):
+    """An unknown build id returns 404 (not a 500)."""
+    resp = client.get("/api/aoe2/builds/not-a-real-build/")
+    assert resp.status_code == 404
+
+
+def test_build_detail_path_traversal_404(client):
+    """A path-traversal-ish slug is rejected as 404, never a server error."""
+    resp = client.get("/api/aoe2/builds/_index/")
+    assert resp.status_code == 404

@@ -13,6 +13,185 @@ export type Aoe2MatchSummary = {
   clip_url: string;
 };
 
+// ---------------------------------------------------------------------------
+// Build-order reference library (public /plays/aoe2/builds) — types + helpers
+// ---------------------------------------------------------------------------
+
+export type BuildPhase = "dark_age" | "feudal" | "castle" | "imperial";
+
+export type BuildStep = {
+  phase: BuildPhase;
+  vils?: number;
+  task: string;
+  pop?: number;
+};
+
+export type BuildAgeTarget = {
+  arrival_s: number | null;
+  vils_at_click?: number | null;
+};
+
+export type BuildSummary = {
+  id: string;
+  name: string;
+  family: string;
+  summary: string;
+};
+
+export type BuildDetail = {
+  id: string;
+  name: string;
+  family: string;
+  source: { guide: string; page: number | null };
+  recommended_civs: string[];
+  summary: string;
+  age_targets: {
+    feudal?: BuildAgeTarget;
+    castle?: BuildAgeTarget;
+    imperial?: BuildAgeTarget;
+  };
+  eco_split?: Record<string, Record<string, number | null>>;
+  steps: BuildStep[];
+  whats_next: string[];
+  signature?: Record<string, unknown>;
+};
+
+// Family slug → human label + ordering for the library index. Slugs come straight from the
+// aoe2coach build YAMLs (scouts/archers/maa/drush/knights/fast_castle/trash/drush_fc).
+export const BUILD_FAMILY_LABELS: Record<string, string> = {
+  scouts: "Scouts",
+  archers: "Archers",
+  maa: "Men-at-Arms",
+  drush: "Drush",
+  knights: "Knights",
+  fast_castle: "Fast Castle",
+  drush_fc: "Drush → Fast Castle",
+  trash: "Trash",
+};
+
+const BUILD_FAMILY_ORDER = [
+  "scouts",
+  "archers",
+  "maa",
+  "drush",
+  "knights",
+  "fast_castle",
+  "drush_fc",
+  "trash",
+];
+
+export function buildFamilyLabel(family: string): string {
+  return BUILD_FAMILY_LABELS[family] ?? family;
+}
+
+export type BuildFamilyGroup = {
+  family: string;
+  label: string;
+  builds: BuildSummary[];
+};
+
+/**
+ * Group the flat build list by family, in the canonical family order (unknown families sorted
+ * alphabetically after the known ones). Builds within a family keep their incoming order.
+ */
+export function groupBuildsByFamily(
+  builds: BuildSummary[],
+): BuildFamilyGroup[] {
+  const byFamily = new Map<string, BuildSummary[]>();
+  for (const b of builds) {
+    const arr = byFamily.get(b.family) ?? [];
+    arr.push(b);
+    byFamily.set(b.family, arr);
+  }
+  const families = [...byFamily.keys()].sort((a, b) => {
+    const ia = BUILD_FAMILY_ORDER.indexOf(a);
+    const ib = BUILD_FAMILY_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  return families.map((family) => ({
+    family,
+    label: buildFamilyLabel(family),
+    builds: byFamily.get(family) ?? [],
+  }));
+}
+
+export const BUILD_PHASE_LABELS: Record<BuildPhase, string> = {
+  dark_age: "Dark Age",
+  feudal: "Feudal Age",
+  castle: "Castle Age",
+  imperial: "Imperial Age",
+};
+
+const BUILD_PHASE_ORDER: BuildPhase[] = [
+  "dark_age",
+  "feudal",
+  "castle",
+  "imperial",
+];
+
+export type BuildLane = {
+  phase: BuildPhase;
+  label: string;
+  steps: BuildStep[];
+};
+
+/** Split steps into ordered phase lanes for the timeline graphic (empty phases dropped). */
+export function buildPhaseLanes(steps: BuildStep[]): BuildLane[] {
+  return BUILD_PHASE_ORDER.map((phase) => ({
+    phase,
+    label: BUILD_PHASE_LABELS[phase],
+    steps: steps.filter((s) => s.phase === phase),
+  })).filter((lane) => lane.steps.length > 0);
+}
+
+// Keyword → aoe2coach icon NAME (the key into AOE2_ICON_BY_NAME). Ordered longest/most-specific
+// first so e.g. "cavalry archer" wins over "archer", "scout cavalry" over "cavalry". The icon
+// component falls back to a monogram glyph for any task with no keyword hit.
+const STEP_ICON_RULES: { re: RegExp; icon: string }[] = [
+  // Buildings
+  { re: /archery range/i, icon: "Archery Range" },
+  { re: /blacksmith/i, icon: "Blacksmith" },
+  { re: /monaster|monk/i, icon: "Monastery" },
+  { re: /market/i, icon: "Market" },
+  { re: /\bstable/i, icon: "Stable" },
+  { re: /town cent|\btc\b|2nd tc|second tc|third tc/i, icon: "Town Center" },
+  // Units (specific → general)
+  { re: /cavalry archer|cav archer/i, icon: "Cavalry Archer" },
+  { re: /\bskirm/i, icon: "Skirmisher" },
+  { re: /\bknight/i, icon: "Knight" },
+  { re: /scout cavalry|\bscout/i, icon: "Light Cavalry" },
+  { re: /man-at-arms|man at arms|\bmaa\b/i, icon: "Militia" },
+  { re: /\bmilitia/i, icon: "Militia" },
+  { re: /crossbow/i, icon: "Crossbowman" },
+  { re: /\barcher/i, icon: "Archer" },
+  { re: /\bspear/i, icon: "Spearman" },
+  // Techs / ages
+  { re: /fletching/i, icon: "Fletching" },
+  { re: /\bloom\b/i, icon: "Loom" },
+  { re: /bloodlines|forging|armor|barding/i, icon: "Blacksmith" },
+  { re: /to feudal|click up|click to feudal|feudal age/i, icon: "Feudal Age" },
+  { re: /to castle|castle age|fast castle|boom/i, icon: "Castle Age" },
+  { re: /imperial/i, icon: "Imperial Age" },
+  // Eco fallbacks
+  { re: /villager|sheep|wood|gold|farm|boar|lure|eco/i, icon: "Villager" },
+];
+
+/**
+ * Map a build step's task text to the aoe2coach icon NAME to render (pass to AOE2_ICON_BY_NAME /
+ * aoe2IconUrl). Returns null when nothing recognisable matches → the UI shows the monogram glyph.
+ * Pure + deterministic — first matching rule wins (rules are ordered specific→general).
+ */
+export function stepIconName(task: string): string | null {
+  if (!task) return null;
+  for (const rule of STEP_ICON_RULES) {
+    if (rule.re.test(task)) return rule.icon;
+  }
+  return null;
+}
+
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const m = Math.floor(s / 60);

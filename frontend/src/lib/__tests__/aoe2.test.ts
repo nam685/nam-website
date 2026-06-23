@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   apmSplitSegments,
   buildProductionSeries,
+  type BuildSummary,
+  buildFamilyLabel,
+  buildPhaseLanes,
   clipEmbedUrl,
   diamondCorners,
   fitMapViewBox,
@@ -9,6 +12,7 @@ import {
   formatDuration,
   formatUptime,
   gameSharePath,
+  groupBuildsByFamily,
   mapCoordToDiamond,
   mapCoordToSvg,
   mistakeTier,
@@ -17,6 +21,7 @@ import {
   parseMarkdown,
   resultLabel,
   sanitizeCoachText,
+  stepIconName,
   stripCoachScaffolding,
   tcIdlePct,
   tierStroke,
@@ -490,5 +495,84 @@ describe("buildProductionSeries", () => {
     );
     expect(chart!.durationS).toBe(200);
     expect(chart!.times[chart!.times.length - 1]).toBe(200);
+describe("build-order library helpers", () => {
+  const mk = (id: string, family: string): BuildSummary => ({
+    id,
+    name: id,
+    family,
+    summary: "s",
+  });
+
+  it("labels known families and passes through unknown", () => {
+    expect(buildFamilyLabel("scouts")).toBe("Scouts");
+    expect(buildFamilyLabel("fast_castle")).toBe("Fast Castle");
+    expect(buildFamilyLabel("mystery")).toBe("mystery");
+  });
+
+  it("groups builds by family in canonical order", () => {
+    const builds = [
+      mk("knight-rush", "knights"),
+      mk("archers-1-range", "archers"),
+      mk("scout-rush", "scouts"),
+      mk("korean", "trash"),
+    ];
+    const groups = groupBuildsByFamily(builds);
+    expect(groups.map((g) => g.family)).toEqual([
+      "scouts",
+      "archers",
+      "knights",
+      "trash",
+    ]);
+    expect(groups[0].label).toBe("Scouts");
+    expect(groups[1].builds[0].id).toBe("archers-1-range");
+  });
+
+  it("sorts unknown families alphabetically after known ones", () => {
+    const groups = groupBuildsByFamily([
+      mk("z", "zeta"),
+      mk("a", "alpha"),
+      mk("s", "scouts"),
+    ]);
+    expect(groups.map((g) => g.family)).toEqual(["scouts", "alpha", "zeta"]);
+  });
+
+  it("splits steps into ordered non-empty phase lanes", () => {
+    const lanes = buildPhaseLanes([
+      { phase: "feudal", task: "Archery Range" },
+      { phase: "dark_age", task: "6 to sheep", vils: 6 },
+      { phase: "castle", task: "Crossbow" },
+    ]);
+    expect(lanes.map((l) => l.phase)).toEqual(["dark_age", "feudal", "castle"]);
+    expect(lanes[0].label).toBe("Dark Age");
+    expect(lanes[0].steps[0].vils).toBe(6);
+  });
+
+  it("drops phases with no steps", () => {
+    const lanes = buildPhaseLanes([{ phase: "feudal", task: "x" }]);
+    expect(lanes).toHaveLength(1);
+    expect(lanes[0].phase).toBe("feudal");
+  });
+
+  it("maps step tasks to icon names (specific wins over general)", () => {
+    expect(stepIconName("Archery Range, pump archers, Fletching")).toBe(
+      "Archery Range",
+    );
+    expect(stepIconName("Build a Stable, start Scout Cavalry")).toBe("Stable");
+    expect(stepIconName("start Scout Cavalry")).toBe("Light Cavalry");
+    expect(stepIconName("transition to cavalry archers")).toBe(
+      "Cavalry Archer",
+    );
+    expect(stepIconName("Stable(s), pump Knights, bloodlines")).toBe("Stable");
+    expect(stepIconName("pump Knights, bloodlines")).toBe("Knight");
+    expect(stepIconName("research Man-at-Arms immediately")).toBe("Militia");
+    expect(stepIconName("Loom, then click up to Feudal at 18 pop")).toBe(
+      "Loom",
+    );
+    expect(stepIconName("6 villagers to sheep")).toBe("Villager");
+  });
+
+  it("returns null for an unrecognised task (glyph fallback)", () => {
+    expect(stepIconName("Pick a follow-up later")).toBeNull();
+    expect(stepIconName("")).toBeNull();
   });
 });
