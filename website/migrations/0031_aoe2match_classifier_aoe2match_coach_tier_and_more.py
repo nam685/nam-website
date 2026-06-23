@@ -4,45 +4,44 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('website', '0030_aoe2match'),
+        ("website", "0030_aoe2match"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='aoe2match',
-            name='classifier',
+            model_name="aoe2match",
+            name="classifier",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='coach_tier',
-            field=models.CharField(blank=True, default='', max_length=24),
+            model_name="aoe2match",
+            name="coach_tier",
+            field=models.CharField(blank=True, default="", max_length=24),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='economy',
+            model_name="aoe2match",
+            name="economy",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='map_geometry',
+            model_name="aoe2match",
+            name="map_geometry",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='map_images',
+            model_name="aoe2match",
+            name="map_images",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='mistakes',
+            model_name="aoe2match",
+            name="mistakes",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='aoe2match',
-            name='reconstruction',
+            model_name="aoe2match",
+            name="reconstruction",
             field=models.JSONField(blank=True, default=dict),
         ),
     ]
