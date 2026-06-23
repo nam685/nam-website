@@ -156,6 +156,7 @@ export type Reconstruction = {
   production?: {
     milestones?: Record<string, unknown>;
     produced_units?: { name: string; t_s: number }[];
+    villager_curve?: { t_s: number; villagers: number }[];
   };
   counts?: {
     villagers_produced?: number;
@@ -163,6 +164,7 @@ export type Reconstruction = {
   };
   efficiency?: {
     tc_idle_s?: number | null;
+    precap_window_s?: number | null;
     longest_villager_gap_s?: number | null;
     apm_total?: number | null;
     apm_eco?: number | null;
@@ -200,22 +202,62 @@ export type Mistake = {
   };
 };
 
-export type EconomyAgeSnap = {
-  estimate: boolean;
-  n_events: number;
-  alloc: Record<string, number>;
-  shares: Record<string, number>;
+// --- aoe2coach v2 economy: TWO never-conflated blocks (worker COUNTS vs resource SPENDING) ---
+export type WorkerAgeSnap = {
+  estimate?: boolean;
+  unit?: string;
+  villagers_present?: number;
+  fishing_workers?: number;
+  workers_present?: number;
+  n_attributed?: number;
+  alloc?: Record<string, number>; // villager COUNTS per resource
+  shares?: Record<string, number>;
 } | null;
+
+export type WorkerAllocation = {
+  unit?: string;
+  tier?: string;
+  estimate?: boolean;
+  per_age?: {
+    feudal?: WorkerAgeSnap;
+    castle?: WorkerAgeSnap;
+    imperial?: WorkerAgeSnap;
+  };
+  mid_game_share?: Record<string, number>;
+  fishing_workers_total?: number;
+  active_farms?: number;
+  note?: string;
+};
+
+export type FloatingFlag = {
+  resource: string;
+  worker_share: number;
+  spend_share: number;
+  excess: number;
+};
+export type ResourceBalance = {
+  unit?: string;
+  tier?: string;
+  estimate?: boolean;
+  spent_by_resource?: Record<string, number>; // resource AMOUNTS spent
+  spend_share?: Record<string, number>;
+  floating?: {
+    estimate?: boolean;
+    flags?: FloatingFlag[];
+    worker_share?: Record<string, number>;
+    spend_share?: Record<string, number>;
+    basis?: string;
+  };
+  collected?: Record<string, unknown> | null; // suppressed by design (null)
+  relic_gold?: string; // "unavailable"
+  note?: string;
+};
+
 export type Economy = {
   estimate?: boolean;
   unavailable?: boolean;
-  n_assignment_events?: number;
-  eco_split_at_ages?: {
-    feudal?: EconomyAgeSnap;
-    castle?: EconomyAgeSnap;
-    imperial?: EconomyAgeSnap;
-  };
-  collected?: Record<string, unknown> | null;
+  worker_allocation?: WorkerAllocation;
+  resource_balance?: ResourceBalance;
   qualitative?: {
     committed_first?: string | null;
     gold_mining_start_s?: number | null;
@@ -443,4 +485,153 @@ export function sanitizeCoachText(raw: string | null | undefined): string {
     }
   }
   return lines.join("\n").trim();
+}
+
+/**
+ * TC idle as a PRE-CAP percentage: tc_idle_s / precap_window_s. The window already excludes
+ * the post-200-pop tail and age-up pauses, so this is "idle while you should have been making
+ * villagers". Returns null when the window is missing/zero (can't honestly compute a %).
+ */
+export function tcIdlePct(
+  tcIdleS: number | null | undefined,
+  precapWindowS: number | null | undefined,
+): number | null {
+  if (
+    tcIdleS == null ||
+    precapWindowS == null ||
+    !Number.isFinite(tcIdleS) ||
+    !Number.isFinite(precapWindowS) ||
+    precapWindowS <= 0
+  ) {
+    return null;
+  }
+  const pct = (tcIdleS / precapWindowS) * 100;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
+/**
+ * Strip the agentic-coach scaffolding from the stored analysis so only the human-readable verdict
+ * remains. The coach sometimes wraps its answer in a tagged block or leads with tool-noise lines;
+ * we drop a leading "Thinking…/Reading…/Running…" preamble and unwrap a single fenced/ tagged body,
+ * then trim. Pure + idempotent — safe to run on already-clean text (returns it unchanged).
+ */
+export function stripCoachScaffolding(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let text = raw.replace(/\r\n/g, "\n").trim();
+
+  // Unwrap a single <final>…</final> / <summary>…</summary> / <answer>…</answer> tag if present.
+  const tagMatch = text.match(
+    /<(final|summary|answer|verdict|analysis)>\s*([\s\S]*?)\s*<\/\1>/i,
+  );
+  if (tagMatch) text = tagMatch[2].trim();
+
+  // Unwrap a single top-level fenced ```markdown block wrapping the WHOLE body.
+  const fence = text.match(/^```(?:markdown|md)?\n([\s\S]*?)\n```$/);
+  if (fence) text = fence[1].trim();
+
+  // Drop leading agent tool-noise lines (Thinking / Reading file / Running …).
+  const lines = text.split("\n");
+  let start = 0;
+  while (
+    start < lines.length &&
+    /^(thinking|reading|running|inspecting|loading|tool|analyzing)\b.*[.…]?$/i.test(
+      lines[start].trim(),
+    )
+  ) {
+    start += 1;
+  }
+  return lines.slice(start).join("\n").trim();
+}
+
+// --- minimal, dependency-free markdown → typed blocks (rendered by Aoe2Coach) ---
+export type MdInline =
+  | { t: "text"; v: string }
+  | { t: "bold"; v: string }
+  | { t: "code"; v: string };
+export type MdBlock =
+  | { t: "h"; level: number; spans: MdInline[] }
+  | { t: "p"; spans: MdInline[] }
+  | { t: "ul"; items: MdInline[][] }
+  | { t: "ol"; items: MdInline[][] };
+
+/** Parse inline **bold** and `code` runs in a single line into typed spans. */
+export function parseInline(line: string): MdInline[] {
+  const spans: MdInline[] = [];
+  const re = /(\*\*([^*]+)\*\*|`([^`]+)`)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > last) spans.push({ t: "text", v: line.slice(last, m.index) });
+    if (m[2] !== undefined) spans.push({ t: "bold", v: m[2] });
+    else if (m[3] !== undefined) spans.push({ t: "code", v: m[3] });
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) spans.push({ t: "text", v: line.slice(last) });
+  return spans.length ? spans : [{ t: "text", v: line }];
+}
+
+/**
+ * Parse a (scaffolding-stripped) markdown string into a flat block list: headings (#…), bullet
+ * lists (- / *), ordered lists (1.), and paragraphs. Intentionally tiny — covers what the coach
+ * emits without pulling in a markdown library (CSP/bundle-size friendly).
+ */
+export function parseMarkdown(src: string | null | undefined): MdBlock[] {
+  const text = (src ?? "").replace(/\r\n/g, "\n").trim();
+  if (!text) return [];
+  const lines = text.split("\n");
+  const blocks: MdBlock[] = [];
+  let para: string[] = [];
+  let listKind: "ul" | "ol" | null = null;
+  let items: string[] = []; // raw item text (joined, then parsed at flush)
+
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push({ t: "p", spans: parseInline(para.join(" ").trim()) });
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (listKind && items.length) {
+      blocks.push({
+        t: listKind,
+        items: items.map((s) => parseInline(s.trim())),
+      });
+    }
+    listKind = null;
+    items = [];
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    const h = trimmed.match(/^(#{1,4})\s+(.*)$/);
+    const bullet = trimmed.match(/^[-*]\s+(.*)$/);
+    const ordered = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if (h) {
+      flushPara();
+      flushList();
+      blocks.push({ t: "h", level: h[1].length, spans: parseInline(h[2]) });
+    } else if (bullet) {
+      flushPara();
+      if (listKind === "ol") flushList();
+      listKind = "ul";
+      items.push(bullet[1]);
+    } else if (ordered) {
+      flushPara();
+      if (listKind === "ul") flushList();
+      listKind = "ol";
+      items.push(ordered[1]);
+    } else if (trimmed === "") {
+      flushPara();
+      flushList();
+    } else if (listKind && items.length && para.length === 0) {
+      // Continuation line of the current list item (wrapped, no blank line).
+      items[items.length - 1] += ` ${trimmed}`;
+    } else {
+      flushList();
+      para.push(trimmed);
+    }
+  }
+  flushPara();
+  flushList();
+  return blocks;
 }

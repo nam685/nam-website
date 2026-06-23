@@ -1,34 +1,25 @@
 "use client";
 
-import { apmSplitSegments, fmtMmss, Reconstruction } from "@/lib/aoe2";
+import {
+  apmSplitSegments,
+  fmtMmss,
+  Reconstruction,
+  tcIdlePct,
+} from "@/lib/aoe2";
 
 /**
- * V3 — efficiency readouts (#5 spec): TC idle (as % of game duration, like CaptureAge), longest
- * villager gap, and an APM eco/mil split bar. All exact → solid, no badge. (TC idle is derived from
- * villager-queue gaps — exact, not estimated.)
+ * V4 — efficiency readouts (#5 spec): TC idle as a PRE-CAP %, longest villager gap, and an APM
+ * eco/mil split bar. All exact → solid, no badge. (Derived from villager-queue gaps — exact.)
  */
 export default function Aoe2EfficiencyPanel({
   recon,
-  durationS,
 }: {
   recon: Reconstruction;
-  durationS?: number | null;
 }) {
   const eff = recon.efficiency ?? {};
   const split = apmSplitSegments(eff.apm_eco, eff.apm_military, eff.apm_total);
   const hasApm = (eff.apm_total ?? 0) > 0;
-
-  // Game duration: prefer the explicit prop, fall back to the reconstruction meta.
-  const metaDur =
-    typeof recon.meta?.duration_s === "number"
-      ? (recon.meta.duration_s as number)
-      : null;
-  const dur = durationS ?? metaDur;
-  const tcIdle = eff.tc_idle_s;
-  const tcIdlePct =
-    tcIdle != null && Number.isFinite(tcIdle) && dur && dur > 0
-      ? Math.round((tcIdle / dur) * 100)
-      : null;
+  const idlePct = tcIdlePct(eff.tc_idle_s, eff.precap_window_s);
 
   return (
     <div>
@@ -42,7 +33,8 @@ export default function Aoe2EfficiencyPanel({
       >
         <Tile
           label="TC idle"
-          value={tcIdlePct != null ? `${tcIdlePct}%` : fmtMmss(tcIdle)}
+          value={idlePct != null ? `${idlePct}%` : fmtMmss(eff.tc_idle_s)}
+          hint="idle before 200 pop, age-ups excluded"
         />
         <Tile
           label="Longest vil gap"
@@ -86,9 +78,17 @@ export default function Aoe2EfficiencyPanel({
   );
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
-    <div>
+    <div title={hint}>
       <div
         style={{
           fontSize: "0.55rem",
@@ -100,6 +100,11 @@ function Tile({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div style={{ fontSize: "1rem", color: "#ddd" }}>{value}</div>
+      {hint && (
+        <div style={{ fontSize: "0.5rem", color: "#555", marginTop: "0.1rem" }}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
