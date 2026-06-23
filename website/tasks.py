@@ -17,20 +17,24 @@ from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_
 logger = logging.getLogger(__name__)
 
 
-def _run_coach(salient_log, metrics, result, bundle=None):
+def _run_coach(salient_log, metrics, result, bundle=None, model=None):
     """Prod wrapper: read settings, call the pure aoe2coach.coach(), own graceful degradation.
+
+    `model` overrides the configured AOE2_COACH_MODEL for this run. Featured matches pass "opus";
+    everything else uses the volume default (haiku) — the Max sub only sustains a handful of opus
+    agentic runs per window before silently downgrading, so opus is reserved for hand-picked matches.
 
     Returns (coach_analysis, coach_model, opening, tier). On any failure returns ("", "", "", "")
     so analysis still completes and the rich data is saved.
 
     When `bundle` (the v2 preprocessing bundle from website.aoe2.v2.build_bundle) is supplied, the
     AGENTIC coach v2 path runs: coach() builds a per-match workspace from the Reconstruction,
-    classifier candidates, mistakes, economy, and strategic-map PNGs, runs the read-only opus agent
-    over it, and falls back to single-shot facts-only on any failure. Without a bundle the legacy v1
+    classifier candidates, mistakes, economy, and strategic-map PNGs, runs the read-only agent over
+    it, and falls back to single-shot facts-only on any failure. Without a bundle the legacy v1
     embedded-benchmark path runs (back-compat).
     """
     try:
-        model = getattr(dj_settings, "AOE2_COACH_MODEL", "opus")
+        model = model or getattr(dj_settings, "AOE2_COACH_MODEL", "haiku")
         claude_bin = getattr(dj_settings, "AOE2_CLAUDE_BIN", "claude")
         # Reasoning effort for the agentic coach. Default "high" (NOT xhigh): xhigh's huge per-run
         # thinking-token load makes the Max sub silently downgrade opus->haiku under rate limits.
@@ -528,8 +532,10 @@ def analyze_match(match_id, run_coach=True):
             match.economy = bundle.get("economy", {})
             match.map_images = bundle.get("map_images", [])
         if run_coach:
+            # Featured (⭐) matches get opus; everything else the volume default (haiku).
+            coach_model_choice = "opus" if match.featured else None
             coach_analysis, coach_model, opening, coach_tier = _run_coach(
-                dual_log, metrics, rec.my_result, bundle=bundle
+                dual_log, metrics, rec.my_result, bundle=bundle, model=coach_model_choice
             )
             metrics["opening"] = opening
             match.coach_analysis = coach_analysis
@@ -571,7 +577,11 @@ def coach_match(match_id):
             logger.exception("coach_match bundle rebuild failed for %s — coaching facts-only", match_id)
         dual_log = (match.timeline or {}).get("salient_log", "")
         metrics = match.metrics or {}
-        coach_analysis, coach_model, opening, coach_tier = _run_coach(dual_log, metrics, rec.my_result, bundle=bundle)
+        # Featured (⭐) matches get opus; everything else the volume default (haiku).
+        coach_model_choice = "opus" if match.featured else None
+        coach_analysis, coach_model, opening, coach_tier = _run_coach(
+            dual_log, metrics, rec.my_result, bundle=bundle, model=coach_model_choice
+        )
         if not coach_analysis:
             logger.warning("coach_match got empty coach for %s (rate-limited?) — leaving existing untouched", match_id)
             return
