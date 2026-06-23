@@ -495,6 +495,9 @@ describe("buildProductionSeries", () => {
     );
     expect(chart!.durationS).toBe(200);
     expect(chart!.times[chart!.times.length - 1]).toBe(200);
+  });
+});
+
 describe("build-order library helpers", () => {
   const mk = (id: string, family: string): BuildSummary => ({
     id,
