@@ -45,35 +45,47 @@ export default function Aoe2EfficiencyPanel({
           value={eff.apm_total != null ? String(eff.apm_total) : "—"}
         />
       </div>
-      {hasApm && (
-        <div>
-          <div
-            style={{
-              display: "flex",
-              height: "0.6rem",
-              borderRadius: "3px",
-              overflow: "hidden",
-            }}
-          >
-            <Seg frac={split.eco} color="#22c55e" />
-            <Seg frac={split.military} color="#e04848" />
-            <Seg frac={split.other} color="#444" />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "0.75rem",
-              marginTop: "0.3rem",
-              fontSize: "0.55rem",
-              color: "#777",
-            }}
-          >
-            <Key color="#22c55e" label={`eco ${eff.apm_eco ?? 0}`} />
-            <Key color="#e04848" label={`mil ${eff.apm_military ?? 0}`} />
-            <Key color="#444" label="other" />
-          </div>
-        </div>
-      )}
+      {hasApm &&
+        (() => {
+          const total = eff.apm_total ?? 0;
+          const ecoN = eff.apm_eco ?? 0;
+          const milN = eff.apm_military ?? 0;
+          const otherN = Math.max(0, total - ecoN - milN);
+          return (
+            <div>
+              <div style={{ fontSize: "0.8rem", color: "#ddd" }}>
+                APM {total} —{" "}
+                <span style={{ color: "#22c55e" }}>{ecoN} eco</span>
+                <span style={{ color: "#555" }}> · </span>
+                <span style={{ color: "#e04848" }}>{milN} military</span>
+                <span style={{ color: "#555" }}> · </span>
+                <span style={{ color: "#999" }}>{otherN} other</span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  height: "0.6rem",
+                  borderRadius: "3px",
+                  overflow: "hidden",
+                  marginTop: "0.35rem",
+                }}
+              >
+                <Seg frac={split.eco} color="#22c55e" />
+                <Seg frac={split.military} color="#e04848" />
+                <Seg frac={split.other} color="#444" />
+              </div>
+              <div
+                style={{
+                  fontSize: "0.55rem",
+                  color: "#666",
+                  marginTop: "0.3rem",
+                }}
+              >
+                commands per minute, by what they controlled.
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 }
@@ -112,22 +124,4 @@ function Tile({
 function Seg({ frac, color }: { frac: number; color: string }) {
   if (frac <= 0) return null;
   return <div style={{ width: `${frac * 100}%`, background: color }} />;
-}
-
-function Key({ color, label }: { color: string; label: string }) {
-  return (
-    <span
-      style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
-    >
-      <span
-        style={{
-          width: "0.5rem",
-          height: "0.5rem",
-          background: color,
-          display: "inline-block",
-        }}
-      />
-      {label}
-    </span>
-  );
 }

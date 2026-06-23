@@ -4,8 +4,9 @@ import { aoe2IconUrl } from "@/lib/aoe2Icons";
 
 /**
  * Render the real AoE2 DE icon for a tech/unit/building/age NAME (bundled under /aoe2-icons/,
- * same-origin / CSP-safe). Best-effort: names without a bundled icon fall back to a clean
- * monogram glyph (first letter on a muted chip) so every row still reads cleanly.
+ * same-origin / CSP-safe). Every name in aoe2coach const.py resolves to a bundled icon; a name
+ * that doesn't is a genuinely-unknown string (e.g. a brand-new unit not yet in const.py) and falls
+ * back to a "?" chip — anticipating future content rather than showing a broken image or a bare dot.
  */
 export default function Aoe2Icon({
   name,
@@ -37,8 +38,7 @@ export default function Aoe2Icon({
       />
     );
   }
-  // Glyph fallback — first alpha char on a muted chip.
-  const letter = (name.match(/[A-Za-z]/)?.[0] ?? "?").toUpperCase();
+  // Unknown name → "?" chip (anticipates future units/techs not yet in const.py).
   return (
     <span
       title={name}
@@ -50,7 +50,8 @@ export default function Aoe2Icon({
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        fontSize: size * 0.6,
+        fontSize: size * 0.62,
+        fontWeight: 700,
         lineHeight: 1,
         fontFamily: "var(--font-headline, sans-serif)",
         color,
@@ -59,7 +60,7 @@ export default function Aoe2Icon({
         borderRadius: 2,
       }}
     >
-      {letter}
+      ?
     </span>
   );
 }

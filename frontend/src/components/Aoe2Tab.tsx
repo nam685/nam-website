@@ -25,7 +25,6 @@ import Aoe2EfficiencyPanel from "./aoe2/Aoe2EfficiencyPanel";
 import Aoe2Icon from "./aoe2/Aoe2Icon";
 import Aoe2Markdown from "./aoe2/Aoe2Markdown";
 import Aoe2Mistakes from "./aoe2/Aoe2Mistakes";
-import Aoe2ProducedStrip from "./aoe2/Aoe2ProducedStrip";
 import Aoe2ProductionChart from "./aoe2/Aoe2ProductionChart";
 import Aoe2Timeline from "./aoe2/Aoe2Timeline";
 
@@ -156,7 +155,9 @@ export default function Aoe2Tab() {
   }
 
   return (
-    <div>
+    // Bump the whole Empires tab up a notch — the base text ran a touch small.
+    // `zoom` scales the rem-based inline styles uniformly without rewriting each size.
+    <div style={{ zoom: 1.1 }}>
       {/* Stats header */}
       {stats && (
         <div style={statsHeader}>
@@ -692,29 +693,26 @@ function CoachTab({ detail }: { detail: Detail }) {
   );
 }
 
-/* ── Army & Stats — produced army + build order + villager curve + APM /
-   efficiency (engine-only stats labeled/omitted). ── */
+/* ── Army & Stats — build-order guess (top) + the unified full-width production
+   graph (areas above, upgrade/unit icon row below, age lines) + APM/efficiency. ── */
 function ArmyStatsTab({ detail }: { detail: Detail }) {
   const recon = detail.reconstruction;
   if (!recon) return <Empty />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-      {/* Army + villagers produced (engine-only stats labeled "unavailable") */}
-      <Aoe2ProducedStrip recon={recon} />
-
-      {/* Stacked production-over-time chart (villagers + army by unit type) */}
-      <Aoe2ProductionChart recon={recon} />
-
-      {/* APM split + efficiency */}
-      <Aoe2EfficiencyPanel recon={recon} />
-
-      {/* Build order (classifier) */}
+      {/* Build-order guess (classifier) — to the TOP of the tab */}
       {detail.classifier?.candidates?.length ? (
         <div>
           <div style={sectionLabel}>Build order</div>
           <Aoe2Classifier classifier={detail.classifier} />
         </div>
       ) : null}
+
+      {/* Unified full-width production graph (areas + event icon row + age lines) */}
+      <Aoe2ProductionChart recon={recon} />
+
+      {/* APM split + efficiency */}
+      <Aoe2EfficiencyPanel recon={recon} />
     </div>
   );
 }

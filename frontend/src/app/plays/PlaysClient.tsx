@@ -122,9 +122,10 @@ export default function PlaysClient({
     <div
       className="page"
       style={{
-        // AoE2's two-pane (games nav + detail) uses the full page width;
-        // chess stays in the comfortable reading column.
-        maxWidth: section === "aoe2" ? "none" : "72rem",
+        // The page (and the chess|AoE2 selector) always spans the full width — the
+        // selector must stay 100% wide for both games. Chess *content* is re-constrained
+        // to a comfortable reading column below; AoE2's two-pane uses the full width.
+        maxWidth: "none",
         // Pull the game selector up close to the top nav (no extra gap).
         paddingTop: "0.5rem",
         position: "relative",
@@ -164,141 +165,147 @@ export default function PlaysClient({
         </button>
       </div>
 
-      {/* Secondary bar: Explorer | Play (only when chess is active) */}
-      {section === "chess" && (
-        <div
-          style={{
-            display: "flex",
-            gap: "0.25rem",
-            marginBottom: "1.5rem",
-            borderBottom: "1px solid #111",
-          }}
-        >
-          <button
-            onClick={() => setTab("explorer")}
+      {/* Chess content is re-constrained to a comfortable reading column (the
+          full-width selector above stays 100% wide for both games). */}
+      <div style={section === "chess" ? { maxWidth: "72rem" } : undefined}>
+        {/* Secondary bar: Explorer | Play (only when chess is active) */}
+        {section === "chess" && (
+          <div
             style={{
-              ...secondaryTabBtnStyle,
-              borderBottomColor: tab === "explorer" ? ACCENT : "transparent",
-              color: tab === "explorer" ? ACCENT : "#444",
+              display: "flex",
+              gap: "0.25rem",
+              marginBottom: "1.5rem",
+              borderBottom: "1px solid #111",
             }}
           >
-            Explorer
-          </button>
-          {isAdmin && (
             <button
-              onClick={() => setTab("play")}
+              onClick={() => setTab("explorer")}
               style={{
                 ...secondaryTabBtnStyle,
-                borderBottomColor: tab === "play" ? ACCENT : "transparent",
-                color: tab === "play" ? ACCENT : "#444",
+                borderBottomColor: tab === "explorer" ? ACCENT : "transparent",
+                color: tab === "explorer" ? ACCENT : "#444",
               }}
             >
-              Play
-              {lichessStatus?.connected && (
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "5px",
-                    height: "5px",
-                    borderRadius: "50%",
-                    background: "#22c55e",
-                    marginLeft: "0.35rem",
-                  }}
-                />
-              )}
+              Explorer
             </button>
-          )}
-        </div>
-      )}
-      {section === "aoe2" && <div style={{ marginBottom: "1.5rem" }} />}
-
-      {/* Explorer tab */}
-      {section === "chess" && tab === "explorer" && <OpeningExplorer />}
-
-      {/* Empires tab */}
-      {section === "aoe2" && <Aoe2Tab />}
-
-      {/* Play tab */}
-      {tab === "play" && isAdmin && (
-        <>
-          {/* Lichess connection status */}
-          <div style={{ marginBottom: "1.5rem" }}>
-            {lichessStatus?.connected ? (
-              <span
+            {isAdmin && (
+              <button
+                onClick={() => setTab("play")}
                 style={{
-                  fontSize: "0.75rem",
-                  color: "#aaa",
-                  fontFamily: "var(--font-headline)",
+                  ...secondaryTabBtnStyle,
+                  borderBottomColor: tab === "play" ? ACCENT : "transparent",
+                  color: tab === "play" ? ACCENT : "#444",
                 }}
               >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: "6px",
-                    height: "6px",
-                    borderRadius: "50%",
-                    background: "#22c55e",
-                    marginRight: "0.4rem",
-                  }}
-                />
-                Connected as{" "}
-                <span style={{ color: ACCENT }}>{lichessStatus.username}</span>
-                <button
-                  onClick={handleDisconnect}
-                  style={{
-                    marginLeft: "0.75rem",
-                    fontFamily: "var(--font-headline)",
-                    fontSize: "0.6rem",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "#555",
-                    background: "none",
-                    border: "1px solid #333",
-                    borderRadius: "3px",
-                    padding: "0.2rem 0.5rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  disconnect
-                </button>
-              </span>
-            ) : (
-              <button onClick={handleConnect} style={connectBtnStyle}>
-                Connect Lichess
+                Play
+                {lichessStatus?.connected && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "5px",
+                      height: "5px",
+                      borderRadius: "50%",
+                      background: "#22c55e",
+                      marginLeft: "0.35rem",
+                    }}
+                  />
+                )}
               </button>
             )}
           </div>
+        )}
+        {section === "aoe2" && <div style={{ marginBottom: "1.5rem" }} />}
 
-          {/* Game area */}
-          {lichessToken ? (
-            activeGameId ? (
-              <LichessGame
-                token={lichessToken}
-                gameId={activeGameId}
-                myColor={myColor}
-                onGameEnd={handleGameEnd}
-              />
+        {/* Explorer tab */}
+        {section === "chess" && tab === "explorer" && <OpeningExplorer />}
+
+        {/* Empires tab */}
+        {section === "aoe2" && <Aoe2Tab />}
+
+        {/* Play tab */}
+        {tab === "play" && isAdmin && (
+          <>
+            {/* Lichess connection status */}
+            <div style={{ marginBottom: "1.5rem" }}>
+              {lichessStatus?.connected ? (
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#aaa",
+                    fontFamily: "var(--font-headline)",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: "#22c55e",
+                      marginRight: "0.4rem",
+                    }}
+                  />
+                  Connected as{" "}
+                  <span style={{ color: ACCENT }}>
+                    {lichessStatus.username}
+                  </span>
+                  <button
+                    onClick={handleDisconnect}
+                    style={{
+                      marginLeft: "0.75rem",
+                      fontFamily: "var(--font-headline)",
+                      fontSize: "0.6rem",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      color: "#555",
+                      background: "none",
+                      border: "1px solid #333",
+                      borderRadius: "3px",
+                      padding: "0.2rem 0.5rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    disconnect
+                  </button>
+                </span>
+              ) : (
+                <button onClick={handleConnect} style={connectBtnStyle}>
+                  Connect Lichess
+                </button>
+              )}
+            </div>
+
+            {/* Game area */}
+            {lichessToken ? (
+              activeGameId ? (
+                <LichessGame
+                  token={lichessToken}
+                  gameId={activeGameId}
+                  myColor={myColor}
+                  onGameEnd={handleGameEnd}
+                />
+              ) : (
+                <LichessGameCreator
+                  token={lichessToken}
+                  onGameStart={handleGameStart}
+                />
+              )
             ) : (
-              <LichessGameCreator
-                token={lichessToken}
-                onGameStart={handleGameStart}
-              />
-            )
-          ) : (
-            !lichessStatus?.connected && (
-              <p
-                style={{
-                  fontSize: "0.8rem",
-                  color: "#555",
-                  fontStyle: "italic",
-                }}
-              >
-                Connect your Lichess account to play games.
-              </p>
-            )
-          )}
-        </>
-      )}
+              !lichessStatus?.connected && (
+                <p
+                  style={{
+                    fontSize: "0.8rem",
+                    color: "#555",
+                    fontStyle: "italic",
+                  }}
+                >
+                  Connect your Lichess account to play games.
+                </p>
+              )
+            )}
+          </>
+        )}
+      </div>
 
       {/* Tagline */}
       <div style={{ textAlign: "center", marginTop: "3rem" }}>
