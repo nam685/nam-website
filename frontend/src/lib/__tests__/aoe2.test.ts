@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   apmSplitSegments,
   buildProductionSeries,
+  buildResourceBalanceChart,
+  buildWorkerAllocChart,
+  niceTicks,
   type BuildSummary,
+  type ResourceBalance,
+  type WorkerAllocation,
   buildFamilyLabel,
   buildPhaseLanes,
   clipEmbedUrl,
@@ -577,5 +582,54 @@ describe("build-order library helpers", () => {
   it("returns null for an unrecognised task (glyph fallback)", () => {
     expect(stepIconName("Pick a follow-up later")).toBeNull();
     expect(stepIconName("")).toBeNull();
+  });
+});
+
+describe("economy charts", () => {
+  it("niceTicks returns clean linear gridline values from 0 to max", () => {
+    expect(niceTicks(130, 5)).toEqual([0, 50, 100]);
+    expect(niceTicks(49000, 5)).toEqual([0, 10000, 20000, 30000, 40000]);
+    expect(niceTicks(0)).toEqual([0]); // degenerate guard
+  });
+
+  it("buildWorkerAllocChart returns villager-count-indexed stacked points + farm line", () => {
+    const wa: WorkerAllocation = {
+      series: [
+        { vils: 3, t_s: 0, alloc: { food: 3 }, active_farms: 0, fishing: 0 },
+        {
+          vils: 10,
+          t_s: 300,
+          alloc: { food: 6, wood: 4 },
+          active_farms: 6,
+          fishing: 0,
+        },
+      ],
+    };
+    const c = buildWorkerAllocChart(wa)!;
+    expect(c).not.toBeNull();
+    expect(c.xMin).toBe(3);
+    expect(c.xMax).toBe(10);
+    expect(c.resources).toEqual(["food", "wood"]); // present, in canonical order
+    expect(c.maxStackTotal).toBe(10); // 6 + 4
+    expect(c.points[1].active_farms).toBe(6);
+  });
+
+  it("buildResourceBalanceChart returns time-indexed cumulative-spend points", () => {
+    const rb: ResourceBalance = {
+      series: [
+        { vils: 3, t_s: 0, spent: { food: 0 } },
+        { vils: 10, t_s: 600, spent: { food: 500, wood: 300 } },
+      ],
+    };
+    const c = buildResourceBalanceChart(rb)!;
+    expect(c.xMin).toBe(0);
+    expect(c.xMax).toBe(600); // x is time, not villager count
+    expect(c.maxStackTotal).toBe(800);
+  });
+
+  it("both builders return null without a series (old matches degrade gracefully)", () => {
+    expect(buildWorkerAllocChart({})).toBeNull();
+    expect(buildWorkerAllocChart(undefined)).toBeNull();
+    expect(buildResourceBalanceChart({ series: [] })).toBeNull();
   });
 });

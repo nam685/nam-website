@@ -398,6 +398,15 @@ export type WorkerAgeSnap = {
   shares?: Record<string, number>;
 } | null;
 
+// One point of the continuous worker-allocation series (indexed by villager count).
+export type WorkerAllocPoint = {
+  vils: number;
+  t_s: number;
+  alloc: Record<string, number>; // worker COUNTS per resource (sums to vils on land)
+  active_farms: number; // reseed-excluded distinct farms active at t_s (drives the food line)
+  fishing: number;
+};
+
 export type WorkerAllocation = {
   unit?: string;
   tier?: string;
@@ -407,6 +416,7 @@ export type WorkerAllocation = {
     castle?: WorkerAgeSnap;
     imperial?: WorkerAgeSnap;
   };
+  series?: WorkerAllocPoint[];
   mid_game_share?: Record<string, number>;
   fishing_workers_total?: number;
   active_farms?: number;
@@ -425,6 +435,7 @@ export type ResourceBalance = {
   estimate?: boolean;
   spent_by_resource?: Record<string, number>; // resource AMOUNTS spent
   spend_share?: Record<string, number>;
+  series?: ResourceBalancePoint[];
   floating?: {
     estimate?: boolean;
     flags?: FloatingFlag[];
@@ -435,6 +446,13 @@ export type ResourceBalance = {
   collected?: Record<string, unknown> | null; // suppressed by design (null)
   relic_gold?: string; // "unavailable"
   note?: string;
+};
+
+// One point of the continuous resource-balance series (cumulative spend; indexed by t_s).
+export type ResourceBalancePoint = {
+  vils: number;
+  t_s: number;
+  spent: Record<string, number>; // cumulative near-exact resource AMOUNTS spent by t_s
 };
 
 export type Economy = {
@@ -967,4 +985,97 @@ export function buildProductionSeries(
   yMax = Math.max(yMax, 1);
 
   return { times, series, yMax, durationS: dur };
+}
+
+// ── Economy graphs (worker allocation + resource balance) ────────────────────────────────
+// The four gatherable resources, in a fixed stacking order (food at the bottom), with their
+// in-game hues. Shared by both economy charts and their icon legends.
+export const ECON_RESOURCES = ["food", "wood", "gold", "stone"] as const;
+export const ECON_RESOURCE_COLOR: Record<string, string> = {
+  food: "#d65a3f", // red — matches the in-game food (meat) hue; kept distinct from gold's yellow
+  wood: "#3f9e54",
+  gold: "#f0c440",
+  stone: "#9aa3ad",
+};
+
+/**
+ * Clean linear y-axis ticks: 0 up to `max`, stepped at a 1/2/5 ×10ⁿ interval so there are roughly
+ * `target` gridlines. The economy graphs use a LINEAR axis (not log) so the stacked food/wood/gold
+ * split shows true proportions rather than being visually distorted by log compression.
+ */
+export function niceTicks(max: number, target = 5): number[] {
+  if (!(max > 0)) return [0];
+  const raw = max / target;
+  const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / pow;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
+  const ticks: number[] = [];
+  for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(Math.round(v));
+  return ticks;
+}
+
+export type EconChartPoint = {
+  x: number; // villager count (worker alloc) or t_s seconds (resource balance)
+  t_s: number;
+  values: Record<string, number>;
+  active_farms?: number;
+};
+export type EconChart = {
+  points: EconChartPoint[];
+  resources: string[]; // present resources, in ECON_RESOURCES order
+  xMin: number;
+  xMax: number;
+  maxStackTotal: number; // largest stacked sum across points (log-axis top)
+};
+
+/** Build the villager-count-indexed worker-allocation chart (x = villager count). */
+export function buildWorkerAllocChart(
+  wa: WorkerAllocation | null | undefined,
+): EconChart | null {
+  const series = wa?.series;
+  if (!series || series.length === 0) return null;
+  const points: EconChartPoint[] = series.map((p) => ({
+    x: p.vils,
+    t_s: p.t_s,
+    values: p.alloc ?? {},
+    active_farms: p.active_farms ?? 0,
+  }));
+  return finishEconChart(points);
+}
+
+/** Build the real-time-indexed resource-balance chart (x = t_s seconds, cumulative spend). */
+export function buildResourceBalanceChart(
+  rb: ResourceBalance | null | undefined,
+): EconChart | null {
+  const series = rb?.series;
+  if (!series || series.length === 0) return null;
+  const points: EconChartPoint[] = series.map((p) => ({
+    x: p.t_s,
+    t_s: p.t_s,
+    values: p.spent ?? {},
+  }));
+  return finishEconChart(points);
+}
+
+function finishEconChart(points: EconChartPoint[]): EconChart | null {
+  const present = new Set<string>();
+  let maxStackTotal = 0;
+  for (const p of points) {
+    let sum = 0;
+    for (const r of ECON_RESOURCES) {
+      const v = p.values[r] ?? 0;
+      if (v > 0) present.add(r);
+      sum += v;
+    }
+    if (sum > maxStackTotal) maxStackTotal = sum;
+  }
+  const resources = ECON_RESOURCES.filter((r) => present.has(r));
+  if (resources.length === 0) return null;
+  return {
+    points,
+    resources,
+    xMin: points[0]?.x ?? 0,
+    xMax: points[points.length - 1]?.x ?? 0,
+    maxStackTotal: Math.max(maxStackTotal, 1),
+  };
 }
