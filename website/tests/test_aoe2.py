@@ -490,6 +490,39 @@ def test_analyze_match_graceful_coach_failure(settings, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_coach_model_opus_for_featured_else_default(settings, monkeypatch):
+    """Featured (⭐) matches coach on opus; everything else uses the volume default (haiku)."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    settings.AOE2_COACH_MODEL = "haiku"
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr("website.tasks.build_bundle", lambda *_a, **_kw: {"reconstruction": {}})
+    seen = {}
+    monkeypatch.setattr(
+        "website.tasks.coach",
+        lambda *_a, **kw: (
+            seen.update(model=kw.get("model"))
+            or CoachOutput(raw_text="x", opening_tag="", model_used=kw.get("model") or "", tier="agentic")
+        ),
+    )
+
+    m = _make_match_with_dummy_file("not-featured-hash")
+    analyze_match(m.id)
+    assert seen["model"] == "haiku"  # non-featured → volume default
+
+    mf = _make_match_with_dummy_file("featured-hash")
+    mf.featured = True
+    mf.save(update_fields=["featured"])
+    analyze_match(mf.id)
+    assert seen["model"] == "opus"  # featured → opus
+
+
+@pytest.mark.django_db
 def test_analyze_match_run_coach_false_skips_coach(settings, monkeypatch):
     """run_coach=False → deterministic preprocessing is saved (done, reconstruction/economy populated)
     but the LLM coach is NEVER invoked (preprocess-now / coach-lazy)."""

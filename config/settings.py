@@ -88,7 +88,7 @@ AOE2_PROFILE_ID = env.int("AOE2_PROFILE_ID", default=14697894)
 AOE2_IGN = env("AOE2_IGN", default="nom")
 AOE2_RELIC_HOST = env("AOE2_RELIC_HOST", default="https://aoe-api.worldsedgelink.com")
 AOE2_CLAUDE_BIN = env("AOE2_CLAUDE_BIN", default="claude")
-AOE2_COACH_MODEL = env("AOE2_COACH_MODEL", default="opus")
+AOE2_COACH_MODEL = env("AOE2_COACH_MODEL", default="haiku")  # volume default; featured (⭐) matches use opus
 # Reasoning effort for the agentic coach. "high" (not "xhigh") — xhigh's per-run thinking-token load
 # makes the Max subscription silently downgrade opus->haiku under rate limits.
 AOE2_COACH_EFFORT = env("AOE2_COACH_EFFORT", default="high")
