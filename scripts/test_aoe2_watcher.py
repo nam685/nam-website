@@ -1,6 +1,8 @@
 import pytest
 
+import scripts.aoe2_watcher as watcher
 from scripts.aoe2_watcher import (
+    _upload,
     already_uploaded,
     find_recs,
     hash_file,
@@ -74,6 +76,28 @@ def test_resolve_config_missing_raises_with_names():
         resolve_config({}, {"AOE2_SERVER_URL": "https://x"})
     msg = str(exc.value)
     assert "AOE2_ADMIN_SECRET" in msg and "AOE2_REC_DIR" in msg
+
+
+def test_upload_sends_coach_zero(tmp_path, monkeypatch):
+    """Eager preprocess, lazy coach: every upload must tell the server coach=0."""
+    rec = tmp_path / "g.aoe2record"
+    rec.write_bytes(b"replaydata")
+    captured = {}
+
+    class FakeResp:
+        status_code = 201
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured["data"] = kwargs.get("data")
+        return FakeResp()
+
+    monkeypatch.setattr(watcher.httpx, "post", fake_post)
+    resp = _upload("https://nam685.de", "tok", str(rec))
+
+    assert resp.status_code == 201
+    assert captured["url"].endswith("/api/aoe2/upload/")
+    assert captured["data"] == {"coach": "0"}
 
 
 def test_supervise_catches_and_retries():
