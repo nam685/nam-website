@@ -1566,3 +1566,159 @@ def test_build_detail_path_traversal_404(client):
     """A path-traversal-ish slug is rejected as 404, never a server error."""
     resp = client.get("/api/aoe2/builds/_index/")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Opening-tag fallback: derive the opening family from the deterministic #3
+# classifier when the LLM coach omits the `- Opening:` bullet (haiku volume runs).
+# ---------------------------------------------------------------------------
+
+
+def test_opening_from_classifier_maps_build_id_to_family():
+    """Top candidate build_id -> build-order family (the canonical opening slug)."""
+    from website.aoe2.opening import opening_from_classifier
+
+    assert opening_from_classifier({"candidates": [{"build_id": "scout-rush-1-stable"}]}) == "scouts"
+    assert opening_from_classifier({"candidates": [{"build_id": "fast-castle-generic"}]}) == "fast_castle"
+    assert opening_from_classifier({"candidates": [{"build_id": "knight-rush"}]}) == "knights"
+
+
+def test_opening_from_classifier_handles_missing_and_bad_input():
+    """No candidates / unknown slug / non-dict -> "" (never crashes)."""
+    from website.aoe2.opening import opening_from_classifier
+
+    assert opening_from_classifier({}) == ""
+    assert opening_from_classifier({"candidates": []}) == ""
+    assert opening_from_classifier({"candidates": [{"build_id": "not-a-real-build"}]}) == ""
+    assert opening_from_classifier({"candidates": [{"build_id": "_index"}]}) == ""  # path-traversal guard
+    assert opening_from_classifier(None) == ""
+
+
+def _fake_bundle_with_classifier(build_id):
+    return {
+        "reconstruction": {"meta": {"map": "Arabia"}},
+        "map_geometry": {},
+        "classifier": {"candidates": [{"build_id": build_id, "name": build_id, "confidence": 0.8}]},
+        "mistakes": [],
+        "economy": {},
+        "map_images": [],
+        "map_png_paths": [],
+        "candidates": None,
+        "recon_obj": None,
+    }
+
+
+@pytest.mark.django_db
+def test_analyze_match_falls_back_to_classifier_opening(settings, monkeypatch):
+    """Coach omits the `- Opening:` bullet (opening_tag="") → opening tag comes from the classifier."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr("website.tasks.build_bundle", lambda *_a, **_kw: _fake_bundle_with_classifier("knight-rush"))
+    monkeypatch.setattr(
+        "website.tasks.coach",
+        lambda *_a, **_kw: CoachOutput(
+            raw_text="WHAT HAPPENED\n- Knights all game.\n\nANALYSIS\nGood pressure.",
+            opening_tag="",  # haiku forgot the `- Opening:` bullet
+            model_used="claude-haiku-4-5",
+            tier="agentic",
+        ),
+    )
+
+    m = _make_match_with_dummy_file("classifier-fallback-hash")
+    analyze_match(m.id)
+    m.refresh_from_db()
+
+    assert m.coach_analysis  # coach still talked
+    assert m.metrics.get("opening") == "knights"  # ...and the tag is filled from the classifier
+
+
+@pytest.mark.django_db
+def test_analyze_match_prefers_llm_opening_over_classifier(settings, monkeypatch):
+    """When the coach DOES emit an opening, its verified read wins over the classifier guess."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr(
+        "website.tasks.build_bundle", lambda *_a, **_kw: _fake_bundle_with_classifier("fast-castle-generic")
+    )
+    monkeypatch.setattr(
+        "website.tasks.coach",
+        lambda *_a, **_kw: CoachOutput(raw_text="report", opening_tag="scouts", model_used="m", tier="agentic"),
+    )
+
+    m = _make_match_with_dummy_file("llm-opening-wins-hash")
+    analyze_match(m.id)
+    m.refresh_from_db()
+    assert m.metrics.get("opening") == "scouts"  # LLM read, not the classifier's "fast_castle"
+
+
+@pytest.mark.django_db
+def test_analyze_match_preprocess_only_sets_classifier_opening(settings, monkeypatch):
+    """run_coach=False → the opening tag is still set deterministically from the classifier."""
+    from website.tasks import analyze_match
+
+    settings.AOE2_PROFILE_ID = OWNER_PROFILE_ID
+    fake_rec, fake_timeline, fake_metrics, fake_dual_log = _fake_pipeline()
+    monkeypatch.setattr("website.tasks.parse_rec", lambda *_a, **_kw: fake_rec)
+    monkeypatch.setattr("website.tasks.build_timeline", lambda *_a, **_kw: fake_timeline)
+    monkeypatch.setattr("website.tasks.compute_metrics", lambda *_a, **_kw: fake_metrics)
+    monkeypatch.setattr("website.tasks.render_dual_log", lambda *_a, **_kw: fake_dual_log)
+    monkeypatch.setattr(
+        "website.tasks.build_bundle", lambda *_a, **_kw: _fake_bundle_with_classifier("scout-rush-1-stable")
+    )
+
+    m = _make_match_with_dummy_file("preprocess-opening-hash")
+    analyze_match(m.id, run_coach=False)
+    m.refresh_from_db()
+    assert m.coach_analysis == ""  # coach not run
+    assert m.metrics.get("opening") == "scouts"  # but the tag is set
+
+
+@pytest.mark.django_db
+def test_backfill_openings_command():
+    """The mgmt command fills blank openings from the stored classifier and leaves filled ones alone."""
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    blank = _make_match_with_dummy_file("backfill-blank")
+    blank.classifier = {"candidates": [{"build_id": "knight-rush"}]}
+    blank.metrics = {"opening": ""}
+    blank.save()
+
+    filled = _make_match_with_dummy_file("backfill-filled")
+    filled.classifier = {"candidates": [{"build_id": "knight-rush"}]}
+    filled.metrics = {"opening": "drush"}  # a coach's verified read — must be preserved
+    filled.save()
+
+    no_cls = _make_match_with_dummy_file("backfill-nocls")
+    no_cls.classifier = {}
+    no_cls.metrics = {"opening": ""}
+    no_cls.save()
+
+    # dry-run writes nothing
+    out = StringIO()
+    call_command("aoe2_backfill_openings", "--dry-run", stdout=out)
+    blank.refresh_from_db()
+    assert blank.metrics.get("opening") == ""
+
+    # real run fills only the blank-with-classifier match
+    out = StringIO()
+    call_command("aoe2_backfill_openings", stdout=out)
+    blank.refresh_from_db()
+    filled.refresh_from_db()
+    no_cls.refresh_from_db()
+    assert blank.metrics.get("opening") == "knights"
+    assert filled.metrics.get("opening") == "drush"  # untouched
+    assert no_cls.metrics.get("opening") == ""  # no classifier → left blank

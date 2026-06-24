@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils import timezone as dj_timezone
 
 from config.celery import app
+from website.aoe2.opening import opening_from_classifier
 from website.aoe2.v2 import build_bundle
 from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
@@ -53,10 +54,21 @@ def _run_coach(salient_log, metrics, result, bundle=None, model=None):
         out = coach(
             metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin, **kwargs
         )
-        return out.raw_text, out.model_used, out.opening_tag, getattr(out, "tier", "")
+        # The LLM's `- Opening:` read is authoritative, but haiku volume runs often omit it. Fall
+        # back to the deterministic #3 classifier so the opening tag is never blank for a coached match.
+        opening = out.opening_tag or _classifier_opening(bundle)
+        return out.raw_text, out.model_used, opening, getattr(out, "tier", "")
     except Exception:  # noqa: BLE001
         logger.warning("Coach stage failed — storing empty coach_analysis")
-        return "", "", "", ""
+        # Coach blew up, but the deterministic classifier still gives us an opening tag.
+        return "", "", _classifier_opening(bundle), ""
+
+
+def _classifier_opening(bundle) -> str:
+    """Opening family from a bundle's classifier, or "" when there's no bundle/candidate."""
+    if bundle is None:
+        return ""
+    return opening_from_classifier(bundle.get("classifier", {}))
 
 
 KLAUDE_USER = "klaude"
@@ -531,6 +543,9 @@ def analyze_match(match_id, run_coach=True):
             match.mistakes = bundle.get("mistakes", [])
             match.economy = bundle.get("economy", {})
             match.map_images = bundle.get("map_images", [])
+            # Deterministic opening baseline (no LLM) — a coached run overrides it below with the
+            # LLM's read when present. Ensures preprocess-only matches still carry an opening tag.
+            metrics["opening"] = _classifier_opening(bundle)
         if run_coach:
             # Featured (⭐) matches get opus; everything else the volume default (haiku).
             coach_model_choice = "opus" if match.featured else None
