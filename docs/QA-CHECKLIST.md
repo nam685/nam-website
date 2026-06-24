@@ -181,6 +181,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] AoE 2 section: stats header shows current ELO, W/L record, total games, and top civilization.
 - [ ] Full-width two-pane layout: a selectable game list on the left, a tabbed detail pane on the right, spanning the full page (no narrow max-width column).
 - [ ] Featured game (or `?game=`, or newest) is selected by default; selecting another game swaps the detail pane.
+- [ ] Every analyzed game in the list shows a colored opening tag (Scouts / Archers / Fast Castle / …) — never a blank/missing badge, even for haiku-coached games where the LLM omitted the `- Opening:` line (it falls back to the deterministic classifier). Backfill older blank tags with `uv run python manage.py aoe2_backfill_openings`.
 - [ ] The detail pane opens on the **Coach** tab by default.
 - [ ] Switching detail tabs (Coach / Economy / Army & Stats / Mistakes) does NOT re-fetch or reload data. There is **no** separate Technology tab — its tech timeline now lives in the Army & Stats graph's below-axis lanes.
 - [ ] In the Army & Stats graph: each tech/unit icon matches its name (e.g. Horse Collar shows a collar, Knight shows a knight) — no wrong art; every known name shows a real icon (no monogram fallback for coach-vocabulary names), and a genuinely-unknown name shows a "?" chip (never a broken image or a bare dot).
