@@ -1,10 +1,14 @@
-"""Backfill the opening tag on AoE2 matches whose coach left it blank.
+"""Backfill / tidy the opening tag on AoE2 matches.
 
 The opening badge lives in `match.metrics["opening"]`, set from the LLM coach's `- Opening:` bullet.
-Haiku volume runs frequently omit that bullet, so older matches show no opening tag. This command
-derives the tag deterministically from each match's already-stored #3 classifier (top candidate
-build_id → build-order `family`) — no replay re-parse, no LLM calls, fully idempotent. It only fills
-BLANK openings, never overwriting a coach's verified read.
+Two problems this command fixes, deterministically and with no LLM calls (idempotent):
+
+1. BLANK openings — haiku volume runs frequently omit the bullet, leaving older matches untagged.
+   Derive the tag from each match's already-stored #3 classifier (top candidate build_id →
+   build-order `family`).
+2. OVER-LONG openings — haiku sometimes writes a whole sentence into the bullet, e.g.
+   "dark age boom (never feudal) — you made only villagers...". Re-cap it to a terse badge with
+   `cap_opening` (a blank/short read is left untouched).
 
     uv run python manage.py aoe2_backfill_openings            # apply
     uv run python manage.py aoe2_backfill_openings --dry-run   # preview only
@@ -12,12 +16,12 @@ BLANK openings, never overwriting a coach's verified read.
 
 from django.core.management.base import BaseCommand
 
-from website.aoe2.opening import opening_from_classifier
+from website.aoe2.opening import cap_opening, opening_from_classifier
 from website.models import Aoe2Match
 
 
 class Command(BaseCommand):
-    help = "Backfill missing AoE2 opening tags from the stored classifier (deterministic, no LLM)."
+    help = "Backfill blank AoE2 opening tags from the classifier and re-cap over-long ones (no LLM)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -28,29 +32,43 @@ class Command(BaseCommand):
 
     def handle(self, *_args, **opts):
         dry_run = opts["dry_run"]
-        updated = 0
+        prefix = "[dry-run] " if dry_run else ""
+        filled = 0
+        recapped = 0
         no_classifier = 0
 
         for match in Aoe2Match.objects.order_by("id").iterator():
             metrics = match.metrics or {}
-            if (metrics.get("opening") or "").strip():
-                continue  # already has a tag — leave the coach's verified read alone
-            derived = opening_from_classifier(match.classifier or {})
-            if not derived:
-                no_classifier += 1
-                continue
-            prefix = "[dry-run] " if dry_run else ""
-            self.stdout.write(f"{prefix}match {match.id}: opening -> {derived}")
+            current = (metrics.get("opening") or "").strip()
+
+            if current:
+                # Has a tag: only touch it if it's longer than a terse badge.
+                capped = cap_opening(current)
+                if capped and capped != current:
+                    self.stdout.write(f"{prefix}match {match.id}: recap {current!r} -> {capped!r}")
+                    new_value = capped
+                    recapped += 1
+                else:
+                    continue
+            else:
+                # Blank: derive from the deterministic classifier.
+                derived = opening_from_classifier(match.classifier or {})
+                if not derived:
+                    no_classifier += 1
+                    continue
+                self.stdout.write(f"{prefix}match {match.id}: fill -> {derived}")
+                new_value = derived
+                filled += 1
+
             if not dry_run:
-                metrics["opening"] = derived
+                metrics["opening"] = new_value
                 match.metrics = metrics
                 match.save(update_fields=["metrics"])
-            updated += 1
 
-        verb = "would update" if dry_run else "updated"
+        verb = "would change" if dry_run else "changed"
         self.stdout.write(
             self.style.SUCCESS(
-                f"aoe2_backfill_openings: {verb} {updated} matches; "
-                f"{no_classifier} blank matches had no usable classifier."
+                f"aoe2_backfill_openings: {verb} {filled + recapped} matches "
+                f"({filled} filled, {recapped} re-capped); {no_classifier} blank matches had no classifier."
             )
         )

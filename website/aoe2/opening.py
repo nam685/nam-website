@@ -9,7 +9,27 @@ right fallback — and it speaks the exact slug vocabulary (scouts/archers/maa/d
 drush_fc/trash) the frontend already colors and labels.
 """
 
+import re
+
 from aoe2coach.buildorders import load_one
+
+# The opening badge is a terse label ("Fast Castle", "Scouts into Knights"). The LLM coach
+# (esp. haiku) sometimes writes a whole explanatory sentence into the `- Opening:` bullet, e.g.
+# "dark age boom (never feudal) — you made only villagers...". Cut at the first explanation
+# delimiter (dash / paren / colon / semicolon / comma) and keep only the leading words. Plain
+# hyphens are NOT split on, so compound tags like "fast-castle" survive.
+_OPENING_DELIM = re.compile(r"\s*(?:[—–]| - |[(:;,])")
+MAX_OPENING_WORDS = 4
+
+
+def cap_opening(text: str, max_words: int = MAX_OPENING_WORDS) -> str:
+    """Trim an opening tag to a terse badge: cut at the first explanation delimiter and keep at
+    most max_words words. Empty/blank in → "" out."""
+    if not text:
+        return ""
+    head = _OPENING_DELIM.split(text.strip(), maxsplit=1)[0]
+    capped = " ".join(head.split()[:max_words])
+    return capped.rstrip(" ,.;:-—–")
 
 
 def opening_from_classifier(classifier: dict) -> str:
