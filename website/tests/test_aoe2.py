@@ -135,6 +135,47 @@ def test_parse_opening_middle_of_text():
 
 
 # ---------------------------------------------------------------------------
+# cap_opening tests
+# ---------------------------------------------------------------------------
+from website.aoe2.opening import cap_opening  # noqa: E402
+
+
+def test_cap_opening_short_unchanged():
+    assert cap_opening("Fast Castle") == "Fast Castle"
+    assert cap_opening("Scouts") == "Scouts"
+    assert cap_opening("Scouts into Knights") == "Scouts into Knights"
+
+
+def test_cap_opening_cuts_explanatory_sentence():
+    # The real haiku regression that prompted the cap.
+    text = (
+        "dark age boom (never feudal) — you made only villagers and eco buildings "
+        "with no military units, and never clicked any age advancement."
+    )
+    assert cap_opening(text) == "dark age boom"
+
+
+def test_cap_opening_caps_word_count():
+    assert cap_opening("one two three four five six") == "one two three four"
+
+
+def test_cap_opening_splits_on_colon_dash_paren():
+    assert cap_opening("Fast Castle: into Knights") == "Fast Castle"
+    assert cap_opening("Archers — solid build") == "Archers"
+    assert cap_opening("Drush (followed by FC)") == "Drush"
+
+
+def test_cap_opening_preserves_compound_hyphen():
+    # Plain hyphens (no surrounding spaces) are NOT split — "fast-castle" must survive.
+    assert cap_opening("fast-castle") == "fast-castle"
+
+
+def test_cap_opening_blank():
+    assert cap_opening("") == ""
+    assert cap_opening("   ") == ""
+
+
+# ---------------------------------------------------------------------------
 # render_dual_log tests
 # ---------------------------------------------------------------------------
 
