@@ -21,6 +21,7 @@ media/
 .env
 .env.local
 .env.*.local
+scripts/aoe2_watcher.env
 
 # Auth credentials
 browser.json
