@@ -70,10 +70,23 @@ export default function Aoe2Tab() {
   const [tab, setTab] = useState<TabKey>("coach");
 
   useEffect(() => {
-    fetch(`${API}/api/aoe2/`)
-      .then((r) => r.json())
-      .then((d) => {
-        const list: Aoe2MatchSummary[] = d.matches || [];
+    // Page through the whole collection into the scrollable rail (no next-page button).
+    // Ordering is stable (-played_at, -created_at), so paging never skips or dupes.
+    (async () => {
+      try {
+        const pageSize = 200;
+        let offset = 0;
+        const list: Aoe2MatchSummary[] = [];
+        for (;;) {
+          const r = await fetch(
+            `${API}/api/aoe2/?limit=${pageSize}&offset=${offset}`,
+          );
+          const d = await r.json();
+          const page: Aoe2MatchSummary[] = d.matches || [];
+          list.push(...page);
+          if (page.length < pageSize) break;
+          offset += pageSize;
+        }
         setMatches(list);
         if (list.length) {
           const param = Number(
@@ -84,8 +97,10 @@ export default function Aoe2Tab() {
           const target = byParam ?? featured ?? list[0];
           setSelectedId(target.id);
         }
-      })
-      .catch(() => {});
+      } catch {
+        /* ignore — the empty state renders */
+      }
+    })();
     fetch(`${API}/api/aoe2/stats/`)
       .then((r) => r.json())
       .then(setStats)
