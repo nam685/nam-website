@@ -11,6 +11,12 @@ growing (write complete at match end). On startup it scans the existing folder (
 catch-up). Keeps a local set of uploaded hashes so it never re-posts; the server also
 dedups by hash, so restarts re-upload nothing.
 
+Eager preprocess, lazy coach: every upload is sent with coach=0 so the server runs the
+deterministic analysis immediately (the match shows up right away) but does NOT run the
+LLM coach inline. The coach is dripped later by the server's coach_backlog cron, which
+respects the Claude Max session budget. Without this, the startup backlog catch-up would
+fire hundreds of inline coach runs and blow the rate limit.
+
 Runs unattended (see scripts/install_aoe2_watcher.ps1): a top-level supervisor restarts
 the watch loop after any error, so a network blip or expired login never kills the daemon.
 Output goes to a size-rotated aoe2_watcher.log next to this script as well as stdout.
@@ -112,6 +118,7 @@ def _upload(server, token, path):
             f"{server}/api/aoe2/upload/",
             headers={"Authorization": f"Bearer {token}"},
             files={"rec": (os.path.basename(path), f, "application/octet-stream")},
+            data={"coach": "0"},  # eager deterministic preprocess; coach drips via server cron
             timeout=120,
         )
     return resp
