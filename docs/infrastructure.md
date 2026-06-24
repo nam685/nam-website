@@ -21,6 +21,12 @@
 - **Celery worker** — systemd service (`celery`), uses Redis as broker
 - **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet, `restart: unless-stopped`)
 
+### Off-server: AoE2 recorded-game watcher
+
+A small daemon runs on the **gaming PC** (not the server) to auto-upload Age of Empires 2
+DE recorded games to the site after each match. Setup and operation:
+[`scripts/AOE2_WATCHER.md`](../scripts/AOE2_WATCHER.md).
+
 ---
 
 ## First-time Server Setup
