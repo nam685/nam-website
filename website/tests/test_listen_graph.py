@@ -51,3 +51,67 @@ def test_search_endpoint(built_graph):  # noqa: ARG001
 def test_search_endpoint_empty_query_returns_empty(built_graph):  # noqa: ARG001
     data = Client().get("/api/listens/graph/search/?q=").json()
     assert data["results"] == []
+
+
+# --- Song-forward shuffle: seedless get_patch should favor tracks + have entropy ---
+
+
+@pytest.fixture()
+def mixed_graph(db):  # noqa: ARG001
+    """Many tracks (modest scores) + one artist and one album with huge aggregated scores.
+
+    Mirrors production, where artist/album nodes aggregate all their tracks' plays and thus
+    dominate a linear recommend_score weighting.
+    """
+    from website.models import MusicNode
+
+    for i in range(20):
+        MusicNode.objects.create(
+            node_type="track", key=f"t{i}", title=f"Track {i}", video_id=f"t{i}", play_count=3, recommend_score=30.0
+        )
+    MusicNode.objects.create(node_type="artist", key="art", title="Big Artist", play_count=999, recommend_score=9999.0)
+    MusicNode.objects.create(node_type="album", key="alb", title="Big Album", play_count=500, recommend_score=5000.0)
+
+
+def _seed_type(patch):
+    """get_patch returns the seed as a key string; look up its node_type in the node list."""
+    return next(n["node_type"] for n in patch["nodes"] if n["key"] == patch["seed"])
+
+
+@pytest.mark.django_db
+def test_seedless_is_song_forward(mixed_graph):  # noqa: ARG001
+    import random as _random
+
+    from website.services import music_graph
+
+    rng = _random.Random(1234)
+    types = []
+    for _ in range(200):
+        patch = music_graph.get_patch(seed_key=None, seed_type=None, rng=rng)
+        types.append(_seed_type(patch))
+    track_share = types.count("track") / len(types)
+    assert track_share > 0.5, f"expected song-forward, got track share {track_share}"
+    assert "track" in types  # songs actually appear (regression: 'never a song')
+
+
+@pytest.mark.django_db
+def test_seedless_has_entropy(mixed_graph):  # noqa: ARG001
+    import random as _random
+
+    from website.services import music_graph
+
+    rng = _random.Random(42)
+    seeds = {music_graph.get_patch(seed_key=None, seed_type=None, rng=rng)["seed"] for _ in range(100)}
+    assert len(seeds) >= 8, f"low entropy: only {len(seeds)} distinct seeds in 100 draws"
+
+
+@pytest.mark.django_db
+def test_seedless_excludes_recent(mixed_graph):  # noqa: ARG001
+    import random as _random
+
+    from website.services import music_graph
+
+    rng = _random.Random(7)
+    # Exclude the two aggregate nodes; the seed must come from the remaining tracks.
+    patch = music_graph.get_patch(seed_key=None, seed_type=None, exclude_keys={"art", "alb"}, rng=rng)
+    assert patch["seed"] not in {"art", "alb"}
