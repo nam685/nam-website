@@ -148,6 +148,29 @@ def _is_logged_in(headers):
         return False
 
 
+# get_history occasionally returns an empty body even though the login probe reports a live
+# session (a "half-dead" cookie). ytmusicapi surfaces that as a JSONDecodeError on the empty
+# response. Retry a few times to absorb transient blips; if it stays empty the cookie genuinely
+# needs re-auth, so raise YTMAuthError — the view turns that into a 409 (actionable re-auth
+# prompt) rather than an opaque 502 that reads as a silent failure.
+_HISTORY_RETRY_ATTEMPTS = 3
+
+
+def _get_history_with_retry(yt):
+    last_exc = None
+    for attempt in range(_HISTORY_RETRY_ATTEMPTS):
+        try:
+            return yt.get_history()
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            logger.warning(
+                "YTM get_history returned an empty/non-JSON body (attempt %d/%d)",
+                attempt + 1,
+                _HISTORY_RETRY_ATTEMPTS,
+            )
+    raise YTMAuthError("YouTube Music returned an empty history response — re-authenticate on /listens.") from last_exc
+
+
 def _parse_track_item(item):
     """Extract track fields from a ytmusicapi item dict."""
     video_id = item.get("videoId", "")
@@ -250,7 +273,7 @@ def _do_sync(progress=None, rebuild_graph=True):
 
     # --- Sync play history ---
     report("Fetching YouTube Music play history…")
-    history = yt.get_history()
+    history = _get_history_with_retry(yt)
 
     cutoff = timezone.now() - timezone.timedelta(hours=24)
     recent_ids = set(ListenTrack.objects.filter(played_at__gte=cutoff).values_list("video_id", flat=True))

@@ -226,6 +226,23 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
+    def test_empty_history_body_surfaces_as_reauth(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
+        # A "half-dead" cookie: the login probe passes but get_history returns an empty body every
+        # time (ytmusicapi raises JSONDecodeError). This must surface as an actionable 409 re-auth
+        # prompt, not an opaque 502 that reads to the user as a silent failure.
+        mock_yt = MagicMock()
+        mock_yt.get_history.side_effect = json.JSONDecodeError("Expecting value", "", 0)
+        mock_ytmusic_cls.return_value = mock_yt
+
+        with patch("builtins.open", _mock_open_browser()):
+            resp = client.post("/api/listens/sync/", **auth_headers)
+        assert resp.status_code == 409
+        assert resp.json()["auth_expired"] is True
+        assert mock_yt.get_history.call_count == listen._HISTORY_RETRY_ATTEMPTS
+        assert ListenTrack.objects.count() == 0
+
+    @patch("os.path.isfile", return_value=True)
+    @patch("ytmusicapi.YTMusic")
     def test_filters_view_counts_from_artist(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = [
@@ -443,3 +460,32 @@ class TestFrequentFromHome:
                 return None
 
         assert listen._fetch_frequent_from_home(FakeYT()) == []
+
+
+# --- Sync resilience: empty-body get_history -> re-auth prompt (not opaque 502) ---
+
+
+def _json_decode_error():
+    return json.JSONDecodeError("Expecting value", "", 0)
+
+
+def test_get_history_with_retry_returns_on_success():
+    yt = MagicMock()
+    yt.get_history.return_value = [{"videoId": "a"}]
+    assert listen._get_history_with_retry(yt) == [{"videoId": "a"}]
+    assert yt.get_history.call_count == 1
+
+
+def test_get_history_with_retry_recovers_after_transient_empty_body():
+    yt = MagicMock()
+    yt.get_history.side_effect = [_json_decode_error(), [{"videoId": "b"}]]
+    assert listen._get_history_with_retry(yt) == [{"videoId": "b"}]
+    assert yt.get_history.call_count == 2
+
+
+def test_get_history_with_retry_raises_auth_error_when_always_empty():
+    yt = MagicMock()
+    yt.get_history.side_effect = _json_decode_error()
+    with pytest.raises(listen.YTMAuthError):
+        listen._get_history_with_retry(yt)
+    assert yt.get_history.call_count == listen._HISTORY_RETRY_ATTEMPTS

@@ -1,4 +1,5 @@
 import logging
+import math
 import random
 import re
 import time
@@ -341,6 +342,36 @@ def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_art
 
 PATCH_MAX_NODES = 40
 
+# Seedless "shuffle" tuning. Artist/album nodes aggregate every play of their tracks, so a naive
+# linear recommend_score weighting buries individual songs (→ "never a song") and concentrates all
+# probability on the top few high-count nodes (→ "same few candidates"). Fix both: pick the node
+# *type* first with a song-forward bias, then weight within that type with a damped (sqrt) score
+# over a wide pool. Callers pass recently-served keys via exclude_keys to avoid immediate repeats.
+SEED_POOL_SIZE = 60
+SEED_TYPE_WEIGHTS = {"track": 0.7, "artist": 0.15, "album": 0.15}
+
+
+def _pick_recommended_seed(exclude_keys, rng):
+    """Song-forward weighted-random seed pick, or None if the graph is empty."""
+    remaining = dict(SEED_TYPE_WEIGHTS)
+    while remaining:
+        node_type = rng.choices(list(remaining), weights=list(remaining.values()), k=1)[0]
+        del remaining[node_type]
+        pool = list(
+            MusicNode.objects.filter(node_type=node_type, recommend_score__gt=0)
+            .exclude(key__in=exclude_keys)
+            .order_by("-recommend_score")[:SEED_POOL_SIZE]
+        )
+        if pool:
+            weights = [math.sqrt(n.recommend_score or 1.0) for n in pool]
+            return rng.choices(pool, weights=weights, k=1)[0]
+
+    # No scored node in any preferred type — fall back to any node, still avoiding recent picks
+    # where possible (and finally allowing repeats rather than returning nothing).
+    fallback = list(MusicNode.objects.exclude(key__in=exclude_keys).order_by("-recommend_score")[:SEED_POOL_SIZE])
+    fallback = fallback or list(MusicNode.objects.all()[:SEED_POOL_SIZE])
+    return rng.choice(fallback) if fallback else None
+
 
 def _serialize_node(n: MusicNode) -> dict:
     return {
@@ -363,15 +394,18 @@ def _neighbors(node_ids: set[int]):
     return list(edges)
 
 
-def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES) -> dict:
-    """Return {seed, nodes, edges} for the seed node + BFS depth-2 neighborhood, capped."""
+def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_keys=None, rng=None) -> dict:
+    """Return {seed, nodes, edges} for the seed node + BFS depth-2 neighborhood, capped.
+
+    With no seed_key, pick a song-forward weighted-random seed (see `_pick_recommended_seed`).
+    `exclude_keys` skips recently-served seeds; `rng` is injectable for deterministic tests.
+    """
+    rng = rng or random
+    exclude_keys = exclude_keys or set()
     if seed_key is None:
-        seed = list(MusicNode.objects.filter(recommend_score__gt=0).order_by("-recommend_score")[:50])
-        seed = seed or list(MusicNode.objects.all()[:50])
-        if not seed:
+        seed_node = _pick_recommended_seed(exclude_keys, rng)
+        if seed_node is None:
             return {"seed": None, "nodes": [], "edges": []}
-        weights = [n.recommend_score or 1.0 for n in seed]
-        seed_node = random.choices(seed, weights=weights, k=1)[0]
     else:
         seed_node = MusicNode.objects.filter(key=seed_key, node_type=seed_type).first()
         if seed_node is None:
