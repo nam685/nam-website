@@ -351,6 +351,29 @@ SEED_POOL_SIZE = 60
 SEED_TYPE_WEIGHTS = {"track": 0.7, "artist": 0.15, "album": 0.15}
 
 
+def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=random):
+    """Pick up to k distinct items by weighted-random over damping(max(score, 0)), no replacement.
+
+    Shared sampling kernel for both the seedless shuffle seed pick and radio's next-track pick.
+    `items`/`scores` are parallel sequences. An all-zero (or empty-weight) pool falls back to a
+    uniform pick so a degenerate score set never raises.
+    """
+    items = list(items)
+    scores = list(scores)
+    idxs = list(range(len(items)))
+    chosen = []
+    for _ in range(min(k, len(items))):
+        weights = [damping(max(scores[i], 0.0)) for i in idxs]
+        total = sum(weights)
+        if total <= 0:
+            pos = rng.randrange(len(idxs))
+        else:
+            pos = rng.choices(range(len(idxs)), weights=weights, k=1)[0]
+        chosen.append(items[idxs[pos]])
+        idxs.pop(pos)
+    return chosen
+
+
 def _pick_recommended_seed(exclude_keys, rng):
     """Song-forward weighted-random seed pick, or None if the graph is empty."""
     remaining = dict(SEED_TYPE_WEIGHTS)

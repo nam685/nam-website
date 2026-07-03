@@ -7,9 +7,15 @@ from website.auth import create_token
 @pytest.fixture(autouse=True)
 def _clear_cache():
     """Clear Django cache between tests to avoid stale cached values."""
-    cache.clear()
+    try:
+        cache.clear()
+    except Exception:
+        pass  # Ignore Redis connection errors in tests that don't need cache
     yield
-    cache.clear()
+    try:
+        cache.clear()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -115,3 +115,53 @@ def test_seedless_excludes_recent(mixed_graph):  # noqa: ARG001
     # Exclude the two aggregate nodes; the seed must come from the remaining tracks.
     patch = music_graph.get_patch(seed_key=None, seed_type=None, exclude_keys={"art", "alb"}, rng=rng)
     assert patch["seed"] not in {"art", "alb"}
+
+
+# --- Shared damped_weighted_sample kernel ---
+
+
+def test_damped_weighted_sample_respects_k_and_no_replacement():
+    import random as _random
+
+    from website.services import music_graph
+
+    items = ["a", "b", "c", "d"]
+    picked = music_graph.damped_weighted_sample(items, [1, 1, 1, 1], k=3, rng=_random.Random(0))
+    assert len(picked) == 3
+    assert len(set(picked)) == 3  # no replacement
+    assert set(picked) <= set(items)
+
+
+def test_damped_weighted_sample_k_capped_to_len():
+    import random as _random
+
+    from website.services import music_graph
+
+    picked = music_graph.damped_weighted_sample(["a", "b"], [1, 1], k=5, rng=_random.Random(0))
+    assert len(picked) == 2
+
+
+def test_damped_weighted_sample_all_zero_weights_uniform_fallback():
+    import random as _random
+
+    from website.services import music_graph
+
+    picked = music_graph.damped_weighted_sample(["a", "b", "c"], [0, 0, 0], k=2, rng=_random.Random(0))
+    assert len(picked) == 2
+    assert len(set(picked)) == 2
+
+
+def test_damped_weighted_sample_favors_higher_score():
+    import random as _random
+
+    from website.services import music_graph
+
+    rng = _random.Random(123)
+    firsts = [music_graph.damped_weighted_sample(["hi", "lo"], [100.0, 1.0], k=1, rng=rng)[0] for _ in range(200)]
+    assert firsts.count("hi") > firsts.count("lo")
+
+
+def test_damped_weighted_sample_empty():
+    from website.services import music_graph
+
+    assert music_graph.damped_weighted_sample([], [], k=3) == []
