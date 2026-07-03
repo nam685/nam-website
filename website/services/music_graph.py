@@ -324,6 +324,23 @@ def compute_recommend_scores():
         node.save(update_fields=["recommend_score"])
 
 
+def compute_node_degrees():
+    """Set each node.degree to its incident-edge count (both directions). Run after edges built."""
+    from collections import Counter
+
+    deg = Counter()
+    for src_id, tgt_id in MusicEdge.objects.values_list("source_id", "target_id").iterator():
+        deg[src_id] += 1
+        deg[tgt_id] += 1
+    to_update = []
+    for node in MusicNode.objects.all().iterator():
+        d = deg.get(node.id, 0)
+        if node.degree != d:
+            node.degree = d
+            to_update.append(node)
+    MusicNode.objects.bulk_update(to_update, ["degree"], batch_size=500)
+
+
 def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_artist_keys, library_video_ids):
     """Set personalization flags on existing nodes from YTM library data (idempotent)."""
     MusicNode.objects.filter(node_type="track").update(is_liked=False, in_library=False)
@@ -351,6 +368,39 @@ SEED_POOL_SIZE = 60
 SEED_TYPE_WEIGHTS = {"track": 0.7, "artist": 0.15, "album": 0.15}
 
 
+def _hub_weight(degree: int) -> float:
+    """Down-weight high-degree hub nodes so they don't saturate every patch / radio pick.
+
+    Log-damped: hubs still surface sometimes (they *are* the most-played music), just not in
+    the majority of patches. Degree 0 -> 1.0 (no penalty), degree 100 -> ~0.18.
+    """
+    return 1.0 / (1.0 + math.log1p(max(degree, 0)))
+
+
+def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=None):
+    """Pick up to k distinct items by weighted-random over damping(max(score, 0)), no replacement.
+
+    Shared sampling kernel for both the seedless shuffle seed pick and radio's next-track pick.
+    `items`/`scores` are parallel sequences. An all-zero (or empty-weight) pool falls back to a
+    uniform pick so a degenerate score set never raises.
+    """
+    rng = rng or random
+    items = list(items)
+    scores = list(scores)
+    idxs = list(range(len(items)))
+    chosen = []
+    for _ in range(min(k, len(items))):
+        weights = [damping(max(scores[i], 0.0)) for i in idxs]
+        total = sum(weights)
+        if total <= 0:
+            pos = rng.randrange(len(idxs))
+        else:
+            pos = rng.choices(range(len(idxs)), weights=weights, k=1)[0]
+        chosen.append(items[idxs[pos]])
+        idxs.pop(pos)
+    return chosen
+
+
 def _pick_recommended_seed(exclude_keys, rng):
     """Song-forward weighted-random seed pick, or None if the graph is empty."""
     remaining = dict(SEED_TYPE_WEIGHTS)
@@ -363,8 +413,8 @@ def _pick_recommended_seed(exclude_keys, rng):
             .order_by("-recommend_score")[:SEED_POOL_SIZE]
         )
         if pool:
-            weights = [math.sqrt(n.recommend_score or 1.0) for n in pool]
-            return rng.choices(pool, weights=weights, k=1)[0]
+            scores = [n.recommend_score or 1.0 for n in pool]
+            return damped_weighted_sample(pool, scores, k=1, rng=rng)[0]
 
     # No scored node in any preferred type — fall back to any node, still avoiding recent picks
     # where possible (and finally allowing repeats rather than returning nothing).
@@ -413,24 +463,47 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
         if seed_node is None:
             return {"seed": None, "nodes": [], "edges": []}
 
-    # BFS to depth 2 collecting node ids.
+    # BFS to depth 2, accumulating a reach score per neighbor (edge weight decayed by hop depth).
+    neighbor_score: dict[int, float] = {}
     frontier = {seed_node.id}
-    collected = {seed_node.id}
-    for _ in range(2):
+    seen = {seed_node.id}
+    for depth in range(2):
         edges = _neighbors(frontier)
-        next_frontier = set()
+        next_frontier: set[int] = set()
         for e in edges:
-            for nid in (e.source_id, e.target_id):
-                if nid not in collected and len(collected) < max_nodes:
-                    collected.add(nid)
-                    next_frontier.add(nid)
+            for a, b in ((e.source_id, e.target_id), (e.target_id, e.source_id)):
+                if a in frontier and b != seed_node.id:
+                    neighbor_score[b] = neighbor_score.get(b, 0.0) + e.weight / (depth + 1)
+                    if b not in seen:
+                        seen.add(b)
+                        next_frontier.add(b)
         frontier = next_frontier
         if not frontier:
             break
 
-    nodes = list(MusicNode.objects.filter(id__in=collected))
+    # Fill the patch (seed always included). When the neighborhood exceeds the cap, choose which
+    # nodes to keep by damped-weighted sampling over reach-score x hub penalty, so a few super-hubs
+    # no longer dominate every patch. Under the cap, keep everything (behavior unchanged).
+    neighbor_ids = list(neighbor_score)
+    room = max_nodes - 1
+    if len(neighbor_ids) > room:
+        degrees = dict(MusicNode.objects.filter(id__in=neighbor_ids).values_list("id", "degree"))
+        eff = [neighbor_score[i] * _hub_weight(degrees.get(i, 0)) for i in neighbor_ids]
+        kept = damped_weighted_sample(neighbor_ids, eff, k=room, rng=rng)
+        collected = {seed_node.id, *kept}
+    else:
+        collected = {seed_node.id, *neighbor_ids}
+
+    edges = list(MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected))
+    # Drop any non-seed node left without an edge into `collected`: over-cap sampling can keep a
+    # depth-2 node whose only connector (its depth-1 parent) wasn't sampled, which would otherwise
+    # render as a floating dot. The seed is always kept even if it has no neighbours.
+    connected = {seed_node.id}
+    for e in edges:
+        connected.add(e.source_id)
+        connected.add(e.target_id)
+    nodes = list(MusicNode.objects.filter(id__in=connected))
     id_to_key = {n.id: n.key for n in nodes}
-    edges = MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected)
     return {
         "seed": seed_node.key,
         "nodes": [_serialize_node(n) for n in nodes],
@@ -521,6 +594,8 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     rebuild_similarity_edges(api_key=api_key, progress=progress)
     _report(progress, "Computing recommendation scores…")
     compute_recommend_scores()
+    _report(progress, "Computing node degrees…")
+    compute_node_degrees()
     _report(progress, f"Done: {MusicNode.objects.count()} nodes, {MusicEdge.objects.count()} edges")
 
 
@@ -588,14 +663,9 @@ def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
 
     candidates.sort(key=lambda c: c[1], reverse=True)
     pool = candidates[:RADIO_CANDIDATE_POOL]
-
-    chosen: list[MusicNode] = []
-    available = list(pool)
-    for _ in range(min(limit, len(pool))):
-        nodes = [c[0] for c in available]
-        weights = [c[1] for c in available]
-        pick = random.choices(nodes, weights=weights, k=1)[0]
-        chosen.append(pick)
-        available = [c for c in available if c[0].id != pick.id]
-
+    nodes = [c[0] for c in pool]
+    # Damped (sqrt) weighting via the shared kernel, with the hub penalty applied to each score so
+    # super-connected tracks stop being served as "next" every time.
+    eff_scores = [c[1] * _hub_weight(c[0].degree) for c in pool]
+    chosen = damped_weighted_sample(nodes, eff_scores, k=limit, rng=random)
     return [_node_to_track(n) for n in chosen]

@@ -107,6 +107,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Listens: with radio on, playing a single track keeps auto-playing related tracks (queue never ends)
 - [ ] Listens: with radio off, playback stops at the end of the queue
 - [ ] Listens: radio state survives a page reload (persisted in session)
+- [ ] `/listens` shuffle button: pressing it repeatedly surfaces visibly different clusters (not the same few hub tracks every time).
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar

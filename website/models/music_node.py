@@ -24,6 +24,7 @@ class MusicNode(models.Model):
     is_subscribed = models.BooleanField(default=False)
     in_library = models.BooleanField(default=False)
     recommend_score = models.FloatField(default=0.0)
+    degree = models.PositiveIntegerField(default=0)  # incident-edge count; set during graph rebuild
 
     class Meta:
         unique_together = [("node_type", "key")]
