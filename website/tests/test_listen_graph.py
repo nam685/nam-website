@@ -205,3 +205,36 @@ def test_compute_node_degrees_counts_incident_edges():
     leaves[0].refresh_from_db()
     assert hub.degree == 3
     assert leaves[0].degree == 1
+
+
+# --- radio_next de-hubbing ---
+
+
+@pytest.mark.django_db
+def test_radio_next_prefers_low_degree_over_hub_at_equal_affinity():
+    import random as _random
+
+    from website.models import MusicEdge, MusicNode
+
+    seed = MusicNode.objects.create(node_type="track", key="seed", title="Seed", video_id="seed")
+    # Two candidates with an equal-weight similar_track edge to the seed:
+    hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub", degree=40)
+    quiet = MusicNode.objects.create(node_type="track", key="quiet", title="Quiet", video_id="quiet", degree=1)
+    for cand in (hub, quiet):
+        src, tgt = (seed, cand) if seed.id < cand.id else (cand, seed)
+        MusicEdge.objects.create(source=src, target=tgt, edge_type="similar_track", weight=1.0)
+
+    import website.services.music_graph as mg
+
+    orig = mg.random
+    mg.random = _random.Random(99)  # deterministic pick stream
+    try:
+        picks = []
+        for _ in range(200):
+            got = mg.radio_next("seed", limit=1)
+            picks += [t["video_id"] for t in got]
+    finally:
+        mg.random = orig
+    assert picks.count("quiet") > picks.count("hub"), (
+        f"hub not de-weighted: {picks.count('hub')} vs {picks.count('quiet')}"
+    )

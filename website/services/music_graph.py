@@ -639,14 +639,9 @@ def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
 
     candidates.sort(key=lambda c: c[1], reverse=True)
     pool = candidates[:RADIO_CANDIDATE_POOL]
-
-    chosen: list[MusicNode] = []
-    available = list(pool)
-    for _ in range(min(limit, len(pool))):
-        nodes = [c[0] for c in available]
-        weights = [c[1] for c in available]
-        pick = random.choices(nodes, weights=weights, k=1)[0]
-        chosen.append(pick)
-        available = [c for c in available if c[0].id != pick.id]
-
+    nodes = [c[0] for c in pool]
+    # Damped (sqrt) weighting via the shared kernel, with the hub penalty applied to each score so
+    # super-connected tracks stop being served as "next" every time.
+    eff_scores = [c[1] * _hub_weight(c[0].degree) for c in pool]
+    chosen = damped_weighted_sample(nodes, eff_scores, k=limit, rng=random)
     return [_node_to_track(n) for n in chosen]
