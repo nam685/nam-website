@@ -412,8 +412,8 @@ def _pick_recommended_seed(exclude_keys, rng):
             .order_by("-recommend_score")[:SEED_POOL_SIZE]
         )
         if pool:
-            weights = [math.sqrt(n.recommend_score or 1.0) for n in pool]
-            return rng.choices(pool, weights=weights, k=1)[0]
+            scores = [n.recommend_score or 1.0 for n in pool]
+            return damped_weighted_sample(pool, scores, k=1, rng=rng)[0]
 
     # No scored node in any preferred type — fall back to any node, still avoiding recent picks
     # where possible (and finally allowing repeats rather than returning nothing).
@@ -462,20 +462,36 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
         if seed_node is None:
             return {"seed": None, "nodes": [], "edges": []}
 
-    # BFS to depth 2 collecting node ids.
+    # BFS to depth 2, accumulating a reach score per neighbor (edge weight decayed by hop depth).
+    neighbor_score: dict[int, float] = {}
     frontier = {seed_node.id}
-    collected = {seed_node.id}
-    for _ in range(2):
+    seen = {seed_node.id}
+    for depth in range(2):
         edges = _neighbors(frontier)
-        next_frontier = set()
+        next_frontier: set[int] = set()
         for e in edges:
-            for nid in (e.source_id, e.target_id):
-                if nid not in collected and len(collected) < max_nodes:
-                    collected.add(nid)
-                    next_frontier.add(nid)
+            for a, b in ((e.source_id, e.target_id), (e.target_id, e.source_id)):
+                if a in frontier and b != seed_node.id:
+                    neighbor_score[b] = neighbor_score.get(b, 0.0) + e.weight / (depth + 1)
+                    if b not in seen:
+                        seen.add(b)
+                        next_frontier.add(b)
         frontier = next_frontier
         if not frontier:
             break
+
+    # Fill the patch (seed always included). When the neighborhood exceeds the cap, choose which
+    # nodes to keep by damped-weighted sampling over reach-score x hub penalty, so a few super-hubs
+    # no longer dominate every patch. Under the cap, keep everything (behavior unchanged).
+    neighbor_ids = list(neighbor_score)
+    room = max_nodes - 1
+    if len(neighbor_ids) > room:
+        degrees = dict(MusicNode.objects.filter(id__in=neighbor_ids).values_list("id", "degree"))
+        eff = [neighbor_score[i] * _hub_weight(degrees.get(i, 0)) for i in neighbor_ids]
+        kept = damped_weighted_sample(neighbor_ids, eff, k=room, rng=rng)
+        collected = {seed_node.id, *kept}
+    else:
+        collected = {seed_node.id, *neighbor_ids}
 
     nodes = list(MusicNode.objects.filter(id__in=collected))
     id_to_key = {n.id: n.key for n in nodes}

@@ -238,3 +238,47 @@ def test_radio_next_prefers_low_degree_over_hub_at_equal_affinity():
     assert picks.count("quiet") > picks.count("hub"), (
         f"hub not de-weighted: {picks.count('hub')} vs {picks.count('quiet')}"
     )
+
+
+# --- get_patch neighborhood de-hubbing ---
+
+
+@pytest.fixture()
+def hub_graph(db):  # noqa: ARG001
+    """A seed connected to one high-degree hub and many low-degree leaves, all equal edge weight."""
+    from website.models import MusicEdge, MusicNode
+
+    seed = MusicNode.objects.create(node_type="track", key="s", title="Seed", video_id="s", recommend_score=10.0)
+    hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub", degree=200)
+    leaves = [
+        MusicNode.objects.create(node_type="track", key=f"n{i}", title=f"N{i}", video_id=f"n{i}", degree=1)
+        for i in range(60)
+    ]
+
+    def link(a, b):
+        src, tgt = (a, b) if a.id < b.id else (b, a)
+        MusicEdge.objects.create(source=src, target=tgt, edge_type="colisten", weight=1.0)
+
+    for node in [hub, *leaves]:
+        link(seed, node)
+    return seed
+
+
+@pytest.mark.django_db
+def test_get_patch_dehubs_oversized_neighborhood(hub_graph):  # noqa: ARG001
+    import random as _random
+
+    from website.services import music_graph
+
+    # max_nodes small enough that the neighborhood must be sub-sampled.
+    appeared = 0
+    trials = 60
+    for i in range(trials):
+        patch = music_graph.get_patch(seed_key="s", seed_type="track", max_nodes=10, rng=_random.Random(i))
+        keys = {n["key"] for n in patch["nodes"]}
+        assert "s" in keys  # seed always present
+        if "hub" in keys:
+            appeared += 1
+    # With a degree-200 hub vs degree-1 leaves at equal weight, the hub should be down-weighted well
+    # below always-present.
+    assert appeared < trials * 0.6, f"hub still saturates patches: {appeared}/{trials}"
