@@ -324,6 +324,23 @@ def compute_recommend_scores():
         node.save(update_fields=["recommend_score"])
 
 
+def compute_node_degrees():
+    """Set each node.degree to its incident-edge count (both directions). Run after edges built."""
+    from collections import Counter
+
+    deg = Counter()
+    for src_id, tgt_id in MusicEdge.objects.values_list("source_id", "target_id").iterator():
+        deg[src_id] += 1
+        deg[tgt_id] += 1
+    to_update = []
+    for node in MusicNode.objects.all().iterator():
+        d = deg.get(node.id, 0)
+        if node.degree != d:
+            node.degree = d
+            to_update.append(node)
+    MusicNode.objects.bulk_update(to_update, ["degree"], batch_size=500)
+
+
 def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_artist_keys, library_video_ids):
     """Set personalization flags on existing nodes from YTM library data (idempotent)."""
     MusicNode.objects.filter(node_type="track").update(is_liked=False, in_library=False)
@@ -553,6 +570,8 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     rebuild_similarity_edges(api_key=api_key, progress=progress)
     _report(progress, "Computing recommendation scores…")
     compute_recommend_scores()
+    _report(progress, "Computing node degrees…")
+    compute_node_degrees()
     _report(progress, f"Done: {MusicNode.objects.count()} nodes, {MusicEdge.objects.count()} edges")
 
 

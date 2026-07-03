@@ -182,3 +182,26 @@ def test_hub_weight_monotonic_decreasing():
     w = [music_graph._hub_weight(d) for d in (0, 1, 5, 50, 500)]
     assert all(a > b for a, b in zip(w, w[1:]))
     assert all(0 < x <= 1.0 for x in w)
+
+
+# --- degree population ---
+
+
+@pytest.mark.django_db
+def test_compute_node_degrees_counts_incident_edges():
+    from website.models import MusicEdge, MusicNode
+    from website.services import music_graph
+
+    hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub")
+    leaves = [
+        MusicNode.objects.create(node_type="track", key=f"l{i}", title=f"L{i}", video_id=f"l{i}") for i in range(3)
+    ]
+    for leaf in leaves:
+        src, tgt = (hub, leaf) if hub.id < leaf.id else (leaf, hub)
+        MusicEdge.objects.create(source=src, target=tgt, edge_type="structural", weight=1.0)
+
+    music_graph.compute_node_degrees()
+    hub.refresh_from_db()
+    leaves[0].refresh_from_db()
+    assert hub.degree == 3
+    assert leaves[0].degree == 1
