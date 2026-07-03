@@ -351,6 +351,15 @@ SEED_POOL_SIZE = 60
 SEED_TYPE_WEIGHTS = {"track": 0.7, "artist": 0.15, "album": 0.15}
 
 
+def _hub_weight(degree: int) -> float:
+    """Down-weight high-degree hub nodes so they don't saturate every patch / radio pick.
+
+    Log-damped: hubs still surface sometimes (they *are* the most-played music), just not in
+    the majority of patches. Degree 0 -> 1.0 (no penalty), degree 100 -> ~0.18.
+    """
+    return 1.0 / (1.0 + math.log1p(max(degree, 0)))
+
+
 def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=random):
     """Pick up to k distinct items by weighted-random over damping(max(score, 0)), no replacement.
 

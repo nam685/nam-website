@@ -165,3 +165,20 @@ def test_damped_weighted_sample_empty():
     from website.services import music_graph
 
     assert music_graph.damped_weighted_sample([], [], k=3) == []
+
+
+# --- Hub-diversity penalty ---
+
+
+def test_hub_weight_zero_degree_is_identity():
+    from website.services import music_graph
+
+    assert music_graph._hub_weight(0) == 1.0
+
+
+def test_hub_weight_monotonic_decreasing():
+    from website.services import music_graph
+
+    w = [music_graph._hub_weight(d) for d in (0, 1, 5, 50, 500)]
+    assert all(a > b for a, b in zip(w, w[1:]))
+    assert all(0 < x <= 1.0 for x in w)
