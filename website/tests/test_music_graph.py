@@ -241,6 +241,41 @@ def test_get_patch_seedless_picks_by_recommend_score(plays):  # noqa: ARG001
 
 
 @pytest.mark.django_db
+def test_get_patch_caps_super_node_degree():
+    """A hub linked to far more than PATCH_MAX_DEGREE tracks is thinned in the patch."""
+    hub = MusicNode.objects.create(node_type="artist", key="hub", title="Hub")
+    n = music_graph.PATCH_MAX_DEGREE + 8
+    tracks = [MusicNode.objects.create(node_type="track", key=f"t{i}", title=f"T{i}") for i in range(n)]
+    for t in tracks:
+        music_graph._upsert_edge(hub, t, "structural", music_graph.STRUCTURAL_WEIGHT)
+
+    patch = music_graph.get_patch(seed_key="hub", seed_type="artist", max_nodes=100)
+
+    hub_degree = sum(1 for e in patch["edges"] if "hub" in (e["source"], e["target"]))
+    assert hub_degree <= music_graph.PATCH_MAX_DEGREE
+
+
+@pytest.mark.django_db
+def test_get_patch_keeps_higher_priority_edges_over_structural():
+    """When a hub is over the cap, meaningful edges win over excess structural links."""
+    hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub")
+    # Fill the cap with low-priority structural neighbours...
+    for i in range(music_graph.PATCH_MAX_DEGREE):
+        s = MusicNode.objects.create(node_type="artist", key=f"s{i}", title=f"S{i}")
+        music_graph._upsert_edge(hub, s, "structural", music_graph.STRUCTURAL_WEIGHT)
+    # ...plus one high-priority similar_track that must displace a structural edge.
+    sim = MusicNode.objects.create(node_type="track", key="sim", title="Sim")
+    music_graph._upsert_edge(hub, sim, "similar_track", 0.9)
+
+    patch = music_graph.get_patch(seed_key="hub", seed_type="track", max_nodes=100)
+
+    hub_edges = [e for e in patch["edges"] if "hub" in (e["source"], e["target"])]
+    assert len(hub_edges) <= music_graph.PATCH_MAX_DEGREE
+    kept_neighbors = {e["target"] if e["source"] == "hub" else e["source"] for e in hub_edges}
+    assert "sim" in kept_neighbors  # the high-priority edge survived the cap
+
+
+@pytest.mark.django_db
 def test_search_nodes_matches_title_and_subtitle(plays):  # noqa: ARG001
     music_graph.rebuild_nodes()
     results = music_graph.search_nodes("radio")
