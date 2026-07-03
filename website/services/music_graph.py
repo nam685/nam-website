@@ -377,13 +377,14 @@ def _hub_weight(degree: int) -> float:
     return 1.0 / (1.0 + math.log1p(max(degree, 0)))
 
 
-def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=random):
+def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=None):
     """Pick up to k distinct items by weighted-random over damping(max(score, 0)), no replacement.
 
     Shared sampling kernel for both the seedless shuffle seed pick and radio's next-track pick.
     `items`/`scores` are parallel sequences. An all-zero (or empty-weight) pool falls back to a
     uniform pick so a degenerate score set never raises.
     """
+    rng = rng or random
     items = list(items)
     scores = list(scores)
     idxs = list(range(len(items)))
@@ -493,9 +494,16 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
     else:
         collected = {seed_node.id, *neighbor_ids}
 
-    nodes = list(MusicNode.objects.filter(id__in=collected))
+    edges = list(MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected))
+    # Drop any non-seed node left without an edge into `collected`: over-cap sampling can keep a
+    # depth-2 node whose only connector (its depth-1 parent) wasn't sampled, which would otherwise
+    # render as a floating dot. The seed is always kept even if it has no neighbours.
+    connected = {seed_node.id}
+    for e in edges:
+        connected.add(e.source_id)
+        connected.add(e.target_id)
+    nodes = list(MusicNode.objects.filter(id__in=connected))
     id_to_key = {n.id: n.key for n in nodes}
-    edges = MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected)
     return {
         "seed": seed_node.key,
         "nodes": [_serialize_node(n) for n in nodes],

@@ -288,3 +288,45 @@ def test_get_patch_dehubs_oversized_neighborhood(hub_graph):  # noqa: ARG001
     # And the degree-200 hub, at equal edge weight to degree-1 leaves, is demoted well below
     # always-present.
     assert appeared < trials * 0.6, f"hub still saturates patches: {appeared}/{trials}"
+
+
+@pytest.fixture()
+def depth2_graph(db):  # noqa: ARG001
+    """Seed -> 3 depth-1 hubs -> 60 depth-2 leaves (each leaf hangs off exactly one hub).
+
+    Over-cap sampling can keep a leaf while dropping its only connector (its hub), which would
+    leave the leaf edgeless in the patch.
+    """
+    from website.models import MusicEdge, MusicNode
+
+    seed = MusicNode.objects.create(node_type="track", key="s", title="Seed", video_id="s", recommend_score=10.0)
+    hubs = [MusicNode.objects.create(node_type="track", key=f"h{i}", title=f"H{i}", video_id=f"h{i}") for i in range(3)]
+
+    def link(a, b):
+        src, tgt = (a, b) if a.id < b.id else (b, a)
+        MusicEdge.objects.create(source=src, target=tgt, edge_type="colisten", weight=1.0)
+
+    for h in hubs:
+        link(seed, h)
+    for i in range(60):
+        leaf = MusicNode.objects.create(node_type="track", key=f"l{i}", title=f"L{i}", video_id=f"l{i}")
+        link(hubs[i % 3], leaf)
+    return seed
+
+
+@pytest.mark.django_db
+def test_get_patch_never_returns_floating_nodes(depth2_graph):  # noqa: ARG001
+    import random as _random
+
+    from website.services import music_graph
+
+    for i in range(40):
+        patch = music_graph.get_patch(seed_key="s", seed_type="track", max_nodes=10, rng=_random.Random(i))
+        edge_keys = set()
+        for e in patch["edges"]:
+            edge_keys.add(e["source"])
+            edge_keys.add(e["target"])
+        for n in patch["nodes"]:
+            if n["key"] == "s":
+                continue  # seed may stand alone if it has no neighbours
+            assert n["key"] in edge_keys, f"floating node {n['key']} in patch (seed {i})"
