@@ -270,15 +270,21 @@ def test_get_patch_dehubs_oversized_neighborhood(hub_graph):  # noqa: ARG001
 
     from website.services import music_graph
 
-    # max_nodes small enough that the neighborhood must be sub-sampled.
+    # max_nodes small enough that the neighborhood (1 hub + 60 leaves) must be sub-sampled.
+    sets = []
     appeared = 0
-    trials = 60
+    trials = 40
     for i in range(trials):
         patch = music_graph.get_patch(seed_key="s", seed_type="track", max_nodes=10, rng=_random.Random(i))
-        keys = {n["key"] for n in patch["nodes"]}
+        keys = frozenset(n["key"] for n in patch["nodes"])
         assert "s" in keys  # seed always present
+        sets.append(keys)
         if "hub" in keys:
             appeared += 1
-    # With a degree-200 hub vs degree-1 leaves at equal weight, the hub should be down-weighted well
-    # below always-present.
+    # New behavior samples the over-cap neighborhood with rng, so the kept node set varies across
+    # seeds. Old first-come BFS ignored rng and returned an identical set every call — this is the
+    # assertion that actually discriminates the fix.
+    assert len(set(sets)) > 1, "neighborhood selection does not vary with rng — de-hub sampling not applied"
+    # And the degree-200 hub, at equal edge weight to degree-1 leaves, is demoted well below
+    # always-present.
     assert appeared < trials * 0.6, f"hub still saturates patches: {appeared}/{trials}"
