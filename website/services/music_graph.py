@@ -341,6 +341,34 @@ def apply_personalization(*, liked_video_ids, library_album_keys, subscribed_art
 
 
 PATCH_MAX_NODES = 40
+PATCH_MAX_DEGREE = 8  # cap edges per node in a patch so hub nodes don't render as a hairball
+
+
+def _cap_edges_by_degree(edges, max_degree: int = PATCH_MAX_DEGREE):
+    """Bound every node to `max_degree` incident edges, keeping the strongest ones.
+
+    Structural / similar_artist edges are uncapped at build time, so a prolific artist or
+    album becomes a "super node" wired to every one of its tracks. This greedily builds a
+    degree-bounded subgraph for the *visualization only* (the underlying MusicEdge rows,
+    which radio scores over, are untouched):
+
+    1. Rank edges by (edge-type priority, weight) descending — the same priority radio uses
+       (similar_track > colisten > similar_artist > structural), so meaningful relationships
+       survive and excess structural hub links are dropped first.
+    2. Keep an edge only if BOTH endpoints are still under the cap; a node may end with fewer
+       than `max_degree` if its edges were claimed by higher-priority neighbours.
+    """
+    ranked = sorted(edges, key=lambda e: (RADIO_EDGE_PRIORITY.get(e.edge_type, 1.0), e.weight), reverse=True)
+    degree: dict[int, int] = defaultdict(int)
+    kept = []
+    for e in ranked:
+        if degree[e.source_id] >= max_degree or degree[e.target_id] >= max_degree:
+            continue
+        kept.append(e)
+        degree[e.source_id] += 1
+        degree[e.target_id] += 1
+    return kept
+
 
 # Seedless "shuffle" tuning. Artist/album nodes aggregate every play of their tracks, so a naive
 # linear recommend_score weighting buries individual songs (→ "never a song") and concentrates all
@@ -431,6 +459,7 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
     nodes = list(MusicNode.objects.filter(id__in=collected))
     id_to_key = {n.id: n.key for n in nodes}
     edges = MusicEdge.objects.filter(source_id__in=collected, target_id__in=collected)
+    edges = _cap_edges_by_degree(list(edges))
     return {
         "seed": seed_node.key,
         "nodes": [_serialize_node(n) for n in nodes],
