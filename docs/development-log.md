@@ -1,5 +1,9 @@
 # Development Log
 
+## 2026-07-05 — Fix listens sync "session expired" loop + real admin gating
+
+Root-caused the long-standing listens sync failure: `browser.json` stored the pasted `accept-encoding: gzip, deflate, br, zstd`, so YouTube replied brotli/zstd that the server's `requests` couldn't decode — every sync raised a JSONDecodeError that masqueraded as an expired session. The `_is_logged_in` probe stripped `accept-encoding`, so it always reported "logged in" while real calls failed, hiding the bug across several fix attempts. Added `_sanitize_headers()` (drops `accept-encoding` + stale `content-*`) applied on both save and load, so the existing on-disk credentials auto-heal with no re-auth. Separately, made admin gating actually validate the token against `/api/auth/check/` (shared `useIsAdmin` hook) instead of merely checking a token string exists — a stale/expired token no longer surfaces admin controls on listens/watches/reads/codes/bets/plays/yaps.
+
 ## 2026-03-31 — Floating feedback button
 
 Added a site-wide floating feedback button (bottom-right corner) so visitors can leave anonymous messages. Backend: new Feedback model + POST /api/feedback/ endpoint, rate-limited to 1 per hour per IP. Frontend: expandable chat-bubble button styled like the ComposeSprite input, adapts to each page's --accent color.
