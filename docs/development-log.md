@@ -1,5 +1,9 @@
 # Development Log
 
+## 2026-07-05 — Listens sync UX: no-timeout rebuild, live refresh, graph follows player
+
+Follow-ups after the sync fix shipped. (1) Reauth now derives the SAPISIDHASH from the cookie itself, so any pasted YTM POST works even when it has no Authorization header (previously rejected as "oauth JSON provided"). (2) Removed the inline graph-rebuild fallback: the Last.fm pass takes minutes and would blow gunicorn's 120s timeout, turning a successful sync into a "quiet failure" — if Celery is unavailable we now skip the rebuild (tracks are already saved) instead of blocking the request. (3) After a sync the stats refresh immediately and the graph re-polls while the async rebuild runs, so new listens appear without a manual page reload. (4) The listens graph now re-centers on the playing track whenever it changes (next/prev/auto-advance/radio), matching a node click.
+
 ## 2026-07-05 — Fix listens sync "session expired" loop + real admin gating
 
 Root-caused the long-standing listens sync failure: `browser.json` stored the pasted `accept-encoding: gzip, deflate, br, zstd`, so YouTube replied brotli/zstd that the server's `requests` couldn't decode — every sync raised a JSONDecodeError that masqueraded as an expired session. The `_is_logged_in` probe stripped `accept-encoding`, so it always reported "logged in" while real calls failed, hiding the bug across several fix attempts. Added `_sanitize_headers()` (drops `accept-encoding` + stale `content-*`) applied on both save and load, so the existing on-disk credentials auto-heal with no re-auth. Separately, made admin gating actually validate the token against `/api/auth/check/` (shared `useIsAdmin` hook) instead of merely checking a token string exists — a stale/expired token no longer surfaces admin controls on listens/watches/reads/codes/bets/plays/yaps.

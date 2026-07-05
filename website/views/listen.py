@@ -106,21 +106,32 @@ def _get_auth_path():
     return os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
 
 
-def _load_browser_headers():
-    """Load + authorize the YTM browser.json headers dict, or None if not configured."""
+def _authorize_headers(headers):
+    """Compute the SAPISIDHASH `authorization` header from the cookie if it's not already present.
+
+    ytmusicapi's `determine_auth_type` classifies a header dict as BROWSER *only* if `authorization`
+    contains "SAPISIDHASH"; with no authorization it defaults to OAUTH and raises "oauth_credentials
+    not provided". Pasted requests may or may not carry an Authorization header (e.g. /browse does,
+    /api/stats/playback does not), so we must derive it ourselves from the cookie rather than depend
+    on which request the user happened to copy. Mutates and returns `headers`.
+    """
     from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
+    if "authorization" not in headers and headers.get("cookie"):
+        sapisid = sapisid_from_cookie(headers["cookie"])
+        origin = headers.get("origin", "https://music.youtube.com")
+        headers["authorization"] = get_authorization(sapisid + " " + origin)
+    return headers
+
+
+def _load_browser_headers():
+    """Load + authorize the YTM browser.json headers dict, or None if not configured."""
     auth_path = _get_auth_path()
     if not os.path.isfile(auth_path):
         return None
 
     with open(auth_path) as f:
-        headers = _sanitize_headers(json.load(f))
-    if "authorization" not in headers and "cookie" in headers:
-        sapisid = sapisid_from_cookie(headers["cookie"])
-        origin = headers.get("origin", "https://music.youtube.com")
-        headers["authorization"] = get_authorization(sapisid + " " + origin)
-    return headers
+        return _authorize_headers(_sanitize_headers(json.load(f)))
 
 
 def _init_ytmusic():
@@ -407,16 +418,19 @@ def listen_sync(request):
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
-    # Rebuild the graph off the request path. Falls back to inline if the broker is unreachable,
-    # so a Celery outage degrades to the old (slow) behaviour rather than skipping the rebuild.
+    # Rebuild the graph off the request path via Celery. The Last.fm pass takes minutes (well past
+    # gunicorn's 120s worker timeout), so we must NOT run it inline: doing so kills the worker
+    # mid-request and reports a "failure" to the user even though the tracks were already synced —
+    # exactly the confusing timeout that made a working sync look broken. If the broker is
+    # unreachable we skip the rebuild (the tracks are saved; the graph refreshes on the next
+    # successful sync) rather than block the response.
     graph_rebuilding = True
     try:
         from ..tasks import rebuild_listen_graph
 
         rebuild_listen_graph.delay()
     except Exception:
-        logger.exception("Could not queue graph rebuild; running inline")
-        _rebuild_graph()
+        logger.exception("Could not queue graph rebuild; skipping (tracks are synced)")
         graph_rebuilding = False
 
     return JsonResponse(
@@ -619,6 +633,11 @@ def listen_reauth(request):
         parsed["origin"] = "https://music.youtube.com"
     if "user-agent" not in parsed:
         parsed["user-agent"] = "Mozilla/5.0"
+
+    # Derive the SAPISIDHASH authorization from the cookie so ytmusicapi detects BROWSER auth. Not
+    # every pasted POST carries an Authorization header (e.g. /api/stats/playback doesn't), and
+    # without one ytmusicapi misdetects the dict as OAuth and rejects it. Compute it ourselves.
+    parsed = _authorize_headers(parsed)
 
     # Validate that the headers parse into a usable YTMusic client (catches malformed cookies).
     try:
