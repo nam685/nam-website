@@ -7,6 +7,12 @@ export function nodeRadius(playCount: number): number {
   return Math.min(2 + Math.log2(Math.max(playCount, 0) + 1) * 1.4, 10);
 }
 
+/** True when zoomed out far enough to use the cheap flat-dot draw path.
+ * `threshold` of 0 disables minimal mode (small patch views are always detailed). */
+export function shouldMinimal(scale: number, threshold: number): boolean {
+  return scale < threshold;
+}
+
 /** Node fill by type — orange-anchored palette (song = the page's primary orange). */
 export const NODE_COLORS: Record<GraphNodeType, string> = {
   track: "#f97316", // song — primary orange

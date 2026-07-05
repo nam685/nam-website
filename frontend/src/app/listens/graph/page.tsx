@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API, type GraphFull, type GraphFullNode } from "@/lib/api";
 import { getAdminToken } from "@/lib/auth";
-import { componentColor, degreeRadius, edgeVisible, EDGE_FILTER_KEYS } from "@/lib/graph";
+import { componentColor, degreeRadius, edgeVisible, EDGE_FILTER_KEYS, shouldMinimal } from "@/lib/graph";
 
 // Cast to a permissive type at the import boundary — react-force-graph-2d's prop
 // callback types expect its own NodeObject/LinkObject generics, incompatible with
@@ -14,6 +14,11 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 }) as React.ComponentType<Record<string, unknown>>;
 
 const ACCENT = "#f97316";
+
+// Below this zoom, draw flat dots and hide edges — dropping per-node shadowBlur and
+// ~thousands of edge line-draws is what keeps the overview smooth. Above it, the full
+// diagnostic rendering (glow, focus ring, labels) kicks back in.
+const MINIMAL_ZOOM = 1.5;
 
 type FullForceNode = GraphFullNode & { x?: number; y?: number };
 
@@ -45,6 +50,7 @@ export default function ListensGraphDiagnosticPage() {
     d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
   } | null>(null);
   const fittedRef = useRef(false);
+  const zoomRef = useRef(1);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ width: 1000, height: 600 });
@@ -66,7 +72,7 @@ export default function ListensGraphDiagnosticPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API}/api/listens/graph/full/`, {
+        const res = await fetch(`${API}/api/listens/graph/`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 401) {
@@ -189,8 +195,12 @@ export default function ListensGraphDiagnosticPage() {
                 fittedRef.current = true;
               }
             }}
+            onZoom={(t: { k: number }) => {
+              zoomRef.current = t.k;
+            }}
             linkColor={() => "rgba(200,200,200,0.14)"}
             linkWidth={0.4}
+            linkVisibility={() => !shouldMinimal(zoomRef.current, MINIMAL_ZOOM)}
             onNodeHover={(node: FullForceNode | null) => setHovered(node ? node.id : null)}
             onNodeClick={(node: FullForceNode) => focusNode(node.id)}
             nodePointerAreaPaint={(
@@ -209,6 +219,17 @@ export default function ListensGraphDiagnosticPage() {
               ctx: CanvasRenderingContext2D,
               scale: number,
             ) => {
+              // Zoomed out: one flat filled dot per node — no save/restore, no shadowBlur,
+              // no focus ring, no label. shadowBlur per node/frame is the dominant cost.
+              if (shouldMinimal(scale, MINIMAL_ZOOM)) {
+                const r = degreeRadius(node.degree) / scale;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+                ctx.fillStyle = componentColor(node.component);
+                ctx.fill();
+                return;
+              }
+
               const isHovered = hovered === node.id;
               const isFocus = focusId === node.id;
               const r = (degreeRadius(node.degree) * (isHovered || isFocus ? 1.5 : 1)) / scale;
