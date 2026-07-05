@@ -361,7 +361,6 @@ export default function ListensGraphPage() {
       <GraphCanvas
         data={data}
         seedKey={patch?.seed ?? null}
-        isAdmin={isAdmin}
         hovered={hovered}
         onNodeHover={(node) => setHovered(node ? node.key : null)}
         onNodeClick={(node) => {

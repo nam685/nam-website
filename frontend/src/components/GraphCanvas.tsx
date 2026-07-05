@@ -16,19 +16,18 @@ const ACCENT = "#f97316";
 const PATCH_SEED_ZOOM = 2.5;
 
 type FgRef = {
-  zoomToFit?: (ms: number, px: number) => void;
-  centerAt?: (x: number, y: number, ms: number) => void;
-  zoom?: (z?: number, ms?: number) => number;
-  d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
+  zoomToFit?: (_ms: number, _px: number) => void;
+  centerAt?: (_x: number, _y: number, _ms: number) => void;
+  zoom?: (_z?: number, _ms?: number) => number;
+  d3Force?: (_name: string) => { strength?: (_n: number) => void; distance?: (_n: number) => void } | undefined;
 } | null;
 
 export interface GraphCanvasProps {
   data: { nodes: ForceNode[]; links: ForceLink[] };
   seedKey?: string | null;
-  isAdmin: boolean;
   hovered: string | null;
-  onNodeHover: (node: ForceNode | null) => void;
-  onNodeClick: (node: ForceNode) => void;
+  onNodeHover: (_node: ForceNode | null) => void;
+  onNodeClick: (_node: ForceNode) => void;
   alwaysLabel?: boolean;
   centerOnSeed?: boolean;
   minimalThreshold?: number;
@@ -37,7 +36,6 @@ export interface GraphCanvasProps {
 export default function GraphCanvas({
   data,
   seedKey = null,
-  isAdmin, // eslint-disable-line @typescript-eslint/no-unused-vars
   hovered,
   onNodeHover,
   onNodeClick,
