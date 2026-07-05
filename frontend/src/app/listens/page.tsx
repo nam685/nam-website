@@ -190,6 +190,8 @@ export default function ListensGraphPage() {
       } else {
         setReauthStatus("done");
         setAuthNeeded(false);
+        setSyncStatus("idle");
+        setSyncMessage("");
         setTimeout(() => {
           setShowReauth(false);
           setReauthHeaders("");
