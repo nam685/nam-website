@@ -1,7 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   API,
   type GraphPatch,
@@ -10,16 +9,9 @@ import {
   type ListenTrack,
 } from "@/lib/api";
 import { getAdminToken, storeDel, useIsAdmin } from "@/lib/auth";
-import { edgeColor, nodeColor, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
+import { toForceData, type ForceNode } from "@/lib/graph";
+import GraphCanvas from "@/components/GraphCanvas";
 import { usePlayer } from "@/lib/player";
-
-// Cast to permissive type at import boundary: react-force-graph-2d's callback
-// prop types expect its own internal NodeObject/LinkObject generics which are
-// incompatible with our strongly-typed ForceNode/ForceLink shapes. Casting
-// here avoids wholesale `as any` on every individual prop callback.
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
-  ssr: false,
-}) as React.ComponentType<Record<string, unknown>>;
 
 const ACCENT = "#f97316";
 
@@ -39,26 +31,6 @@ export default function ListensGraphPage() {
   const [reauthHeaders, setReauthHeaders] = useState("");
   const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [reauthError, setReauthError] = useState("");
-  const fgRef = useRef<{
-    zoomToFit?: (ms: number, px: number) => void;
-    d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
-  } | null>(null);
-  // Auto-fit only once per patch (on first settle) — not on every engine stop, or
-  // interacting with the graph (dragging a node reheats the sim) would yank the view back.
-  const fittedRef = useRef(false);
-  // Measure the canvas container so the graph fills it (full page width, tall).
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dims, setDims] = useState({ width: 1000, height: 600 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setDims({ width: el.clientWidth, height: el.clientHeight });
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   // Admin actions require a valid token; bounce expired/absent sessions to the login.
   const handleAuthExpired = () => {
@@ -113,15 +85,6 @@ export default function ListensGraphPage() {
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
-
-  // On each new patch: allow one auto-fit, and spread nodes apart so a dense patch
-  // sprawls to fill the canvas instead of collapsing into a tight ball.
-  useEffect(() => {
-    fittedRef.current = false;
-    if (!patch) return;
-    fgRef.current?.d3Force?.("charge")?.strength?.(-320);
-    fgRef.current?.d3Force?.("link")?.distance?.(70);
-  }, [patch]);
 
   const playNode = (node: ForceNode) => {
     if (!isAdmin || !node.video_id) return;
@@ -395,109 +358,21 @@ export default function ListensGraphPage() {
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        style={{
-          // Full-bleed: break out of the centered max-width layout to span the page width.
-          width: "100vw",
-          marginLeft: "calc(50% - 50vw)",
-          height: "calc(100vh - 200px)",
-          minHeight: 480,
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          overflow: "hidden",
-          // Ambient orange hue behind the dots, like the home-page constellation backdrop.
-          background: "radial-gradient(circle at 50% 42%, rgba(249,115,22,0.07) 0%, #0a0a0a 68%)",
+      <GraphCanvas
+        data={data}
+        seedKey={patch?.seed ?? null}
+        isAdmin={isAdmin}
+        hovered={hovered}
+        onNodeHover={(node) => setHovered(node ? node.key : null)}
+        onNodeClick={(node) => {
+          // Click = walk the graph: play (admin) and re-center on this node.
+          if (isAdmin) playNode(node);
+          loadPatch(node.key, node.node_type);
         }}
-      >
-        <ForceGraph2D
-          ref={fgRef as never}
-          width={dims.width}
-          height={dims.height}
-          graphData={data}
-          backgroundColor="rgba(0,0,0,0)"
-          nodeRelSize={1}
-          cooldownTicks={120}
-          onEngineStop={() => {
-            if (!fittedRef.current) {
-              fgRef.current?.zoomToFit?.(400, 80);
-              fittedRef.current = true;
-            }
-          }}
-          linkColor={(l: { edge_type: string; weight: number }) => edgeColor(l.edge_type as never, l.weight)}
-          linkWidth={0.5}
-          onNodeClick={(node: ForceNode) => {
-            // Click = walk the graph: play (admin) and re-center on this node.
-            if (isAdmin) playNode(node);
-            loadPatch(node.key, node.node_type);
-          }}
-          onNodeHover={(node: ForceNode | null) => setHovered(node ? node.key : null)}
-          nodePointerAreaPaint={(
-            node: ForceNode & { x: number; y: number },
-            color: string,
-            ctx: CanvasRenderingContext2D,
-            scale: number,
-          ) => {
-            // Match the hover/click hit-area to the drawn dot (scale-invariant, like the dot).
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, (nodeRadius(node.play_count) + 2) / scale, 0, 2 * Math.PI);
-            ctx.fill();
-          }}
-          nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
-            const isSeed = patch?.seed === node.key;
-            const isHovered = hovered === node.key;
-            // Divide by scale so the dot keeps a constant on-screen size at any zoom,
-            // matching the home-page constellation dots. Hover grows it ~1.6x.
-            const r = (nodeRadius(node.play_count) * (isHovered ? 1.6 : 1)) / scale;
-            // Color-coded by type: song=orange, artist=amber, album=teal.
-            const fill = nodeColor(node.node_type);
-            // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
-            ctx.save();
-            ctx.shadowColor = fill;
-            ctx.shadowBlur = r * (isSeed || isHovered ? 2.4 : 1.5);
-            ctx.globalAlpha = isHovered ? 1 : 0.92;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = fill;
-            ctx.fill();
-            ctx.restore();
-            // Seed is marked by a bright outer ring (color now encodes type, not seed).
-            if (isSeed) {
-              ctx.strokeStyle = "rgba(255,255,255,0.9)";
-              ctx.lineWidth = 1.5 / scale;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 3 / scale, 0, 2 * Math.PI);
-              ctx.stroke();
-            }
-            if (node.is_liked) {
-              ctx.strokeStyle = "#ffd400";
-              ctx.lineWidth = 2 / scale;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 2 / scale, 0, 2 * Math.PI);
-              ctx.stroke();
-            }
-            if (node.is_subscribed) {
-              ctx.strokeStyle = ACCENT;
-              ctx.setLineDash([2, 2]);
-              ctx.lineWidth = 1.5 / scale;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 4 / scale, 0, 2 * Math.PI);
-              ctx.stroke();
-              ctx.setLineDash([]);
-            }
-            // Label the seed, the hovered node, and (when zoomed in) larger nodes —
-            // avoids a wall of overlapping text at the default overview zoom.
-            if (isSeed || isHovered || scale > 1.6) {
-              const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
-              ctx.font = `${10 / scale}px monospace`;
-              ctx.fillStyle = "#ccc";
-              ctx.textAlign = "center";
-              ctx.fillText(label, node.x, node.y + r + 9 / scale);
-            }
-          }}
-        />
-      </div>
+        alwaysLabel
+        centerOnSeed
+        minimalThreshold={0}
+      />
     </div>
   );
 }
