@@ -8,6 +8,7 @@ import {
   edgeVisible,
   nodeColor,
   nodeRadius,
+  shouldMinimal,
   toForceData,
 } from "../graph";
 import type { GraphPatch } from "../api";
@@ -130,5 +131,20 @@ describe("edgeVisible", () => {
     const none = new Set<string>();
     expect(edgeVisible({ edge_type: "structural", source_kind: "" }, none)).toBe(false);
     expect(edgeVisible({ edge_type: "affinity", source_kind: "colisten" }, none)).toBe(false);
+  });
+});
+
+describe("shouldMinimal", () => {
+  it("uses minimal path when zoomed out below the threshold", () => {
+    expect(shouldMinimal(0.5, 1.5)).toBe(true);
+    expect(shouldMinimal(1.49, 1.5)).toBe(true);
+  });
+  it("uses the detailed path at or above the threshold", () => {
+    expect(shouldMinimal(1.5, 1.5)).toBe(false);
+    expect(shouldMinimal(3, 1.5)).toBe(false);
+  });
+  it("threshold 0 never selects minimal (patch view is always detailed)", () => {
+    expect(shouldMinimal(0.01, 0)).toBe(false);
+    expect(shouldMinimal(5, 0)).toBe(false);
   });
 });
