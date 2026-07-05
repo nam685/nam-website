@@ -369,6 +369,14 @@ def test_topk_by_mp_prunes_hub_when_spokes_prefer_others():
     assert hub_degree <= 2
 
 
+def test_cap_affinity_degree_bounds_union_hub():
+    # A hub 0 that every spoke selects (so top-k can't bound it) is still capped by the hard pass.
+    best = {(0, i): (0.5, "colisten") for i in range(1, 40)}
+    kept = music_graph._cap_affinity_degree(best, cap=12)
+    hub_degree = sum(1 for pair in kept if 0 in pair)
+    assert hub_degree <= 12
+
+
 @pytest.mark.django_db
 def test_affinity_edges_are_degree_bounded(db):  # noqa: ARG001
     now = timezone.now()
