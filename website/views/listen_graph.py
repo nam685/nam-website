@@ -28,6 +28,16 @@ def graph_patch(request):
 
 
 @require_GET
+def graph_full_public(request):  # noqa: ARG001
+    """Return the entire graph (non-tag nodes + edges between them), cached.
+
+    Named distinctly from the admin-gated `graph_full` diagnostic snapshot below
+    (same base name would clobber it — the latter serves `/listens/graph/full/`).
+    """
+    return JsonResponse(music_graph.get_full_graph())
+
+
+@require_GET
 def graph_search(request):
     """Search nodes by title/subtitle to re-seed the graph."""
     query = request.GET.get("q", "")

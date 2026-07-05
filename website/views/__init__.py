@@ -54,7 +54,7 @@ from .listen import (
     listen_sync,
     listen_sync_status,
 )
-from .listen_graph import graph_full, graph_patch, graph_search
+from .listen_graph import graph_full, graph_full_public, graph_patch, graph_search
 from .project import project_list
 from .slops import (
     slops_approve,
@@ -140,6 +140,7 @@ __all__ = [
     "lichess_status",
     "lichess_token",
     "graph_full",
+    "graph_full_public",
     "graph_patch",
     "graph_search",
     "listen_import",

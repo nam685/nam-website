@@ -2,7 +2,7 @@ import pytest
 from django.test import Client
 from django.utils import timezone
 
-from website.models import ListenTrack
+from website.models import ListenTrack, MusicEdge, MusicNode
 from website.services import music_graph
 
 
@@ -64,7 +64,6 @@ def mixed_graph(db):  # noqa: ARG001
     Mirrors production, where artist/album nodes aggregate all their tracks' plays and thus
     dominate a linear recommend_score weighting.
     """
-    from website.models import MusicNode
 
     for i in range(20):
         MusicNode.objects.create(
@@ -190,7 +189,6 @@ def test_hub_weight_monotonic_decreasing():
 
 @pytest.mark.django_db
 def test_compute_node_degrees_counts_incident_edges():
-    from website.models import MusicEdge, MusicNode
     from website.services import music_graph
 
     hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub")
@@ -237,7 +235,6 @@ def test_graph_full_returns_snapshot(built_graph, auth_headers):  # noqa: ARG001
 @pytest.fixture()
 def hub_graph(db):  # noqa: ARG001
     """A seed connected to one high-degree hub and many low-degree leaves, all equal edge weight."""
-    from website.models import MusicEdge, MusicNode
 
     seed = MusicNode.objects.create(node_type="track", key="s", title="Seed", video_id="s", recommend_score=10.0)
     hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub", degree=200)
@@ -288,7 +285,6 @@ def depth2_graph(db):  # noqa: ARG001
     Over-cap sampling can keep a leaf while dropping its only connector (its hub), which would
     leave the leaf edgeless in the patch.
     """
-    from website.models import MusicEdge, MusicNode
 
     seed = MusicNode.objects.create(node_type="track", key="s", title="Seed", video_id="s", recommend_score=10.0)
     hubs = [MusicNode.objects.create(node_type="track", key=f"h{i}", title=f"H{i}", video_id=f"h{i}") for i in range(3)]
@@ -321,3 +317,68 @@ def test_get_patch_never_returns_floating_nodes(depth2_graph):  # noqa: ARG001
             if n["key"] == "s":
                 continue  # seed may stand alone if it has no neighbours
             assert n["key"] in edge_keys, f"floating node {n['key']} in patch (seed {i})"
+
+
+# --- Full graph endpoint (whole graph, excludes internal tag nodes) ---
+
+
+@pytest.fixture()
+def graph_with_tag(db):  # noqa: ARG001
+    # The Redis/locmem cache is NOT rolled back by @pytest.mark.django_db, so clear
+    # the full-graph key so each test computes against its own fixture data.
+    from django.core.cache import cache
+
+    cache.delete(music_graph.FULL_GRAPH_CACHE_KEY)
+    # NOTE: "tag" is intentionally not in NodeType.choices, but Django choices are not
+    # DB-enforced, so create(node_type="tag") works — this mirrors prod (240 tag nodes).
+    track = MusicNode.objects.create(node_type="track", key="v1", title="Let Down", video_id="v1", play_count=3)
+    artist = MusicNode.objects.create(node_type="artist", key="radiohead", title="Radiohead")
+    tag = MusicNode.objects.create(node_type="tag", key="rock", title="rock")
+    MusicEdge.objects.create(source=track, target=artist, edge_type="structural", weight=1.0)
+    MusicEdge.objects.create(source=artist, target=tag, edge_type="structural", weight=1.0)
+    return {"track": track, "artist": artist, "tag": tag}
+
+
+@pytest.mark.django_db
+def test_full_graph_excludes_tag_nodes(graph_with_tag):  # noqa: ARG001
+    data = Client().get("/api/listens/graph/").json()
+    keys = {n["key"] for n in data["nodes"]}
+    assert "v1" in keys
+    assert "radiohead" in keys
+    assert "rock" not in keys  # tag layer excluded
+    assert all(n["node_type"] != "tag" for n in data["nodes"])
+
+
+@pytest.mark.django_db
+def test_full_graph_excludes_edges_touching_tags(graph_with_tag):  # noqa: ARG001
+    data = Client().get("/api/listens/graph/").json()
+    node_keys = {n["key"] for n in data["nodes"]}
+    # every edge endpoint must be a surviving (non-tag) node
+    for e in data["edges"]:
+        assert e["source"] in node_keys
+        assert e["target"] in node_keys
+    # the artist->tag edge must be gone; the track->artist edge must survive
+    pairs = {(e["source"], e["target"]) for e in data["edges"]}
+    assert ("v1", "radiohead") in pairs
+    assert ("radiohead", "rock") not in pairs
+
+
+@pytest.mark.django_db
+def test_full_graph_served_from_cache_after_warm(graph_with_tag):  # noqa: ARG001
+    from django.core.cache import cache
+
+    cache.delete(music_graph.FULL_GRAPH_CACHE_KEY)
+    payload = music_graph.warm_full_graph_cache()
+    assert cache.get(music_graph.FULL_GRAPH_CACHE_KEY) == payload
+    # get_full_graph returns the cached object without recomputing
+    assert music_graph.get_full_graph() == payload
+
+
+@pytest.mark.django_db
+def test_full_graph_lazy_recompute_on_miss(graph_with_tag):  # noqa: ARG001
+    from django.core.cache import cache
+
+    cache.delete(music_graph.FULL_GRAPH_CACHE_KEY)
+    data = music_graph.get_full_graph()  # cache empty -> recompute + store
+    assert cache.get(music_graph.FULL_GRAPH_CACHE_KEY) == data
+    assert any(n["key"] == "v1" for n in data["nodes"])

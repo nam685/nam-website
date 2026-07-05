@@ -5,6 +5,7 @@ import re
 import time
 from collections import defaultdict
 
+from django.core.cache import cache as redis_cache
 from django.db.models import Count, Max, Q
 from django.utils import timezone
 
@@ -643,6 +644,11 @@ def _pick_shuffle_seed(exclude_keys, rng):
     return MusicNode.objects.filter(id=rng.choice(ids)).first() if ids else None
 
 
+# Whole-graph payload for the full-graph page. No TTL: warmed at the tail of
+# build_graph() (invalidate-on-rebuild), lazily recomputed on cache miss.
+FULL_GRAPH_CACHE_KEY = "listens_graph_full"
+
+
 def _serialize_node(n: MusicNode) -> dict:
     return {
         "key": n.key,
@@ -743,6 +749,45 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
     }
 
 
+def _serialize_full_graph() -> dict:
+    """Serialize the entire graph MINUS the internal `tag` layer.
+
+    Tags exist only to shape the shuffle walk; they are not shown to users. We
+    return every non-tag node and only edges whose BOTH endpoints are non-tag.
+    """
+    nodes = list(MusicNode.objects.exclude(node_type="tag"))
+    id_to_key = {n.id: n.key for n in nodes}
+    keep_ids = set(id_to_key)
+    edges = MusicEdge.objects.filter(source_id__in=keep_ids, target_id__in=keep_ids)
+    return {
+        "nodes": [_serialize_node(n) for n in nodes],
+        "edges": [
+            {
+                "source": id_to_key[e.source_id],
+                "target": id_to_key[e.target_id],
+                "edge_type": e.edge_type,
+                "weight": e.weight,
+            }
+            for e in edges
+        ],
+    }
+
+
+def warm_full_graph_cache() -> dict:
+    """Recompute the full-graph payload and store it (no expiry). Returns it."""
+    payload = _serialize_full_graph()
+    redis_cache.set(FULL_GRAPH_CACHE_KEY, payload, None)
+    return payload
+
+
+def get_full_graph() -> dict:
+    """Return the cached full-graph payload, recomputing on a cache miss."""
+    cached = redis_cache.get(FULL_GRAPH_CACHE_KEY)
+    if cached is not None:
+        return cached
+    return warm_full_graph_cache()
+
+
 def search_nodes(query: str, limit: int = 10) -> list[dict]:
     if not query.strip():
         return []
@@ -823,6 +868,7 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
     _report(progress, "Computing node degrees…")
     compute_node_degrees()
     _report(progress, f"Done: {MusicNode.objects.count()} nodes, {MusicEdge.objects.count()} edges")
+    warm_full_graph_cache()
 
 
 def _node_to_track(node: MusicNode) -> dict:
