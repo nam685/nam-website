@@ -451,6 +451,28 @@ def test_walk_radio_returns_fresh_tracks(plays):  # noqa: ARG001
 
 
 @pytest.mark.django_db
+def test_walk_teleport_reaches_disconnected_island(db):  # noqa: ARG001
+    import random as _random
+
+    # Giant component: seed↔a. Island: a single disconnected track `lone` with no edges.
+    seed = MusicNode.objects.create(node_type="track", key="seed", title="Seed", video_id="seed")
+    a = MusicNode.objects.create(node_type="track", key="a", title="A", video_id="a")
+    src, tgt = (seed, a) if seed.id < a.id else (a, seed)
+    MusicEdge.objects.create(source=src, target=tgt, edge_type="affinity", weight=1.0, source_kind="colisten")
+    MusicNode.objects.create(node_type="track", key="lone", title="Lone", video_id="lone")
+
+    # Over many seeded walks, the ε-teleport eventually surfaces the otherwise-unreachable `lone`.
+    surfaced = set()
+    for i in range(30):
+        ids = music_graph.walk("seed", limit=3, teleport_prob=0.3, rng=_random.Random(i))
+        surfaced |= set(MusicNode.objects.filter(id__in=ids).values_list("video_id", flat=True))
+    assert "lone" in surfaced
+    # And with teleport off, `lone` is unreachable from the giant.
+    off = music_graph.walk("seed", limit=3, teleport_prob=0.0, rng=_random.Random(1))
+    assert "lone" not in set(MusicNode.objects.filter(id__in=off).values_list("video_id", flat=True))
+
+
+@pytest.mark.django_db
 def test_walk_shuffle_seedless_starts_somewhere(plays):  # noqa: ARG001
     music_graph.build_graph(api_key="", ytm_headers=None)
     rng = __import__("random").Random(2)
