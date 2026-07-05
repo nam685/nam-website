@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { store } from "@/lib/auth";
+import { store, useIsAdmin } from "@/lib/auth";
 import { API } from "@/lib/api";
 import type { BetsTicker, BetsHistory, BetsSearchResult, StrategyInfo } from "@/lib/api";
 import Backtester from "./Backtester";
@@ -304,7 +304,7 @@ export default function BetsPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [history, setHistory] = useState<BetsHistory | null>(null);
   const [historyPeriod, setHistoryPeriod] = useState("1M");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const isAdmin = useIsAdmin();
   const [syncing, setSyncing] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -315,7 +315,6 @@ export default function BetsPage() {
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
 
   useEffect(() => {
-    setIsAdmin(!!store("adminToken"));
     fetch(`${API}/api/bets/`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(setTickers)

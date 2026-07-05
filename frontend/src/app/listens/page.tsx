@@ -9,7 +9,7 @@ import {
   type ListenStats,
   type ListenTrack,
 } from "@/lib/api";
-import { getAdminToken, store, storeDel } from "@/lib/auth";
+import { getAdminToken, storeDel, useIsAdmin } from "@/lib/auth";
 import { edgeColor, nodeColor, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
 import { usePlayer } from "@/lib/player";
 
@@ -25,7 +25,9 @@ const ACCENT = "#f97316";
 
 export default function ListensGraphPage() {
   const player = usePlayer();
-  const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  // Gate admin controls (SYNC / AUTH) behind a *server-validated* admin token — a stale/expired
+  // token must not surface these buttons.
+  const isAdmin = useIsAdmin();
   const [patch, setPatch] = useState<GraphPatch | null>(null);
   const [stats, setStats] = useState<ListenStats | null>(null);
   const [query, setQuery] = useState("");

@@ -10,7 +10,7 @@ import {
   type WatchVideo,
   API,
 } from "@/lib/api";
-import { fetchAdminNonce, store } from "@/lib/auth";
+import { fetchAdminNonce, store, useIsAdmin } from "@/lib/auth";
 
 const ACCENT = "#1e40af";
 const PAGE_SIZE = 100;
@@ -580,7 +580,7 @@ export default function WatchesPage() {
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const initialLoadDone = useRef(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
-  const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  const isAdmin = useIsAdmin();
 
   /* ── Fetch channels ───────────────────────────────── */
   const fetchChannels = useCallback(async () => {

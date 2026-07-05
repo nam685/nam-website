@@ -370,6 +370,45 @@ class TestListenReauth:
         # The SAPISIDHASH expires in hours; persisting it would re-break sync. Must not be stored.
         assert "authorization" not in saved
 
+    @patch("ytmusicapi.YTMusic")
+    def test_strips_accept_encoding_when_persisting(self, _mock_yt, client, auth_headers):
+        # THE root-cause bug: a pasted `accept-encoding: ..., br, zstd` makes YouTube reply with
+        # brotli/zstd that requests can't decode, so every sync fails as a fake "session expired".
+        # It must never be written to browser.json.
+        raw = self.RAW + "\nAccept-Encoding: gzip, deflate, br, zstd\nContent-Length: 42"
+        m = mock_open()
+        with patch("website.views.listen._is_logged_in", return_value=True), patch("builtins.open", m):
+            resp = self._post(client, raw, auth_headers)
+        assert resp.status_code == 200
+        saved = json.loads("".join(call.args[0] for call in m().write.call_args_list))
+        assert "accept-encoding" not in saved
+        assert "content-length" not in saved
+        assert "cookie" in saved  # the useful bits survive
+
+
+def test_sanitize_headers_drops_volatile_keys():
+    dirty = {
+        "cookie": "SAPISID=abc",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "content-encoding": "gzip",
+        "content-length": "42",
+        "content-type": "application/json",
+        "user-agent": "UA",
+    }
+    clean = listen._sanitize_headers(dirty)
+    assert clean == {"cookie": "SAPISID=abc", "user-agent": "UA"}
+
+
+def test_load_browser_headers_auto_heals_accept_encoding():
+    # An already-saved browser.json with accept-encoding must be sanitized on load, so an existing
+    # broken file starts working the moment this ships — no re-auth required.
+    cookie = "__Secure-3PAPISID=abc; SAPISID=abc; foo=bar"
+    on_disk = json.dumps({"cookie": cookie, "accept-encoding": "gzip, deflate, br, zstd"})
+    with patch("os.path.isfile", return_value=True), patch("builtins.open", mock_open(read_data=on_disk)):
+        headers = listen._load_browser_headers()
+    assert "accept-encoding" not in headers
+    assert headers["cookie"] == cookie
+
 
 # ── Sync status ───────────────────────────────────────
 

@@ -26,6 +26,26 @@ VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
 # Hop-by-hop / request-specific headers that must not be forwarded when we probe YTM ourselves.
 _PROBE_SKIP_HEADERS = {"content-length", "host", "connection", "te", "accept-encoding"}
+
+# Headers that must never be persisted into / loaded from browser.json.
+#
+# The pasted headers come from a real browser request, so they carry request-instance junk that
+# breaks ytmusicapi when replayed:
+#   - `accept-encoding: ..., br, zstd` is the killer. ytmusicapi forwards it verbatim, YouTube
+#     replies brotli/zstd-compressed, and the server's `requests` can't decode br/zstd → the body
+#     is binary garbage → `resp.json()` raises JSONDecodeError → every sync looks like an expired
+#     session. (Our own login probe strips accept-encoding, so it always decoded and reported
+#     "logged in" — which is exactly why this hid for so long.) Dropping it lets requests use its
+#     own gzip/deflate, which it can always decode.
+#   - content-* describe that original request's body, not ytmusicapi's JSON POSTs.
+_VOLATILE_HEADERS = {"accept-encoding", "content-length", "content-encoding", "content-type"}
+
+
+def _sanitize_headers(headers):
+    """Strip request-instance headers that break ytmusicapi when replayed (see _VOLATILE_HEADERS)."""
+    return {k: v for k, v in headers.items() if k.lower() not in _VOLATILE_HEADERS}
+
+
 # The browse response embeds {"key": "logged_in", "value": "0|1"} in its serviceTrackingParams.
 _LOGGED_IN_RE = re.compile(r'logged_in"[^}]*?"value":\s*"(\d)"', re.DOTALL)
 
@@ -95,7 +115,7 @@ def _load_browser_headers():
         return None
 
     with open(auth_path) as f:
-        headers = json.load(f)
+        headers = _sanitize_headers(json.load(f))
     if "authorization" not in headers and "cookie" in headers:
         sapisid = sapisid_from_cookie(headers["cookie"])
         origin = headers.get("origin", "https://music.youtube.com")
@@ -585,6 +605,11 @@ def listen_reauth(request):
             continue
         key, _, value = line.partition(":")
         parsed[key.strip().lower()] = value.strip()
+
+    # Drop request-instance headers (esp. `accept-encoding: ..., br, zstd`) that break ytmusicapi
+    # when replayed — see _VOLATILE_HEADERS. Do this before validation/probe so we test exactly the
+    # header set we persist.
+    parsed = _sanitize_headers(parsed)
 
     if "cookie" not in parsed:
         return JsonResponse({"error": "No 'cookie' header found in pasted headers"}, status=400)
