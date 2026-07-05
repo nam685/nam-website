@@ -70,7 +70,7 @@ export default function ListensGraphDiagnosticPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 401) {
-          if (typeof window !== "undefined") window.location.href = "/sudo?from=/listens/graph/full";
+          if (typeof window !== "undefined") window.location.href = "/sudo?from=/listens/graph";
           return;
         }
         if (!res.ok) throw new Error(`graph fetch failed: ${res.status}`);
