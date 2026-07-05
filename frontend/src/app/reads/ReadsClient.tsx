@@ -1,8 +1,7 @@
 "use client";
 
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
-import { useEffect, useState } from "react";
-import { store } from "@/lib/auth";
+import { useIsAdmin } from "@/lib/auth";
 
 /* ── TODO: AI Explorer ─────────────────────────────────
  *
@@ -397,10 +396,7 @@ function SectionHeader({ label }: { label: string }) {
 /* ── Main component ──────────────────────────────── */
 
 export default function ReadsClient() {
-  const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => {
-    setIsAdmin(!!store("adminToken"));
-  }, []);
+  const isAdmin = useIsAdmin();
   return (
     <>
       <style>{`

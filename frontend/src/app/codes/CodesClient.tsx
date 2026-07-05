@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API } from "@/lib/api";
-import { fetchAdminNonce, store } from "@/lib/auth";
+import { fetchAdminNonce, useIsAdmin } from "@/lib/auth";
 import { getContribColor } from "@/lib/contributions";
 import { formatRelativeDate } from "@/lib/date";
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
@@ -393,11 +393,7 @@ function ContributionGraph({ calendar }: { calendar: ContributionCalendar }) {
 /* ── Refresh button ──────────────────────────────── */
 
 function RefreshButton() {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    if (store("adminToken")) setIsAdmin(true);
-  }, []);
+  const isAdmin = useIsAdmin();
 
   if (!isAdmin) return null;
 
