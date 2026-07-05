@@ -485,13 +485,36 @@ def rebuild_affinity_edges(api_key: str, progress=None):
             if pair not in best or m > best[pair][0]:
                 best[pair] = (m, kind)
 
-    node_ids = {i for pair in best for i in pair}
+    # Hard per-node degree cap. MP + per-node top-k bounds how many partners a node *selects*, but
+    # the union is still unbounded: a track that lands in hundreds of others' top-k (the heavy
+    # count-1 co-listen ties barely suppress it) re-accumulates into a hub. Since a uniform random
+    # walk visits nodes ∝ degree, such a hub would recur in shuffle — the exact thing we're killing.
+    # Greedily keep highest-MP edges such that no node exceeds AFFINITY_MAX_DEGREE. Connectivity is
+    # unaffected: the tag layer is the backbone, affinity only adds taste.
+    kept = _cap_affinity_degree(best)
+    node_ids = {i for pair in kept for i in pair}
     id_to_node = {n.id: n for n in MusicNode.objects.filter(id__in=node_ids)}
-    for (a, b), (m, kind) in best.items():
+    for (a, b), (m, kind) in kept.items():
         na, nb = id_to_node.get(a), id_to_node.get(b)
         if na and nb:
             _upsert_edge(na, nb, "affinity", m, source_kind=kind)
-    _report(progress, f"Affinity: {len(best)} MP edges from {len(per_source)} sources")
+    _report(progress, f"Affinity: {len(kept)}/{len(best)} MP edges kept after degree cap")
+
+
+AFFINITY_MAX_DEGREE = 12  # hard cap on affinity edges per node (bounds hub recurrence in the walk)
+
+
+def _cap_affinity_degree(best: dict[tuple[int, int], tuple[float, str]], cap: int = AFFINITY_MAX_DEGREE):
+    """Keep highest-MP edges so no node exceeds `cap` affinity edges (symmetric, so all degrees ≤ cap)."""
+    degree: dict[int, int] = defaultdict(int)
+    kept: dict[tuple[int, int], tuple[float, str]] = {}
+    for (a, b), (m, kind) in sorted(best.items(), key=lambda kv: kv[1][0], reverse=True):
+        if degree[a] >= cap or degree[b] >= cap:
+            continue
+        kept[(a, b)] = (m, kind)
+        degree[a] += 1
+        degree[b] += 1
+    return kept
 
 
 PERSONALIZATION_BOOST = 1.5  # multiplier per active flag (liked/subscribed/in_library)
