@@ -147,17 +147,15 @@ def rebuild_nodes():
 
 
 COLISTEN_WINDOW_MINUTES = 30
-COLISTEN_TOP_K = 6  # keep only each track's 6 strongest co-listen partners (caps density)
 STRUCTURAL_WEIGHT = 0.5
 
-# --- Radio (endless auto-play) selection ---
+# --- Patch-visualization edge ranking (public /listens neighbourhood viz only) ---
+# All rebuilt edges are structural / tag / affinity; affinity carries the recommendation signal.
 RADIO_EDGE_PRIORITY = {
-    "similar_track": 3.0,
-    "colisten": 2.5,
-    "similar_artist": 1.5,
+    "affinity": 2.5,
+    "tag": 1.2,
     "structural": 1.0,
 }
-RADIO_CANDIDATE_POOL = 12  # weighted-random pick from this many top-scored candidates
 
 
 def _canonical(a: MusicNode, b: MusicNode):
@@ -170,15 +168,18 @@ def edge_exists(a: MusicNode, b: MusicNode, edge_type: str) -> bool:
     return MusicEdge.objects.filter(source=src, target=tgt, edge_type=edge_type).exists()
 
 
-def _upsert_edge(a: MusicNode, b: MusicNode, edge_type: str, weight: float):
+def _upsert_edge(a: MusicNode, b: MusicNode, edge_type: str, weight: float, source_kind: str = ""):
     if a.id == b.id:
         return
     src, tgt = _canonical(a, b)
-    MusicEdge.objects.update_or_create(source=src, target=tgt, edge_type=edge_type, defaults={"weight": weight})
+    MusicEdge.objects.update_or_create(
+        source=src, target=tgt, edge_type=edge_type, defaults={"weight": weight, "source_kind": source_kind}
+    )
 
 
 def rebuild_structural_edges():
-    """track -> its artist(s) and album. Thin connective tissue between node types."""
+    """Backbone edges: track↔artist(s), track↔album, album↔artist. Connects each track to its
+    own metadata cluster so a track is never fully isolated from its artist/album."""
     MusicEdge.objects.filter(edge_type="structural").delete()
     artists = {n.key: n for n in MusicNode.objects.filter(node_type="artist")}
     albums = {n.key: n for n in MusicNode.objects.filter(node_type="album")}
@@ -189,6 +190,7 @@ def rebuild_structural_edges():
         if not track_node:
             continue
         names = split_artists(t.artist)
+        primary_artist = artists.get(normalize(names[0])) if names else None
         for name in names:
             artist_node = artists.get(normalize(name))
             if artist_node:
@@ -197,14 +199,82 @@ def rebuild_structural_edges():
             album_node = albums.get(f"{normalize(names[0])}::{normalize(t.album)}")
             if album_node:
                 _upsert_edge(track_node, album_node, "structural", STRUCTURAL_WEIGHT)
+                # album↔artist so the album isn't a leaf hanging only off its tracks.
+                if primary_artist:
+                    _upsert_edge(album_node, primary_artist, "structural", STRUCTURAL_WEIGHT)
 
 
-def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
-    """Link tracks played within `window_minutes` of each other. Weight = co-occurrence count."""
-    MusicEdge.objects.filter(edge_type="colisten").delete()
-    tracks = {n.key: n for n in MusicNode.objects.filter(node_type="track")}
+# --- Tag / genre layer (content-based multipartite connectivity) -------------------------------
+TAG_TOP_N = 5  # top Last.fm tags to pull per artist
+TAG_MIN_ARTISTS = 2  # keep only tags shared by ≥2 artists — a 1-artist tag is a dead-end leaf
+
+
+def rebuild_tag_edges(api_key: str, progress=None):
+    """Fetch each artist's top Last.fm tags and wire artist↔tag edges.
+
+    Tags are few and widely shared, so they connect the graph *by construction* — an orphan
+    artist whose Last.fm similars aren't in the library still shares a genre tag with the main
+    body and is pulled into the giant component. Returns the count of tag-less artists (island
+    risk) for reporting. No api_key → no-op (dev), returns 0.
+    """
+    MusicEdge.objects.filter(edge_type="tag").delete()
+    MusicNode.objects.filter(node_type="tag").delete()
+    if not api_key:
+        _report(progress, "LASTFM_API_KEY unset; skipping tag layer")
+        return 0
+
+    artists = list(MusicNode.objects.filter(node_type="artist"))
+    _report(progress, f"Last.fm: fetching top tags for {len(artists)} artists…")
+
+    # First pass: collect (artist_key -> [(tag_norm, tag_title, count)]) and tally tag frequency.
+    artist_tags: dict[str, list[tuple[str, str, int]]] = {}
+    tag_artist_count: dict[str, int] = defaultdict(int)
+    tag_title: dict[str, str] = {}
+    for i, node in enumerate(artists, 1):
+        payload = _cached_lastfm(
+            f"artist.gettoptags::{node.key}",
+            lambda node=node: lastfm.fetch_artist_top_tags(node.title, api_key, limit=TAG_TOP_N),
+        )
+        rows = []
+        for t in payload:
+            tnorm = normalize(t["name"])
+            if not tnorm:
+                continue
+            rows.append((tnorm, t["name"], int(t.get("count", 0))))
+            tag_artist_count[tnorm] += 1
+            tag_title.setdefault(tnorm, t["name"])
+        artist_tags[node.key] = rows
+        if i % 50 == 0 or i == len(artists):
+            _report(progress, f"  top tags: {i}/{len(artists)}")
+
+    # Keep only tags shared by ≥ TAG_MIN_ARTISTS artists (a lone tag bridges nothing).
+    kept_tags = {t for t, c in tag_artist_count.items() if c >= TAG_MIN_ARTISTS}
+    for tnorm in kept_tags:
+        _upsert_node("tag", tnorm, title=tag_title[tnorm])
+    tag_nodes = {n.key: n for n in MusicNode.objects.filter(node_type="tag")}
+    artist_nodes = {n.key: n for n in artists}
+
+    tagless = 0
+    for akey, rows in artist_tags.items():
+        wired = [r for r in rows if r[0] in kept_tags]
+        if not wired:
+            tagless += 1
+            continue
+        for tnorm, _title, count in wired:
+            # Weight: normalized tag strength (Last.fm counts run 0–100). Floored so a 0-count
+            # (but present) tag still forms a usable bridge edge.
+            _upsert_edge(artist_nodes[akey], tag_nodes[tnorm], "tag", max(count / 100.0, 0.05))
+    _report(progress, f"Tag layer: {len(kept_tags)} shared tags, {tagless} tag-less artists")
+    return tagless
+
+
+def _colisten_counts(window_minutes: int = COLISTEN_WINDOW_MINUTES) -> dict[tuple[str, str], int]:
+    """Co-occurrence count for every track pair played within `window_minutes` (personal CF).
+
+    No top-K cap here (unlike the old build): the asymmetric top-K was the hubness generator.
+    Density is bounded downstream by Mutual-Proximity + per-node top-k on the *rescaled* affinity.
+    """
     window = timezone.timedelta(minutes=window_minutes)
-
     # Only real-timestamp plays (Takeout imports) represent genuine listening sessions.
     # Sync-created rows (history/liked/frequent) have fabricated timestamps that all cluster
     # at ~now, which would otherwise link every pair into one giant fake session.
@@ -218,25 +288,7 @@ def rebuild_colisten_edges(window_minutes: int = COLISTEN_WINDOW_MINUTES):
                 continue
             pair = tuple(sorted((cur["video_id"], nxt["video_id"])))
             counts[pair] = counts.get(pair, 0) + 1
-
-    # Cap each track to its K strongest (most-repeated) co-listen partners. Without this,
-    # a large listening history pairs nearly everything within the window and every patch
-    # collapses into a hairball. Keeping only the top-K per node bounds density while
-    # preserving the genuinely-recurring pairings.
-    neighbors: dict[str, list[tuple[int, str]]] = defaultdict(list)
-    for (a_key, b_key), count in counts.items():
-        neighbors[a_key].append((count, b_key))
-        neighbors[b_key].append((count, a_key))
-    keep: set[tuple[str, str]] = set()
-    for key, partners in neighbors.items():
-        partners.sort(reverse=True)
-        for _count, other in partners[:COLISTEN_TOP_K]:
-            keep.add(tuple(sorted((key, other))))
-
-    for pair in keep:
-        a, b = tracks.get(pair[0]), tracks.get(pair[1])
-        if a and b:
-            _upsert_edge(a, b, "colisten", float(counts[pair]))
+    return counts
 
 
 LASTFM_REQUEST_DELAY = 0.25  # ~4 req/s, polite
@@ -256,18 +308,13 @@ def _cached_lastfm(cache_key: str, fetch):
     return payload
 
 
-def rebuild_similarity_edges(api_key: str, progress=None):
-    """Create similar_artist / similar_track edges between nodes already in the universe.
+def _lastfm_similar_candidates(api_key: str, progress=None):
+    """Fetch Last.fm similar-artist + similar-track pairs as raw affinity candidates (global CF).
 
-    Last.fm responses are cached in LastfmCache. With no api_key, this is a no-op so the
-    graph still builds from co-listen + structural edges (useful in dev).
+    Returns (similar_artist_candidates, similar_track_candidates), each a
+    dict[(node_id_a, node_id_b)] -> match in [0, 1], keyed canonically (a < b). Only pairs where
+    *both* endpoints are already library nodes are kept.
     """
-    if not api_key:
-        _report(progress, "LASTFM_API_KEY unset; skipping Last.fm similarity")
-        return
-
-    MusicEdge.objects.filter(edge_type__in=["similar_artist", "similar_track"]).delete()
-
     artists = {n.key: n for n in MusicNode.objects.filter(node_type="artist")}
     # Track lookup by (artist_norm, canonical_title) so Last.fm name-based results map back
     # to nodes despite remix/feat suffixes.
@@ -275,7 +322,7 @@ def rebuild_similarity_edges(api_key: str, progress=None):
     for n in MusicNode.objects.filter(node_type="track"):
         tracks_by_name.setdefault((normalize(n.subtitle.split(",")[0]), canonical_title(n.title)), n)
 
-    # --- similar artists ---
+    sa: dict[tuple[int, int], float] = {}
     artist_items = list(artists.items())
     _report(progress, f"Last.fm: fetching similar artists for {len(artist_items)} artists (cached calls are instant)…")
     for i, (key, node) in enumerate(artist_items, 1):
@@ -285,12 +332,13 @@ def rebuild_similarity_edges(api_key: str, progress=None):
         )
         for sim in payload:
             target = artists.get(normalize(sim["name"]))
-            if target:
-                _upsert_edge(node, target, "similar_artist", float(sim["match"]))
+            if target and target.id != node.id:
+                pair = (min(node.id, target.id), max(node.id, target.id))
+                sa[pair] = max(sa.get(pair, 0.0), float(sim["match"]))
         if i % 25 == 0 or i == len(artist_items):
             _report(progress, f"  similar artists: {i}/{len(artist_items)}")
 
-    # --- similar tracks (only for the most-played tracks, to bound API calls) ---
+    st: dict[tuple[int, int], float] = {}
     top_tracks = list(MusicNode.objects.filter(node_type="track").order_by("-play_count")[:SIMILAR_TRACK_NODE_LIMIT])
     _report(progress, f"Last.fm: fetching similar tracks for {len(top_tracks)} tracks…")
     for i, node in enumerate(top_tracks, 1):
@@ -301,10 +349,149 @@ def rebuild_similarity_edges(api_key: str, progress=None):
         )
         for sim in payload:
             target = tracks_by_name.get((normalize(sim["artist"]), canonical_title(sim["title"])))
-            if target:
-                _upsert_edge(node, target, "similar_track", float(sim["match"]))
+            if target and target.id != node.id:
+                pair = (min(node.id, target.id), max(node.id, target.id))
+                st[pair] = max(st.get(pair, 0.0), float(sim["match"]))
         if i % 25 == 0 or i == len(top_tracks):
             _report(progress, f"  similar tracks: {i}/{len(top_tracks)}")
+    return sa, st
+
+
+# --- Affinity edges: Mutual Proximity de-hubbing ------------------------------------------------
+# Hubness (Flexer/Schnitzer, OFAI): in any nearest-neighbour similarity space a few items become
+# the neighbour of far too many others as a geometric artifact — our old 395-edge, play-count-4
+# "super nodes". Mutual Proximity (Flexer & Stevens 2017) rescales each similarity to the
+# probability that x and y are *mutually* near, using the empirical distribution of each node's
+# own similarities; a hub whose partners don't reciprocate its nearness is pruned. We then keep
+# each node's top-k by MP — the "mutual proximity graph" kNN construction — which bounds degree.
+MP_TOPK = 8
+
+# Content-based affinity: artists sharing genre tags. Skip tags broader than this — a tag on
+# hundreds of artists ("pop") isn't discriminative and would generate a combinatorial hairball;
+# such tags still connect the graph through their membership edges.
+CONTENT_TAG_MAX_ARTISTS = 60
+
+
+def _content_affinity_candidates() -> dict[tuple[int, int], float]:
+    """Artist↔artist affinity from tag-set overlap (Jaccard), read from the tag edges in the DB.
+
+    The content half of the CF+content hybrid: two artists with strongly overlapping genre tags
+    get a recommendation edge even absent any co-listen or Last.fm-similar link. Returned as
+    dict[(artist_a, artist_b)] -> jaccard in (0, 1], canonical (a < b).
+    """
+    artist_ids = set(MusicNode.objects.filter(node_type="artist").values_list("id", flat=True))
+    artist_tags: dict[int, set[int]] = defaultdict(set)
+    for s, t in MusicEdge.objects.filter(edge_type="tag").values_list("source_id", "target_id"):
+        artist, tag = (s, t) if s in artist_ids else (t, s)
+        artist_tags[artist].add(tag)
+
+    tag_artists: dict[int, list[int]] = defaultdict(list)
+    for artist, tags in artist_tags.items():
+        for tag in tags:
+            tag_artists[tag].append(artist)
+
+    shared: dict[tuple[int, int], int] = defaultdict(int)
+    for arts in tag_artists.values():
+        if len(arts) > CONTENT_TAG_MAX_ARTISTS:
+            continue  # non-discriminative broad tag
+        arts = sorted(arts)
+        for i in range(len(arts)):
+            for j in range(i + 1, len(arts)):
+                shared[(arts[i], arts[j])] += 1
+
+    cands: dict[tuple[int, int], float] = {}
+    for (a, b), sh in shared.items():
+        union = len(artist_tags[a]) + len(artist_tags[b]) - sh
+        if union > 0:
+            cands[(a, b)] = sh / union
+    return cands
+
+
+def mutual_proximity(candidates: dict[tuple[int, int], float]) -> dict[tuple[int, int], float]:
+    """Rescale symmetric similarities to Mutual Proximity in [0, 1].
+
+    `candidates` maps a canonical node-id pair (a < b) to a symmetric similarity. For each node we
+    build the empirical CDF of its similarities; MP(x, y) = CDF_x(s) · CDF_y(s). Midpoint ranking
+    handles the heavy ties in discrete co-listen counts gracefully (all-equal → 0.5, not 0).
+    """
+    import bisect
+
+    by_node: dict[int, list[float]] = defaultdict(list)
+    for (a, b), s in candidates.items():
+        by_node[a].append(s)
+        by_node[b].append(s)
+    sorted_sims = {n: sorted(v) for n, v in by_node.items()}
+
+    def cdf(n: int, s: float) -> float:
+        arr = sorted_sims[n]
+        lo = bisect.bisect_left(arr, s)
+        hi = bisect.bisect_right(arr, s)
+        return (lo + hi) / (2 * len(arr))
+
+    return {(a, b): cdf(a, s) * cdf(b, s) for (a, b), s in candidates.items()}
+
+
+def _topk_by_mp(mp_scores: dict[tuple[int, int], float], k: int = MP_TOPK) -> set[tuple[int, int]]:
+    """Keep each node's k strongest partners by MP, unioned. Bounds degree ≈ 2k and, because MP is
+    mutual, a non-reciprocated hub never makes its counterparties' top-k → no artifact hubs."""
+    by_node: dict[int, list[tuple[float, int]]] = defaultdict(list)
+    for (a, b), mp in mp_scores.items():
+        by_node[a].append((mp, b))
+        by_node[b].append((mp, a))
+    keep: set[tuple[int, int]] = set()
+    for n, partners in by_node.items():
+        partners.sort(reverse=True)
+        for _mp, other in partners[:k]:
+            keep.add((min(n, other), max(n, other)))
+    return keep
+
+
+def rebuild_affinity_edges(api_key: str, progress=None):
+    """Rebuild the single `affinity` edge layer from co-listen (personal CF) + Last.fm (global CF).
+
+    Each source is Mutual-Proximity rescaled and top-k'd independently (its similarities are only
+    comparable within-source), then merged: a pair kept in several sources takes its strongest MP.
+    """
+    MusicEdge.objects.filter(edge_type__in=["affinity", "colisten", "similar_artist", "similar_track"]).delete()
+    tracks = {n.key: n for n in MusicNode.objects.filter(node_type="track")}
+
+    per_source: dict[str, dict[tuple[int, int], float]] = {}
+    # personal co-listen → node-id pairs
+    coli: dict[tuple[int, int], float] = {}
+    for (va, vb), c in _colisten_counts().items():
+        na, nb = tracks.get(va), tracks.get(vb)
+        if na and nb:
+            coli[(min(na.id, nb.id), max(na.id, nb.id))] = float(c)
+    per_source["colisten"] = coli
+    # global CF from Last.fm
+    if api_key:
+        sa, st = _lastfm_similar_candidates(api_key, progress)
+        per_source["similar_artist"] = sa
+        per_source["similar_track"] = st
+    else:
+        _report(progress, "LASTFM_API_KEY unset; affinity from co-listen only")
+    # content-based: artist↔artist genre-tag overlap (built from the tag layer, no extra API calls)
+    per_source["content"] = _content_affinity_candidates()
+
+    best: dict[tuple[int, int], tuple[float, str]] = {}
+    for kind, cands in per_source.items():
+        if not cands:
+            continue
+        mp = mutual_proximity(cands)
+        for pair in _topk_by_mp(mp):
+            m = mp[pair]
+            if m <= 0:
+                continue
+            if pair not in best or m > best[pair][0]:
+                best[pair] = (m, kind)
+
+    node_ids = {i for pair in best for i in pair}
+    id_to_node = {n.id: n for n in MusicNode.objects.filter(id__in=node_ids)}
+    for (a, b), (m, kind) in best.items():
+        na, nb = id_to_node.get(a), id_to_node.get(b)
+        if na and nb:
+            _upsert_edge(na, nb, "affinity", m, source_kind=kind)
+    _report(progress, f"Affinity: {len(best)} MP edges from {len(per_source)} sources")
 
 
 PERSONALIZATION_BOOST = 1.5  # multiplier per active flag (liked/subscribed/in_library)
@@ -387,15 +574,6 @@ def _cap_edges_by_degree(edges, max_degree: int = PATCH_MAX_DEGREE):
     return kept
 
 
-# Seedless "shuffle" tuning. Artist/album nodes aggregate every play of their tracks, so a naive
-# linear recommend_score weighting buries individual songs (→ "never a song") and concentrates all
-# probability on the top few high-count nodes (→ "same few candidates"). Fix both: pick the node
-# *type* first with a song-forward bias, then weight within that type with a damped (sqrt) score
-# over a wide pool. Callers pass recently-served keys via exclude_keys to avoid immediate repeats.
-SEED_POOL_SIZE = 60
-SEED_TYPE_WEIGHTS = {"track": 0.7, "artist": 0.15, "album": 0.15}
-
-
 def _hub_weight(degree: int) -> float:
     """Down-weight high-degree hub nodes so they don't saturate every patch / radio pick.
 
@@ -429,26 +607,17 @@ def damped_weighted_sample(items, scores, k=1, *, damping=math.sqrt, rng=None):
     return chosen
 
 
-def _pick_recommended_seed(exclude_keys, rng):
-    """Song-forward weighted-random seed pick, or None if the graph is empty."""
-    remaining = dict(SEED_TYPE_WEIGHTS)
-    while remaining:
-        node_type = rng.choices(list(remaining), weights=list(remaining.values()), k=1)[0]
-        del remaining[node_type]
-        pool = list(
-            MusicNode.objects.filter(node_type=node_type, recommend_score__gt=0)
-            .exclude(key__in=exclude_keys)
-            .order_by("-recommend_score")[:SEED_POOL_SIZE]
-        )
-        if pool:
-            scores = [n.recommend_score or 1.0 for n in pool]
-            return damped_weighted_sample(pool, scores, k=1, rng=rng)[0]
+def _pick_shuffle_seed(exclude_keys, rng):
+    """Uniform-random track seed for seedless shuffle — a random start for the walk.
 
-    # No scored node in any preferred type — fall back to any node, still avoiding recent picks
-    # where possible (and finally allowing repeats rather than returning nothing).
-    fallback = list(MusicNode.objects.exclude(key__in=exclude_keys).order_by("-recommend_score")[:SEED_POOL_SIZE])
-    fallback = fallback or list(MusicNode.objects.all()[:SEED_POOL_SIZE])
-    return rng.choice(fallback) if fallback else None
+    No score weighting: on a connected, de-hubbed graph, a uniform random walk visits nodes in
+    proportion to their degree, so popular/central tracks surface naturally without an explicit
+    popularity term. Falls back to any node, then allows repeats rather than returning nothing.
+    """
+    ids = list(MusicNode.objects.filter(node_type="track").exclude(key__in=exclude_keys).values_list("id", flat=True))
+    ids = ids or list(MusicNode.objects.exclude(key__in=exclude_keys).values_list("id", flat=True))
+    ids = ids or list(MusicNode.objects.values_list("id", flat=True))
+    return MusicNode.objects.filter(id=rng.choice(ids)).first() if ids else None
 
 
 def _serialize_node(n: MusicNode) -> dict:
@@ -481,7 +650,7 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
     rng = rng or random
     exclude_keys = exclude_keys or set()
     if seed_key is None:
-        seed_node = _pick_recommended_seed(exclude_keys, rng)
+        seed_node = _pick_shuffle_seed(exclude_keys, rng)
         if seed_node is None:
             return {"seed": None, "nodes": [], "edges": []}
     else:
@@ -620,10 +789,12 @@ def build_graph(api_key: str, ytm_headers=None, progress=None):
         apply_personalization(**personalization)
     else:
         _report(progress, "  no YTM auth — keeping existing liked/subscribed flags")
-    _report(progress, "Building structural + co-listen edges…")
+    _report(progress, "Building structural backbone…")
     rebuild_structural_edges()
-    rebuild_colisten_edges()
-    rebuild_similarity_edges(api_key=api_key, progress=progress)
+    _report(progress, "Building tag/genre connective layer…")
+    rebuild_tag_edges(api_key=api_key, progress=progress)
+    _report(progress, "Building affinity edges (co-listen + Last.fm, Mutual-Proximity rescaled)…")
+    rebuild_affinity_edges(api_key=api_key, progress=progress)
     _report(progress, "Computing recommendation scores…")
     compute_recommend_scores()
     _report(progress, "Computing node degrees…")
@@ -650,54 +821,282 @@ def _node_to_track(node: MusicNode) -> dict:
     }
 
 
-def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
-    """Pick the next radio tracks related to `seed_video_id` via the music graph.
+WALK_RESTART_PROB = 0.15  # radio: chance per step to teleport back to the seed (keeps results near it)
 
-    Pure graph-based: BFS (depth 2) from the seed track node over
-    similar_track / colisten / similar_artist / structural edges, scoring candidate
-    track nodes by edge weight x edge-type priority (decayed by hop depth). Returns up
-    to `limit` ListenTrack-shaped dicts chosen by weighted-random sampling (for variety).
-    Returns [] when the seed is unknown or yields no fresh, playable track neighbours.
+
+def _load_adjacency():
+    """Load the whole graph into an in-memory adjacency list + track lookup for fast walking.
+
+    The graph is small (a few thousand nodes / edges), so one query beats a DB round-trip per step.
+    Returns (adjacency: id -> [neighbour ids], track_video: id -> video_id for playable tracks).
     """
+    adjacency: dict[int, list[int]] = defaultdict(list)
+    # weight > 0 only: a non-positive edge means "no real affinity" and is not a walkable link.
+    for src, tgt in MusicEdge.objects.filter(weight__gt=0).values_list("source_id", "target_id").iterator():
+        adjacency[src].append(tgt)
+        adjacency[tgt].append(src)
+    track_video = dict(MusicNode.objects.filter(node_type="track").exclude(video_id="").values_list("id", "video_id"))
+    return adjacency, track_video
+
+
+def walk(seed_video_id=None, exclude_video_ids=None, limit=5, *, restart_prob=WALK_RESTART_PROB, rng=None) -> list[int]:
+    """Uniform random walk over the graph, returning up to `limit` fresh track node ids in order.
+
+    The single navigation primitive behind both shuffle and radio:
+      - `seed_video_id=None` → shuffle: start at a uniform-random track, no restart.
+      - `seed_video_id` set   → radio: start at the seed, teleport back with `restart_prob`.
+    Each step moves to a uniformly-random neighbour (any edge type — tag/artist/album nodes are
+    traversed for reachability but only track nodes are emitted). Because the graph is connected
+    and de-hubbed, visitation is ∝ degree, so popular/central tracks recur naturally.
+    """
+    rng = rng or random
     exclude = set(exclude_video_ids or ())
-    exclude.add(seed_video_id)
-
-    seed = MusicNode.objects.filter(node_type="track", key=seed_video_id).first()
-    if seed is None:
+    adjacency, track_video = _load_adjacency()
+    if not track_video:
         return []
 
-    scores: dict[int, float] = {}
-    frontier = {seed.id}
-    visited = {seed.id}
-    for depth in range(2):
-        edges = _neighbors(frontier)
-        next_frontier: set[int] = set()
-        for e in edges:
-            for a, b in ((e.source_id, e.target_id), (e.target_id, e.source_id)):
-                if a in frontier and b not in visited:
-                    next_frontier.add(b)
-                    prio = RADIO_EDGE_PRIORITY.get(e.edge_type, 1.0)
-                    scores[b] = scores.get(b, 0.0) + e.weight * prio / (depth + 1)
-        visited |= next_frontier
-        frontier = next_frontier
-        if not frontier:
+    if seed_video_id:
+        exclude.add(seed_video_id)
+        seed = MusicNode.objects.filter(node_type="track", key=seed_video_id).first()
+        if seed is None:
+            return []  # radio from an unknown seed → nothing (don't silently random-walk)
+        seed_id = seed.id
+    else:
+        # seedless shuffle: uniform-random start over playable tracks not already excluded
+        start_pool = [i for i, v in track_video.items() if v not in exclude] or list(track_video)
+        seed_id = rng.choice(start_pool)
+
+    results: list[int] = []
+    seen_videos = set(exclude)
+    current = seed_id
+    # Bounded step budget: enough to reach `limit` fresh tracks on a connected graph, but finite so
+    # a tiny/degenerate component can't loop forever.
+    budget = max(limit * 60, 120)
+    for _ in range(budget):
+        if len(results) >= limit:
             break
+        if seed_video_id and restart_prob and rng.random() < restart_prob:
+            current = seed_id
+        neighbours = adjacency.get(current)
+        if not neighbours:
+            current = seed_id  # dead end (isolated node) — restart from seed/start
+            continue
+        current = rng.choice(neighbours)
+        vid = track_video.get(current)
+        if vid and vid not in seen_videos:
+            seen_videos.add(vid)
+            results.append(current)
+    return results
 
-    if not scores:
+
+def radio_next(seed_video_id, exclude_video_ids=None, limit=5) -> list[dict]:
+    """Next radio tracks via a uniform random walk seeded at `seed_video_id` (see `walk`)."""
+    ids = walk(seed_video_id, exclude_video_ids=exclude_video_ids, limit=limit)
+    if not ids:
         return []
+    by_id = {n.id: n for n in MusicNode.objects.filter(id__in=ids)}
+    return [_node_to_track(by_id[i]) for i in ids if i in by_id]
 
-    candidate_nodes = MusicNode.objects.filter(id__in=scores.keys(), node_type="track")
-    candidates = [
-        (n, scores[n.id]) for n in candidate_nodes if n.video_id and n.video_id not in exclude and scores[n.id] > 0
+
+# --- Full-graph diagnostic snapshot (admin visualization) ---------------------------------------
+def _connected_components(node_ids, adjacency):
+    """Label connected components; returns id -> component index, sorted so 0 is the largest."""
+    seen: set[int] = set()
+    comps: list[list[int]] = []
+    for start in node_ids:
+        if start in seen:
+            continue
+        stack, comp = [start], []
+        while stack:
+            x = stack.pop()
+            if x in seen:
+                continue
+            seen.add(x)
+            comp.append(x)
+            stack.extend(n for n in adjacency.get(x, ()) if n not in seen)
+        comps.append(comp)
+    comps.sort(key=len, reverse=True)
+    return {nid: idx for idx, comp in enumerate(comps) for nid in comp}, comps
+
+
+def _articulation_and_bridges(node_ids, adjacency):
+    """Tarjan articulation points + bridges (iterative, whole graph). Returns (set aps, set bridges).
+
+    Bridges are canonical (a, b) with a < b. Surfaces internal fragility: a node/edge whose removal
+    would split a component further — the weak seams a walk can get trapped behind.
+    """
+    disc: dict[int, int] = {}
+    low: dict[int, int] = {}
+    aps: set[int] = set()
+    bridges: set[tuple[int, int]] = set()
+    timer = 0
+    for root in node_ids:
+        if root in disc:
+            continue
+        # iterative DFS; stack frames carry (node, parent, neighbour-iterator, child-count)
+        stack = [(root, -1, iter(adjacency.get(root, ())), 0)]
+        disc[root] = low[root] = timer
+        timer += 1
+        root_children = 0
+        while stack:
+            node, parent, it, _ = stack[-1]
+            advanced = False
+            for nb in it:
+                if nb == parent:
+                    continue
+                if nb not in disc:
+                    disc[nb] = low[nb] = timer
+                    timer += 1
+                    if node == root:
+                        root_children += 1
+                    stack.append((nb, node, iter(adjacency.get(nb, ())), 0))
+                    advanced = True
+                    break
+                else:
+                    low[node] = min(low[node], disc[nb])
+            if advanced:
+                continue
+            stack.pop()
+            if stack:
+                par = stack[-1][0]
+                low[par] = min(low[par], low[node])
+                if par != root and low[node] >= disc[par]:
+                    aps.add(par)
+                if low[node] > disc[par]:
+                    bridges.add((min(par, node), max(par, node)))
+        if root_children > 1:
+            aps.add(root)
+    return aps, bridges
+
+
+ISLAND_MAX_SIZE = 5  # components this small are "islands" listed individually in the summary
+TOP_HUBS = 20
+
+
+def full_graph_snapshot() -> dict:
+    """Whole graph + connectivity analytics for the admin diagnostic viz. Pure read, no mutation."""
+    nodes = list(MusicNode.objects.all())
+    node_ids = [n.id for n in nodes]
+    id_set = set(node_ids)
+    raw_edges = list(MusicEdge.objects.values("source_id", "target_id", "edge_type", "source_kind", "weight"))
+
+    adjacency: dict[int, list[int]] = defaultdict(list)
+    degree: dict[int, int] = defaultdict(int)
+    for e in raw_edges:
+        s, t = e["source_id"], e["target_id"]
+        if s in id_set and t in id_set:
+            adjacency[s].append(t)
+            adjacency[t].append(s)
+            degree[s] += 1
+            degree[t] += 1
+
+    component_of, comps = _connected_components(node_ids, adjacency)
+    giant = set(comps[0]) if comps else set()
+    aps, bridges = _articulation_and_bridges(list(giant), {k: v for k, v in adjacency.items() if k in giant})
+
+    def nid(n):
+        return f"{n.node_type}:{n.key}"
+
+    id_to_key = {n.id: nid(n) for n in nodes}
+    out_nodes = [
+        {
+            "id": nid(n),
+            "key": n.key,
+            "node_type": n.node_type,
+            "title": n.title,
+            "subtitle": n.subtitle,
+            "video_id": n.video_id,
+            "play_count": n.play_count,
+            "is_liked": n.is_liked,
+            "is_subscribed": n.is_subscribed,
+            "in_library": n.in_library,
+            "degree": degree.get(n.id, 0),
+            "component": component_of.get(n.id, 0),
+        }
+        for n in nodes
     ]
-    if not candidates:
-        return []
+    out_edges = [
+        {
+            "source": id_to_key[e["source_id"]],
+            "target": id_to_key[e["target_id"]],
+            "edge_type": e["edge_type"],
+            "source_kind": e["source_kind"],
+            "weight": e["weight"],
+        }
+        for e in raw_edges
+        if e["source_id"] in id_set and e["target_id"] in id_set
+    ]
 
-    candidates.sort(key=lambda c: c[1], reverse=True)
-    pool = candidates[:RADIO_CANDIDATE_POOL]
-    nodes = [c[0] for c in pool]
-    # Damped (sqrt) weighting via the shared kernel, with the hub penalty applied to each score so
-    # super-connected tracks stop being served as "next" every time.
-    eff_scores = [c[1] * _hub_weight(c[0].degree) for c in pool]
-    chosen = damped_weighted_sample(nodes, eff_scores, k=limit, rng=random)
-    return [_node_to_track(n) for n in chosen]
+    # --- summary ---
+    node_by_id = {n.id: n for n in nodes}
+    degs = sorted(degree.get(i, 0) for i in node_ids)
+    deg_hist: dict[str, int] = defaultdict(int)
+    for d in degs:
+        deg_hist[str(d)] += 1
+    comp_sizes = [len(c) for c in comps]
+    islands = [
+        {
+            "component": idx,
+            "size": len(c),
+            "nodes": [
+                {"id": id_to_key[i], "node_type": node_by_id[i].node_type, "title": node_by_id[i].title} for i in c
+            ],
+        }
+        for idx, c in enumerate(comps)
+        if len(c) <= ISLAND_MAX_SIZE
+    ]
+    top_hub_ids = sorted(node_ids, key=lambda i: degree.get(i, 0), reverse=True)[:TOP_HUBS]
+    edge_type_counts: dict[str, int] = defaultdict(int)
+    source_kind_counts: dict[str, int] = defaultdict(int)
+    for e in out_edges:
+        edge_type_counts[e["edge_type"]] += 1
+        if e["source_kind"]:
+            source_kind_counts[e["source_kind"]] += 1
+    n = len(degs)
+    summary = {
+        "node_count": len(nodes),
+        "edge_count": len(out_edges),
+        "component_count": len(comps),
+        "giant_size": len(giant),
+        "component_sizes": comp_sizes,
+        "islands": islands,
+        "degree": {
+            "min": degs[0] if degs else 0,
+            "max": degs[-1] if degs else 0,
+            "mean": round(sum(degs) / n, 2) if n else 0,
+            "median": degs[n // 2] if n else 0,
+            "histogram": dict(deg_hist),
+        },
+        "top_hubs": [
+            {
+                "id": id_to_key[i],
+                "node_type": node_by_id[i].node_type,
+                "title": node_by_id[i].title,
+                "degree": degree.get(i, 0),
+                "play_count": node_by_id[i].play_count,
+            }
+            for i in top_hub_ids
+        ],
+        "edge_type_counts": dict(edge_type_counts),
+        "source_kind_counts": dict(source_kind_counts),
+        "articulation_points": [
+            {"id": id_to_key[i], "node_type": node_by_id[i].node_type, "title": node_by_id[i].title} for i in aps
+        ],
+        "bridges": [{"source": id_to_key[a], "target": id_to_key[b]} for a, b in bridges],
+        "tagless_artists": _tagless_artist_count(),
+    }
+    return {"nodes": out_nodes, "edges": out_edges, "summary": summary}
+
+
+def _tagless_artist_count() -> int:
+    """Artists with no tag edge in either direction — the residual island risk."""
+    from django.db.models import Q
+
+    total = MusicNode.objects.filter(node_type="artist").count()
+    tagged = (
+        MusicNode.objects.filter(node_type="artist")
+        .filter(Q(edges_out__edge_type="tag") | Q(edges_in__edge_type="tag"))
+        .distinct()
+        .count()
+    )
+    return total - tagged

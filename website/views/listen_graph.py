@@ -2,6 +2,7 @@ from django.core.cache import cache as redis_cache
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 
+from ..auth import require_admin
 from ..services import music_graph
 
 # Ring of the last few seedless "shuffle" seeds, so consecutive shuffles don't repeat the same node.
@@ -31,3 +32,10 @@ def graph_search(request):
     """Search nodes by title/subtitle to re-seed the graph."""
     query = request.GET.get("q", "")
     return JsonResponse({"results": music_graph.search_nodes(query)})
+
+
+@require_GET
+@require_admin
+def graph_full(request):  # noqa: ARG001
+    """Whole graph + connectivity analytics for the admin diagnostic viz (admin-gated)."""
+    return JsonResponse(music_graph.full_graph_snapshot())

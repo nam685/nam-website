@@ -11,6 +11,7 @@ class MusicNode(models.Model):
         ARTIST = "artist"
         ALBUM = "album"
         TRACK = "track"
+        TAG = "tag"  # Last.fm genre/mood — the multipartite connective layer
 
     node_type = models.CharField(max_length=8, choices=NodeType.choices)
     key = models.CharField(max_length=600)  # video_id | artist_lower | "artist::album"
