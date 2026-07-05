@@ -418,16 +418,19 @@ def listen_sync(request):
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
-    # Rebuild the graph off the request path. Falls back to inline if the broker is unreachable,
-    # so a Celery outage degrades to the old (slow) behaviour rather than skipping the rebuild.
+    # Rebuild the graph off the request path via Celery. The Last.fm pass takes minutes (well past
+    # gunicorn's 120s worker timeout), so we must NOT run it inline: doing so kills the worker
+    # mid-request and reports a "failure" to the user even though the tracks were already synced —
+    # exactly the confusing timeout that made a working sync look broken. If the broker is
+    # unreachable we skip the rebuild (the tracks are saved; the graph refreshes on the next
+    # successful sync) rather than block the response.
     graph_rebuilding = True
     try:
         from ..tasks import rebuild_listen_graph
 
         rebuild_listen_graph.delay()
     except Exception:
-        logger.exception("Could not queue graph rebuild; running inline")
-        _rebuild_graph()
+        logger.exception("Could not queue graph rebuild; skipping (tracks are synced)")
         graph_rebuilding = False
 
     return JsonResponse(

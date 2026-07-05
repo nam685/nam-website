@@ -72,13 +72,33 @@ export default function ListensGraphPage() {
     setPatch(data);
   }, []);
 
-  useEffect(() => {
-    loadPatch();
+  const loadStats = useCallback(() => {
     fetch(`${API}/api/listens/stats/`)
       .then((r) => r.json())
       .then(setStats)
       .catch(() => {});
-  }, [loadPatch]);
+  }, []);
+
+  // Timers that reload the graph while the async (Celery) rebuild runs, so freshly-synced tracks
+  // appear without a manual refresh. Tracked so they can be cleared on unmount / re-sync.
+  const rebuildPollRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearRebuildPoll = useCallback(() => {
+    rebuildPollRef.current.forEach(clearTimeout);
+    rebuildPollRef.current = [];
+  }, []);
+  useEffect(() => clearRebuildPoll, [clearRebuildPoll]);
+
+  useEffect(() => {
+    loadPatch();
+    loadStats();
+  }, [loadPatch, loadStats]);
+
+  // Follow the player: whenever the playing track changes (next/prev/auto-advance/radio), re-center
+  // the graph on that song — same as clicking its node. Lets you "walk the graph" hands-free.
+  const currentVideoId = player.queue[player.currentIndex]?.video_id;
+  useEffect(() => {
+    if (currentVideoId) loadPatch(currentVideoId, "song");
+  }, [currentVideoId, loadPatch]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -146,13 +166,26 @@ export default function ListensGraphPage() {
         setSyncMessage(data.error || "Sync failed.");
       } else {
         setSyncStatus("done");
-        // The graph now rebuilds asynchronously (Celery) since the Last.fm pass takes minutes,
-        // so the new tracks won't appear in the graph until that finishes — say so.
-        if ((data.synced > 0 || data.synced_liked > 0) && data.graph_rebuilding) {
-          setSyncMessage(`Synced ${data.synced + data.synced_liked} tracks — graph rebuilding in the background.`);
-        } else if (data.synced > 0 || data.synced_liked > 0) {
-          // Rebuild ran inline (broker down fallback) — graph is current, refresh it.
+        const newCount = (data.synced || 0) + (data.synced_liked || 0);
+        // Tracks land in the DB immediately, so refresh the stats now — the total/today counters
+        // jump right away instead of requiring a manual page reload.
+        loadStats();
+        if (newCount > 0 && data.graph_rebuilding) {
+          // The graph rebuild (Last.fm pass) runs asynchronously in Celery and takes a few minutes.
+          // Poll the graph a handful of times so the new nodes appear on their own once it finishes.
+          setSyncMessage(`Synced ${newCount} tracks — graph updating in the background (~a few min).`);
+          clearRebuildPoll();
+          rebuildPollRef.current = [60, 150, 300].map((s) =>
+            setTimeout(() => {
+              loadPatch();
+              loadStats();
+            }, s * 1000),
+          );
+        } else if (newCount > 0) {
+          setSyncMessage(`Synced ${newCount} tracks.`);
           loadPatch();
+        } else {
+          setSyncMessage("Already up to date.");
         }
       }
     } catch {

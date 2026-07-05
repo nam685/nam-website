@@ -307,8 +307,12 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_graph_rebuild_falls_back_inline_if_broker_down(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
-        # If the broker is unreachable, degrade to the old inline rebuild rather than skip it.
+    def test_graph_rebuild_skipped_not_inline_if_broker_down(
+        self, mock_ytmusic_cls, _mock_isfile, client, auth_headers
+    ):
+        # If the broker is unreachable we must SKIP the rebuild, never run it inline: the Last.fm
+        # pass takes minutes and would blow gunicorn's 120s timeout, turning a successful sync
+        # (tracks already written) into a confusing "failure". Sync still returns 200.
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = MOCK_HISTORY
         mock_ytmusic_cls.return_value = mock_yt
@@ -318,7 +322,7 @@ class TestListenSync:
             resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 200
         assert resp.json()["graph_rebuilding"] is False
-        inline.assert_called_once()
+        inline.assert_not_called()  # never block the request on the slow rebuild
 
 
 # ── Reauth ────────────────────────────────────────────
