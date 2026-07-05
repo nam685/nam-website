@@ -1,5 +1,17 @@
 # Listens Full Graph + Fast Rendering + Merged Sync/Auth — Implementation Plan
 
+> **⚠️ CORRECTION (2026-07-05, after execution):** This plan was written against a
+> stale `main` checkout that lacked the `/listens/graph` admin diagnostic page and the
+> `graph_full` endpoint, which already existed on `origin/main`. The plan therefore
+> designed a *new* full-graph page + a *new* `/api/listens/graph/` public endpoint. During
+> execution the collision surfaced and the user clarified that "listens/graph lags" meant
+> the **existing diagnostic page**. What actually shipped:
+> - **Kept:** Task 2 (`shouldMinimal`), Task 3 (`GraphCanvas` + patch center-on-seed/always-labels), Task 4 (merged Sync/Auth button + admin `⊹ FULL GRAPH` link → `/listens/graph`).
+> - **Reverted:** Task 5 (the new page) and its diagnostic relocation.
+> - **Reworked (Task R1):** dropped the redundant public endpoint; moved the existing admin `graph_full` to bare `/api/listens/graph/` and wrapped it in the warm-on-rebuild cache (caching `full_graph_snapshot()`, which runs components/articulation/bridge analysis).
+> - **Added (Task A2):** the minimal zoomed-out render + edge culling on the **existing** diagnostic page (`frontend/src/app/listens/graph/page.tsx`).
+> Read Tasks 1 and 5 below as historical context, not as-shipped. The as-shipped record is `.superpowers/sdd/progress.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a full-graph view of the ~2816-node music graph that renders fast when zoomed out, reachable from an admin-gated button on `/listens`, and collapse the separate Sync/Auth buttons into one reactive button.
@@ -818,7 +830,6 @@ export default function ListensFullGraphPage() {
       </div>
       <GraphCanvas
         data={data}
-        isAdmin={isAdmin}
         hovered={hovered}
         onNodeHover={(node) => setHovered(node ? node.key : null)}
         onNodeClick={(node) => playNode(node)}

@@ -3,6 +3,17 @@
 **Date:** 2026-07-05
 **Branch:** `feat/listens-full-graph`
 
+> **⚠️ CORRECTION (post-implementation):** This spec was written against a stale `main`
+> checkout and wrongly assumed no full-graph page existed. `origin/main` already had an
+> admin diagnostic full-graph page at `/listens/graph` (served by `graph_full` at
+> `/api/listens/graph/full/`), which was the laggy page the user meant. As shipped: the
+> **existing diagnostic page** got the minimal zoomed-out render + edge culling; the
+> endpoint was consolidated to bare `/api/listens/graph/` and given the warm-on-rebuild
+> cache; `/listens` got the admin `⊹ FULL GRAPH` button + merged Sync/Auth button; and the
+> patch view now centers on the seed. The "new page" / "exclude tags" decisions below did
+> NOT ship — they were premised on the wrong assumption. See the plan's correction banner
+> and `.superpowers/sdd/progress.md` for the as-shipped record.
+
 ## Problem
 
 The `/listens` page renders a small (~40-node) "patch" of the music graph — a
