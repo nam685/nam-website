@@ -12,6 +12,7 @@ import { getAdminToken, storeDel, useIsAdmin } from "@/lib/auth";
 import { toForceData, type ForceNode } from "@/lib/graph";
 import GraphCanvas from "@/components/GraphCanvas";
 import { usePlayer } from "@/lib/player";
+import Link from "next/link";
 
 const ACCENT = "#f97316";
 
@@ -31,6 +32,7 @@ export default function ListensGraphPage() {
   const [reauthHeaders, setReauthHeaders] = useState("");
   const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [reauthError, setReauthError] = useState("");
+  const [authNeeded, setAuthNeeded] = useState(false);
 
   // Admin actions require a valid token; bounce expired/absent sessions to the login.
   const handleAuthExpired = () => {
@@ -121,6 +123,7 @@ export default function ListensGraphPage() {
       if (res.status === 409 && data.auth_expired) {
         setSyncStatus("error");
         setSyncMessage("YouTube Music session expired — re-authenticate below, then sync again.");
+        setAuthNeeded(true);
         setShowReauth(true);
         return; // leave the message + panel up; don't auto-clear
       }
@@ -186,6 +189,7 @@ export default function ListensGraphPage() {
         setReauthStatus("error");
       } else {
         setReauthStatus("done");
+        setAuthNeeded(false);
         setTimeout(() => {
           setShowReauth(false);
           setReauthHeaders("");
@@ -261,31 +265,57 @@ export default function ListensGraphPage() {
           ↻ SHUFFLE
         </button>
         {isAdmin && (
+          <Link
+            href="/listens/graph"
+            style={{
+              background: "rgba(249,115,22,0.12)",
+              border: `1px solid ${ACCENT}`,
+              borderRadius: 6,
+              padding: "8px 14px",
+              color: ACCENT,
+              fontSize: 10,
+              fontFamily: "monospace",
+              letterSpacing: 1,
+              cursor: "pointer",
+              textDecoration: "none",
+            }}
+          >
+            ⊹ FULL GRAPH
+          </Link>
+        )}
+        {isAdmin && (
           <>
             <button
-              onClick={doSync}
+              onClick={() => {
+                if (authNeeded) {
+                  if (!getAdminToken()) return;
+                  setShowReauth((v) => !v);
+                } else {
+                  doSync();
+                }
+              }}
               disabled={syncStatus === "syncing"}
               style={{
-                background: "none", border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
-                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
+                background: authNeeded || showReauth ? "rgba(249,115,22,0.15)" : "none",
+                border: `1px solid rgba(249,115,22,0.3)`,
+                borderRadius: 6,
+                padding: "8px 14px",
+                color: ACCENT,
+                fontSize: 10,
+                fontFamily: "monospace",
+                letterSpacing: 1,
+                cursor: "pointer",
               }}
             >
-              {syncStatus === "syncing" ? "SYNCING..." : syncStatus === "done" ? "SYNCED!" : syncStatus === "error" ? "FAILED" : "SYNC"}
-            </button>
-            <button
-              onClick={() => {
-                if (!getAdminToken()) return;
-                setShowReauth(!showReauth);
-              }}
-              style={{
-                background: showReauth ? "rgba(249,115,22,0.15)" : "none",
-                border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
-                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
-              }}
-            >
-              AUTH
+              {authNeeded
+                ? "AUTH"
+                : syncStatus === "syncing"
+                  ? "SYNCING..."
+                  : syncStatus === "done"
+                    ? "SYNCED!"
+                    : syncStatus === "error"
+                      ? "FAILED"
+                      : "SYNC"}
             </button>
           </>
         )}
