@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { edgeColor, edgeOpacity, nodeColor, nodeRadius, toForceData } from "../graph";
+import {
+  componentColor,
+  degreeRadius,
+  edgeColor,
+  edgeFilterKey,
+  edgeOpacity,
+  edgeVisible,
+  nodeColor,
+  nodeRadius,
+  toForceData,
+} from "../graph";
 import type { GraphPatch } from "../api";
 
 describe("nodeRadius", () => {
@@ -63,5 +73,62 @@ describe("toForceData", () => {
     expect(data.nodes.map((n) => n.id)).toEqual(["v1", "radiohead"]);
     expect(data.links).toHaveLength(1);
     expect(data.links[0].source).toBe("v1");
+  });
+});
+
+describe("componentColor", () => {
+  it("paints the giant component (0) the page orange", () => {
+    expect(componentColor(0)).toBe("#f97316");
+  });
+  it("gives islands distinct colors from the giant and from each other", () => {
+    expect(componentColor(1)).not.toBe(componentColor(0));
+    expect(componentColor(1)).not.toBe(componentColor(2));
+    expect(componentColor(2)).not.toBe(componentColor(3));
+  });
+  it("is stable for the same component id", () => {
+    expect(componentColor(7)).toBe(componentColor(7));
+    expect(componentColor(42)).toBe(componentColor(42));
+  });
+});
+
+describe("degreeRadius", () => {
+  it("returns the base size at degree 0", () => {
+    expect(degreeRadius(0)).toBe(2);
+  });
+  it("is monotonic non-decreasing in degree", () => {
+    for (let d = 0; d < 200; d++) {
+      expect(degreeRadius(d + 1)).toBeGreaterThanOrEqual(degreeRadius(d));
+    }
+  });
+  it("is capped for very high degree", () => {
+    expect(degreeRadius(1_000_000)).toBeLessThanOrEqual(14);
+    expect(degreeRadius(50)).toBeGreaterThan(degreeRadius(1));
+  });
+});
+
+describe("edgeFilterKey", () => {
+  it("groups structural/tag by edge_type", () => {
+    expect(edgeFilterKey({ edge_type: "structural", source_kind: "" })).toBe("structural");
+    expect(edgeFilterKey({ edge_type: "tag", source_kind: "" })).toBe("tag");
+  });
+  it("groups affinity edges by their source_kind", () => {
+    expect(edgeFilterKey({ edge_type: "affinity", source_kind: "colisten" })).toBe("colisten");
+    expect(edgeFilterKey({ edge_type: "affinity", source_kind: "similar_artist" })).toBe("similar_artist");
+    expect(edgeFilterKey({ edge_type: "affinity", source_kind: "similar_track" })).toBe("similar_track");
+  });
+});
+
+describe("edgeVisible", () => {
+  it("shows an edge only when its filter group is active", () => {
+    const active = new Set(["structural", "colisten"]);
+    expect(edgeVisible({ edge_type: "structural", source_kind: "" }, active)).toBe(true);
+    expect(edgeVisible({ edge_type: "affinity", source_kind: "colisten" }, active)).toBe(true);
+    expect(edgeVisible({ edge_type: "tag", source_kind: "" }, active)).toBe(false);
+    expect(edgeVisible({ edge_type: "affinity", source_kind: "similar_track" }, active)).toBe(false);
+  });
+  it("hides everything when no filters are active", () => {
+    const none = new Set<string>();
+    expect(edgeVisible({ edge_type: "structural", source_kind: "" }, none)).toBe(false);
+    expect(edgeVisible({ edge_type: "affinity", source_kind: "colisten" }, none)).toBe(false);
   });
 });

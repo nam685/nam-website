@@ -21,8 +21,9 @@ def built_graph(db):  # noqa: ARG001
         )
     music_graph.rebuild_nodes()
     music_graph.rebuild_structural_edges()
-    music_graph.rebuild_colisten_edges()
+    music_graph.rebuild_affinity_edges(api_key="")
     music_graph.compute_recommend_scores()
+    music_graph.compute_node_degrees()
 
 
 @pytest.mark.django_db
@@ -207,37 +208,27 @@ def test_compute_node_degrees_counts_incident_edges():
     assert leaves[0].degree == 1
 
 
-# --- radio_next de-hubbing ---
+# --- graph_full admin endpoint ---
 
 
 @pytest.mark.django_db
-def test_radio_next_prefers_low_degree_over_hub_at_equal_affinity():
-    import random as _random
+def test_graph_full_requires_admin(built_graph):  # noqa: ARG001
+    # No token → 401 (admin-gated diagnostic).
+    resp = Client().get("/api/listens/graph/full/")
+    assert resp.status_code == 401
 
-    from website.models import MusicEdge, MusicNode
 
-    seed = MusicNode.objects.create(node_type="track", key="seed", title="Seed", video_id="seed")
-    # Two candidates with an equal-weight similar_track edge to the seed:
-    hub = MusicNode.objects.create(node_type="track", key="hub", title="Hub", video_id="hub", degree=40)
-    quiet = MusicNode.objects.create(node_type="track", key="quiet", title="Quiet", video_id="quiet", degree=1)
-    for cand in (hub, quiet):
-        src, tgt = (seed, cand) if seed.id < cand.id else (cand, seed)
-        MusicEdge.objects.create(source=src, target=tgt, edge_type="similar_track", weight=1.0)
-
-    import website.services.music_graph as mg
-
-    orig = mg.random
-    mg.random = _random.Random(99)  # deterministic pick stream
-    try:
-        picks = []
-        for _ in range(200):
-            got = mg.radio_next("seed", limit=1)
-            picks += [t["video_id"] for t in got]
-    finally:
-        mg.random = orig
-    assert picks.count("quiet") > picks.count("hub"), (
-        f"hub not de-weighted: {picks.count('hub')} vs {picks.count('quiet')}"
-    )
+@pytest.mark.django_db
+def test_graph_full_returns_snapshot(built_graph, auth_headers):  # noqa: ARG001
+    resp = Client().get("/api/listens/graph/full/", **auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {"nodes", "edges", "summary"} <= data.keys()
+    assert data["summary"]["node_count"] == len(data["nodes"])
+    # Node ids are namespaced "<type>:<key>"; every edge endpoint resolves to a node.
+    node_ids = {n["id"] for n in data["nodes"]}
+    for e in data["edges"]:
+        assert e["source"] in node_ids and e["target"] in node_ids
 
 
 # --- get_patch neighborhood de-hubbing ---

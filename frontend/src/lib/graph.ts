@@ -1,4 +1,4 @@
-import type { GraphEdgeType, GraphNode, GraphNodeType, GraphPatch } from "./api";
+import type { GraphEdgeType, GraphFullEdge, GraphNode, GraphNodeType, GraphPatch } from "./api";
 
 /** Node circle radius in px, scaled by play count and capped.
  * Deliberately small so dense patches stay legible rather than clumping into blobs. */
@@ -47,6 +47,62 @@ export interface ForceLink {
   target: string;
   edge_type: GraphEdgeType;
   weight: number;
+}
+
+/* ── Full-graph diagnostic helpers ─────────────────────── */
+
+/** The giant component is always the page's primary orange. */
+const GIANT_COMPONENT_COLOR = "#f97316";
+
+/**
+ * Stable, high-contrast color per connected component. Component 0 (the giant
+ * component) is always the page orange; every other component id maps to a
+ * distinct hue on the HSL wheel via a small integer hash so islands pop and the
+ * same id always yields the same color.
+ */
+export function componentColor(component: number): string {
+  if (component === 0) return GIANT_COMPONENT_COLOR;
+  // Spread hues around the wheel using the golden-angle so adjacent ids land far
+  // apart; the hash keeps it deterministic per id. Avoid orange's ~25° band so
+  // islands never masquerade as the giant component.
+  const hue = Math.round((component * 137.508 + 60) % 360);
+  const sat = 70 + (component % 3) * 8; // 70/78/86 — all vivid
+  const light = 55 + (component % 2) * 6; // 55/61 — bright on the dark canvas
+  return `hsl(${hue}, ${sat}%, ${light}%)`;
+}
+
+/** Node radius scaled by total degree (log scale, capped). Degree 0 → base size. */
+const DEGREE_BASE_RADIUS = 2;
+const DEGREE_MAX_RADIUS = 14;
+export function degreeRadius(degree: number): number {
+  return Math.min(DEGREE_BASE_RADIUS + Math.log2(Math.max(degree, 0) + 1) * 1.6, DEGREE_MAX_RADIUS);
+}
+
+/**
+ * Filter-group key for a full-graph edge. Structural and tag edges group by
+ * their edge_type; affinity edges group by their source_kind
+ * (colisten / similar_artist / similar_track / content).
+ */
+export function edgeFilterKey(edge: Pick<GraphFullEdge, "edge_type" | "source_kind">): string {
+  return edge.edge_type === "affinity" ? edge.source_kind : edge.edge_type;
+}
+
+/** All edge-filter group keys, in display order. */
+export const EDGE_FILTER_KEYS = [
+  "structural",
+  "tag",
+  "colisten",
+  "similar_artist",
+  "similar_track",
+  "content",
+] as const;
+
+/** True when an edge's filter group is currently active. */
+export function edgeVisible(
+  edge: Pick<GraphFullEdge, "edge_type" | "source_kind">,
+  activeFilters: Set<string>,
+): boolean {
+  return activeFilters.has(edgeFilterKey(edge));
 }
 
 /** Convert an API patch into react-force-graph's {nodes, links} shape. Drops dangling edges. */

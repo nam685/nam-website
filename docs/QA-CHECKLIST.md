@@ -108,6 +108,16 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Listens: with radio off, playback stops at the end of the queue
 - [ ] Listens: radio state survives a page reload (persisted in session)
 - [ ] `/listens` shuffle button: pressing it repeatedly surfaces visibly different clusters (not the same few hub tracks every time).
+- [ ] Radio/shuffle keep flowing without stalling (graph is one connected component — no dead-end islands).
+
+### Listens graph diagnostic (admin)
+- [ ] `/listens/graph` redirects to `/sudo` when not logged in; loads the full graph when authenticated.
+- [ ] `GET /api/listens/graph/full/` returns 401 without a Bearer token, 200 with a valid admin token.
+- [ ] Full graph renders as one dominant connected component (giant), islands (if any) shown in distinct colors.
+- [ ] Node size scales with degree; no single low-play-count node dominates as a mega-hub.
+- [ ] Edge-type filter toggles (structural / tag / colisten / similar_artist / similar_track / content) show/hide edges.
+- [ ] Stats panel: component count, degree histogram, top hubs, islands, articulation points/bridges, tag-less artist count.
+- [ ] After a graph rebuild, component count is ~1 and the old degree-8 plateau / 395-edge hubs are gone.
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
