@@ -88,7 +88,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] No "▶ PLAY", SYNC, or AUTH controls visible when logged out
 
 ### Admin
-- [ ] Sync button appears and triggers sync
+- [ ] A single Sync/Auth button appears (no separate Auth button); it reads SYNC and triggers a sync.
 - [ ] Sync cooldown (5 min) is enforced
 - [ ] Google Takeout import works via POST /api/listens/import/
 - [ ] Sync also pulls liked tracks (synced_liked count in response)
@@ -96,7 +96,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Sync rebuilds the graph (nodes/edges refresh after new tracks land)
 - [ ] `python manage.py build_music_graph` rebuilds the graph from the CLI
 - [ ] "▶ PLAY" appears on a selected node's card (track plays; artist/album plays its top track)
-- [ ] AUTH button toggles re-auth form with textarea for pasting browser headers
+- [ ] After a sync reports the YTM session expired (auth_expired), the button flips to AUTH and opens the re-auth panel; a successful re-auth reverts it to SYNC.
 - [ ] Re-auth saves headers and validates YTMusic init before writing
 - [ ] Daily automated sync runs via Celery Beat (also rebuilds the graph)
 - [ ] Clicking play opens the mini player
@@ -109,15 +109,18 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Listens: radio state survives a page reload (persisted in session)
 - [ ] `/listens` shuffle button: pressing it repeatedly surfaces visibly different clusters (not the same few hub tracks every time).
 - [ ] Radio/shuffle keep flowing without stalling (graph is one connected component — no dead-end islands).
+- [ ] /listens: loading a new patch (shuffle / clicking a node) centers the view on the seed node and zooms in enough to read every node's title (does not zoom out to frame the whole patch).
 
 ### Listens graph diagnostic (admin)
+- [ ] /listens: an admin-only "⊹ FULL GRAPH" button (next to SHUFFLE) links to /listens/graph; it is absent when not logged in.
 - [ ] `/listens/graph` redirects to `/sudo` when not logged in; loads the full graph when authenticated.
-- [ ] `GET /api/listens/graph/full/` returns 401 without a Bearer token, 200 with a valid admin token.
+- [ ] `GET /api/listens/graph/` returns 401/403 without a Bearer token, 200 with a valid admin token (served from the rebuild-warmed cache).
 - [ ] Full graph renders as one dominant connected component (giant), islands (if any) shown in distinct colors.
 - [ ] Node size scales with degree; no single low-play-count node dominates as a mega-hub.
 - [ ] Edge-type filter toggles (structural / tag / colisten / similar_artist / similar_track / content) show/hide edges.
 - [ ] Stats panel: component count, degree histogram, top hubs, islands, articulation points/bridges, tag-less artist count.
 - [ ] After a graph rebuild, component count is ~1 and the old degree-8 plateau / 395-edge hubs are gone.
+- [ ] /listens/graph: zoomed out renders as flat dots with edges hidden and stays smooth on a large graph; zooming in restores glow, focus ring, and labels.
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
