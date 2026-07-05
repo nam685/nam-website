@@ -212,13 +212,16 @@ def test_compute_node_degrees_counts_incident_edges():
 @pytest.mark.django_db
 def test_graph_full_requires_admin(built_graph):  # noqa: ARG001
     # No token → 401 (admin-gated diagnostic).
-    resp = Client().get("/api/listens/graph/full/")
+    resp = Client().get("/api/listens/graph/")
     assert resp.status_code == 401
 
 
 @pytest.mark.django_db
 def test_graph_full_returns_snapshot(built_graph, auth_headers):  # noqa: ARG001
-    resp = Client().get("/api/listens/graph/full/", **auth_headers)
+    from django.core.cache import cache
+
+    cache.delete(music_graph.FULL_GRAPH_CACHE_KEY)
+    resp = Client().get("/api/listens/graph/", **auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert {"nodes", "edges", "summary"} <= data.keys()
@@ -319,7 +322,7 @@ def test_get_patch_never_returns_floating_nodes(depth2_graph):  # noqa: ARG001
             assert n["key"] in edge_keys, f"floating node {n['key']} in patch (seed {i})"
 
 
-# --- Full graph endpoint (whole graph, excludes internal tag nodes) ---
+# --- Full graph cache (admin diagnostic snapshot) ---
 
 
 @pytest.fixture()
@@ -337,30 +340,6 @@ def graph_with_tag(db):  # noqa: ARG001
     MusicEdge.objects.create(source=track, target=artist, edge_type="structural", weight=1.0)
     MusicEdge.objects.create(source=artist, target=tag, edge_type="structural", weight=1.0)
     return {"track": track, "artist": artist, "tag": tag}
-
-
-@pytest.mark.django_db
-def test_full_graph_excludes_tag_nodes(graph_with_tag):  # noqa: ARG001
-    data = Client().get("/api/listens/graph/").json()
-    keys = {n["key"] for n in data["nodes"]}
-    assert "v1" in keys
-    assert "radiohead" in keys
-    assert "rock" not in keys  # tag layer excluded
-    assert all(n["node_type"] != "tag" for n in data["nodes"])
-
-
-@pytest.mark.django_db
-def test_full_graph_excludes_edges_touching_tags(graph_with_tag):  # noqa: ARG001
-    data = Client().get("/api/listens/graph/").json()
-    node_keys = {n["key"] for n in data["nodes"]}
-    # every edge endpoint must be a surviving (non-tag) node
-    for e in data["edges"]:
-        assert e["source"] in node_keys
-        assert e["target"] in node_keys
-    # the artist->tag edge must be gone; the track->artist edge must survive
-    pairs = {(e["source"], e["target"]) for e in data["edges"]}
-    assert ("v1", "radiohead") in pairs
-    assert ("radiohead", "rock") not in pairs
 
 
 @pytest.mark.django_db

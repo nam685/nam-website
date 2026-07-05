@@ -66,7 +66,7 @@ export default function ListensGraphDiagnosticPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API}/api/listens/graph/full/`, {
+        const res = await fetch(`${API}/api/listens/graph/`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.status === 401) {

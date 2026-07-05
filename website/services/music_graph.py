@@ -749,39 +749,15 @@ def get_patch(seed_key, seed_type, max_nodes: int = PATCH_MAX_NODES, *, exclude_
     }
 
 
-def _serialize_full_graph() -> dict:
-    """Serialize the entire graph MINUS the internal `tag` layer.
-
-    Tags exist only to shape the shuffle walk; they are not shown to users. We
-    return every non-tag node and only edges whose BOTH endpoints are non-tag.
-    """
-    nodes = list(MusicNode.objects.exclude(node_type="tag"))
-    id_to_key = {n.id: n.key for n in nodes}
-    keep_ids = set(id_to_key)
-    edges = MusicEdge.objects.filter(source_id__in=keep_ids, target_id__in=keep_ids)
-    return {
-        "nodes": [_serialize_node(n) for n in nodes],
-        "edges": [
-            {
-                "source": id_to_key[e.source_id],
-                "target": id_to_key[e.target_id],
-                "edge_type": e.edge_type,
-                "weight": e.weight,
-            }
-            for e in edges
-        ],
-    }
-
-
 def warm_full_graph_cache() -> dict:
-    """Recompute the full-graph payload and store it (no expiry). Returns it."""
-    payload = _serialize_full_graph()
+    """Recompute the admin diagnostic snapshot and store it (no expiry). Returns it."""
+    payload = full_graph_snapshot()
     redis_cache.set(FULL_GRAPH_CACHE_KEY, payload, None)
     return payload
 
 
 def get_full_graph() -> dict:
-    """Return the cached full-graph payload, recomputing on a cache miss."""
+    """Return the cached diagnostic snapshot, recomputing on a cache miss."""
     cached = redis_cache.get(FULL_GRAPH_CACHE_KEY)
     if cached is not None:
         return cached
