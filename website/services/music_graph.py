@@ -845,6 +845,7 @@ def _node_to_track(node: MusicNode) -> dict:
 
 
 WALK_RESTART_PROB = 0.15  # radio: chance per step to teleport back to the seed (keeps results near it)
+WALK_TELEPORT_PROB = 0.08  # chance per step to jump to a uniform-random track anywhere in the graph
 
 
 def _load_adjacency():
@@ -862,21 +863,36 @@ def _load_adjacency():
     return adjacency, track_video
 
 
-def walk(seed_video_id=None, exclude_video_ids=None, limit=5, *, restart_prob=WALK_RESTART_PROB, rng=None) -> list[int]:
+def walk(
+    seed_video_id=None,
+    exclude_video_ids=None,
+    limit=5,
+    *,
+    restart_prob=WALK_RESTART_PROB,
+    teleport_prob=WALK_TELEPORT_PROB,
+    rng=None,
+) -> list[int]:
     """Uniform random walk over the graph, returning up to `limit` fresh track node ids in order.
 
     The single navigation primitive behind both shuffle and radio:
       - `seed_video_id=None` → shuffle: start at a uniform-random track, no restart.
       - `seed_video_id` set   → radio: start at the seed, teleport back with `restart_prob`.
     Each step moves to a uniformly-random neighbour (any edge type — tag/artist/album nodes are
-    traversed for reachability but only track nodes are emitted). Because the graph is connected
-    and de-hubbed, visitation is ∝ degree, so popular/central tracks recur naturally.
+    traversed for reachability but only track nodes are emitted). Because the graph is de-hubbed,
+    visitation is ∝ degree, so popular/central tracks recur naturally.
+
+    With probability `teleport_prob` a step instead jumps to a uniform-random track *anywhere* in
+    the graph (the PageRank random-surfer). This gives every node — including stray lone songs in
+    tiny disconnected islands the walk could never otherwise reach — a small nonzero long-run
+    visitation probability, so orphan tracks still surface occasionally without needing to be
+    structurally connected. Set to 0 to disable (e.g. deterministic tests / pure-neighbourhood radio).
     """
     rng = rng or random
     exclude = set(exclude_video_ids or ())
     adjacency, track_video = _load_adjacency()
     if not track_video:
         return []
+    track_ids = list(track_video)
 
     if seed_video_id:
         exclude.add(seed_video_id)
@@ -886,7 +902,7 @@ def walk(seed_video_id=None, exclude_video_ids=None, limit=5, *, restart_prob=WA
         seed_id = seed.id
     else:
         # seedless shuffle: uniform-random start over playable tracks not already excluded
-        start_pool = [i for i, v in track_video.items() if v not in exclude] or list(track_video)
+        start_pool = [i for i, v in track_video.items() if v not in exclude] or track_ids
         seed_id = rng.choice(start_pool)
 
     results: list[int] = []
@@ -898,13 +914,18 @@ def walk(seed_video_id=None, exclude_video_ids=None, limit=5, *, restart_prob=WA
     for _ in range(budget):
         if len(results) >= limit:
             break
-        if seed_video_id and restart_prob and rng.random() < restart_prob:
-            current = seed_id
-        neighbours = adjacency.get(current)
-        if not neighbours:
-            current = seed_id  # dead end (isolated node) — restart from seed/start
-            continue
-        current = rng.choice(neighbours)
+        r = rng.random()
+        if teleport_prob and r < teleport_prob:
+            current = rng.choice(track_ids)  # jump anywhere — lets isolated islands surface
+        elif seed_video_id and restart_prob and r < teleport_prob + restart_prob:
+            current = seed_id  # radio: pull back toward the seed
+        else:
+            neighbours = adjacency.get(current)
+            if not neighbours:
+                # dead end (fully isolated node): restart from seed, or teleport in seedless shuffle
+                current = seed_id if seed_video_id else rng.choice(track_ids)
+                continue
+            current = rng.choice(neighbours)
         vid = track_video.get(current)
         if vid and vid not in seen_videos:
             seen_videos.add(vid)
