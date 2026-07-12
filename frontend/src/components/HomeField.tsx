@@ -12,8 +12,9 @@ import {
   makeGaussian,
 } from "@/lib/homeField";
 
-// One Monte-Carlo suite: a comet walking the staircase out from the photo edge,
-// then a fading trace once it leaves the field.
+// One Monte-Carlo suite: a comet walking the staircase out from the photo edge.
+// It keeps only its current + previous point (for the incremental trace segment)
+// and a short bounded tail buffer (for the comet head) — never a full history.
 interface Particle {
   i: number;
   r: number;
@@ -21,18 +22,22 @@ interface Particle {
   thNext: number;
   phase: "radial" | "arc";
   done: boolean;
-  pts: [number, number][];
-}
-interface Trace {
-  pts: [number, number][];
-  life: number;
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  tail: [number, number][];
 }
 
 /**
  * Animated background behind the home orbit: comets launch from the photo edge,
- * walk outward past the nav dots leaving dim traces, and a cursor "spotlight"
+ * walk outward past the nav dots leaving faint traces, and a cursor "spotlight"
  * brightens the traces near the pointer. Traces + spotlight follow the same hue
  * as the photo rim; the nav dots keep their own colours. Purely decorative.
+ *
+ * The trace layer is a *persistent* bitmap: each frame it fades a touch and only
+ * the newest segment of each live comet is drawn onto it — so per-frame work is
+ * O(live comets), not O(all points ever drawn).
  */
 export default function HomeField() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,7 +45,6 @@ export default function HomeField() {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    // Respect reduced-motion: skip the animation entirely (dots + photo still work).
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
 
     const ctx = canvas.getContext("2d");
@@ -59,28 +63,36 @@ export default function HomeField() {
     let cx = 0;
     let cy = 0;
     let R = 0; // pixels per r-unit (= photo radius)
+    // Offscreen buffers (dim traces + spotlight) render at half res and upscale —
+    // they're soft anyway, so this quarters their fill cost. Comet heads stay full-res.
+    const Q = 0.5;
 
     function resize() {
-      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      // Decorative layer — cap DPR so hi-dpi screens don't quadruple fill cost.
+      DPR = Math.min(window.devicePixelRatio || 1, 1.5);
       const rect = canvas!.getBoundingClientRect();
       W = rect.width;
       H = rect.height;
-      for (const cn of [canvas!, trace, light, buf]) {
-        cn.width = W * DPR;
-        cn.height = H * DPR;
+      canvas!.width = W * DPR;
+      canvas!.height = H * DPR;
+      for (const cn of [trace, light, buf]) {
+        cn.width = Math.max(1, Math.round(W * DPR * Q));
+        cn.height = Math.max(1, Math.round(H * DPR * Q));
       }
       cx = W / 2;
       cy = H / 2;
-      // Matches the orbit geometry: container = min(75vw,75vh,420px), photo = 75% of it.
       const container = Math.min(0.75 * window.innerWidth, 0.75 * window.innerHeight, 420);
       R = 0.375 * container;
+      // The trace layer persists across frames, so give it a standing transform
+      // (resizing a canvas clears it — traces simply rebuild from here).
+      tctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
+      tctx!.clearRect(0, 0, W, H);
     }
     resize();
     window.addEventListener("resize", resize);
 
     const randn = makeGaussian();
     let particles: Particle[] = [];
-    let completed: Trace[] = [];
     const mouse = { x: 0, y: 0, has: false };
 
     function onMove(e: MouseEvent) {
@@ -93,20 +105,14 @@ export default function HomeField() {
 
     function makeParticle(): Particle {
       const th0 = Math.random() * 2 * Math.PI;
-      const p: Particle = {
-        i: 0,
-        r: circleRadius(0, P.k1, P.k2),
-        th: th0,
-        thNext: th0,
-        phase: "radial",
-        done: false,
-        pts: [],
-      };
-      p.pts.push(polarToXY(p.r, p.th, cx, cy, R));
-      return p;
+      const r0 = circleRadius(0, P.k1, P.k2);
+      const [x, y] = polarToXY(r0, th0, cx, cy, R);
+      return { i: 0, r: r0, th: th0, thNext: th0, phase: "radial", done: false, x, y, px: x, py: y, tail: [[x, y]] };
     }
 
     function stepParticle(p: Particle, dt: number) {
+      p.px = p.x;
+      p.py = p.y;
       const step = P.s * dt;
       if (p.phase === "radial") {
         const target = circleRadius(p.i + 1, P.k1, P.k2);
@@ -128,26 +134,11 @@ export default function HomeField() {
           if (circleRadius(p.i, P.k1, P.k2) > P.rmax) p.done = true;
         }
       }
-      p.pts.push(polarToXY(p.r, p.th, cx, cy, R));
-    }
-
-    // Rebuild the WHITE trace bitmap each frame (baseline tint + spotlight mask).
-    function strokePath(pts: [number, number][], alpha: number) {
-      if (pts.length < 2 || alpha <= 0) return;
-      tctx!.strokeStyle = `rgba(255,255,255,${alpha})`;
-      tctx!.beginPath();
-      tctx!.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) tctx!.lineTo(pts[i][0], pts[i][1]);
-      tctx!.stroke();
-    }
-    function renderTraces() {
-      tctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
-      tctx!.clearRect(0, 0, W, H);
-      tctx!.lineWidth = 1.3;
-      tctx!.lineCap = "round";
-      tctx!.lineJoin = "round";
-      for (const s of completed) strokePath(s.pts, 0.85 * Math.max(0, s.life / P.hold));
-      for (const p of particles) strokePath(p.pts, 0.95);
+      const [x, y] = polarToXY(p.r, p.th, cx, cy, R);
+      p.x = x;
+      p.y = y;
+      p.tail.push([x, y]);
+      if (p.tail.length > COMET_TAIL) p.tail.shift();
     }
 
     function hueRGB(): [number, number, number] {
@@ -157,7 +148,7 @@ export default function HomeField() {
     }
 
     function buildSpotlight(hue: [number, number, number]) {
-      lctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
+      lctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
       lctx!.clearRect(0, 0, W, H);
       if (!mouse.has) return;
       const { r: rc, theta: thc } = xyToPolar(mouse.x - cx, mouse.y - cy, R);
@@ -203,39 +194,44 @@ export default function HomeField() {
       const dt = Math.min((ts - last) / 1000 || 0, 0.05);
       last = ts;
 
-      // spawn on schedule — never wait: at N live, retire the oldest live suite to fade
+      // spawn on schedule — never wait: at N live, drop the oldest (its trace is
+      // already baked into the fading bitmap, so it just keeps fading).
       spawnAcc += dt;
       while (spawnAcc >= P.t) {
         spawnAcc -= P.t;
-        if (particles.length >= P.N) {
-          const old = particles.shift();
-          if (old) completed.push({ pts: old.pts, life: P.hold });
-        }
+        if (particles.length >= P.N) particles.shift();
         particles.push(makeParticle());
       }
       if (spawnAcc > P.t) spawnAcc = P.t;
 
       for (const p of particles) stepParticle(p, dt);
-      const still: Particle[] = [];
+      particles = particles.filter((p) => !p.done);
+
+      // ── trace layer: fade a touch, then stamp only the NEW segments ──
+      tctx!.globalCompositeOperation = "destination-out";
+      tctx!.fillStyle = `rgba(0,0,0,${(1 - Math.exp((-dt * 4) / P.hold)).toFixed(4)})`;
+      tctx!.fillRect(0, 0, W, H);
+      tctx!.globalCompositeOperation = "source-over";
+      tctx!.strokeStyle = "rgba(255,255,255,0.9)";
+      tctx!.lineWidth = 1.3;
+      tctx!.lineCap = "round";
+      tctx!.lineJoin = "round";
+      tctx!.beginPath();
       for (const p of particles) {
-        if (p.done) completed.push({ pts: p.pts, life: P.hold });
-        else still.push(p);
+        tctx!.moveTo(p.px, p.py);
+        tctx!.lineTo(p.x, p.y);
       }
-      particles = still;
-      while (completed.length > P.keep) completed.shift();
-      for (const s of completed) s.life -= dt;
-      completed = completed.filter((s) => s.life > 0);
+      tctx!.stroke();
 
       const hue = hueRGB();
       const [hr, hg, hb] = hue;
       const hcss = `rgb(${hr},${hg},${hb})`;
-      renderTraces();
 
       ctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx!.clearRect(0, 0, W, H);
 
       // 1. faint baseline — tint the white bitmap to the hue, draw dim
-      bctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
+      bctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
       bctx!.globalCompositeOperation = "source-over";
       bctx!.clearRect(0, 0, W, H);
       bctx!.drawImage(trace, 0, 0, W, H);
@@ -258,28 +254,24 @@ export default function HomeField() {
       }
       ctx!.globalAlpha = 1;
 
-      // 3. live heads — smooth, dense comet tails + glowing head
+      // 3. live heads — one smooth tapered tail stroke + a glowing head.
+      // Single pass (per-segment alpha/width ramp) keeps it a comet without the
+      // ~600 stroke calls/frame a second glow pass would cost.
       ctx!.lineCap = "round";
       ctx!.lineJoin = "round";
       for (const p of particles) {
-        const pts = p.pts;
+        const pts = p.tail;
         const n = pts.length;
-        if (n < 2) continue;
-        const start = Math.max(1, n - COMET_TAIL);
-        for (const pass of [
-          { w: 3.5, wf: 7, al: 0.11 },
-          { w: 0.8, wf: 2.4, al: 0.9 },
-        ]) {
-          for (let i = start; i < n; i++) {
-            const f = (i - (n - COMET_TAIL)) / COMET_TAIL;
-            if (f <= 0) continue;
+        if (n >= 2) {
+          for (let i = 1; i < n; i++) {
+            const f = i / (n - 1); // 0 (tail end) → 1 (head)
             const p0 = pts[i - 1];
             const p1 = pts[i];
             const pm1 = pts[Math.max(0, i - 2)];
             const m0: [number, number] = [(pm1[0] + p0[0]) / 2, (pm1[1] + p0[1]) / 2];
             const m1: [number, number] = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
-            ctx!.strokeStyle = `rgba(${hr},${hg},${hb},${(pass.al * f).toFixed(3)})`;
-            ctx!.lineWidth = pass.w + pass.wf * f;
+            ctx!.strokeStyle = `rgba(${hr},${hg},${hb},${(0.85 * f).toFixed(3)})`;
+            ctx!.lineWidth = 0.8 + 2.6 * f;
             ctx!.beginPath();
             ctx!.moveTo(m0[0], m0[1]);
             ctx!.quadraticCurveTo(p0[0], p0[1], m1[0], m1[1]);
@@ -287,13 +279,13 @@ export default function HomeField() {
           }
         }
         const [hx, hy] = pts[n - 1];
-        const g = ctx!.createRadialGradient(hx, hy, 0, hx, hy, 8);
+        const g = ctx!.createRadialGradient(hx, hy, 0, hx, hy, 10);
         g.addColorStop(0, "rgba(255,255,255,0.95)");
-        g.addColorStop(0.4, `rgba(${hr},${hg},${hb},0.7)`);
+        g.addColorStop(0.35, `rgba(${hr},${hg},${hb},0.75)`);
         g.addColorStop(1, `rgba(${hr},${hg},${hb},0)`);
         ctx!.fillStyle = g;
         ctx!.beginPath();
-        ctx!.arc(hx, hy, 8, 0, 2 * Math.PI);
+        ctx!.arc(hx, hy, 10, 0, 2 * Math.PI);
         ctx!.fill();
       }
       ctx!.globalCompositeOperation = "source-over";
