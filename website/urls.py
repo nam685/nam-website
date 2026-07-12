@@ -57,7 +57,7 @@ urlpatterns = [
     path("lichess/status/", views.lichess_status),
     path("listens/graph/patch/", views.graph_patch),
     path("listens/graph/search/", views.graph_search),
-    path("listens/graph/full/", views.graph_full),
+    path("listens/graph/", views.graph_full),
     path("listens/import/", views.listen_import),
     path("listens/", views.listen_list),
     path("listens/radio/", views.listen_radio),

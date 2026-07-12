@@ -38,4 +38,4 @@ def graph_search(request):
 @require_admin
 def graph_full(request):  # noqa: ARG001
     """Whole graph + connectivity analytics for the admin diagnostic viz (admin-gated)."""
-    return JsonResponse(music_graph.full_graph_snapshot())
+    return JsonResponse(music_graph.get_full_graph())
