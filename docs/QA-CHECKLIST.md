@@ -24,6 +24,11 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Profile photo is circular, served from `/media/profile/profile-N.webp`, and varies between reloads (random per load)
 - [ ] Photo rim + edge tint track the mouse, matching the ambient glow hue (e.g. red near `yaps`, cyan near `plays`)
 - [ ] Photo sized ~75% of the center→dot distance; layout holds on mobile (orbit goes 85vw)
+- [ ] Section dots are all the same size
+- [ ] Particle field animates behind the orbit: comets launch from the photo edge and leave traces that fade after a few seconds
+- [ ] Cursor spotlight brightens nearby traces — round near the center, stretching into a smooth radial beam toward the edges (no sudden jump in shape)
+- [ ] Field traces + spotlight share the cursor hue (same as the photo rim); section dots keep their own colors
+- [ ] With OS "reduce motion" enabled, the field does not animate; dots + photo still work
 
 ## Auth (/sudo)
 

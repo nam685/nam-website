@@ -9,6 +9,7 @@ import {
   dotHueCss,
 } from "@/lib/homepageContent";
 import { API } from "@/lib/api";
+import HomeField from "@/components/HomeField";
 
 export default function Home() {
   // Pick one photo per page load (1..5), stable for the session.
@@ -60,6 +61,9 @@ export default function Home() {
         justifyContent: "center",
       }}
     >
+      {/* Animated particle field (decorative, behind everything) */}
+      <HomeField />
+
       {/* Ambient glow */}
       <div
         ref={ambientRef}
