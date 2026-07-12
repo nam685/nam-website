@@ -63,9 +63,10 @@ export default function HomeField() {
     let cx = 0;
     let cy = 0;
     let R = 0; // pixels per r-unit (= photo radius)
-    // Offscreen buffers (dim traces + spotlight) render at half res and upscale —
-    // they're soft anyway, so this quarters their fill cost. Comet heads stay full-res.
-    const Q = 0.5;
+    // Offscreen-buffer resolution scale (1 = full res). A downscale quarters fill
+    // cost but averages the thin trace lines on upscale (dims them), so keep full
+    // res — the persistent trace layer is what actually made this cheap.
+    const Q = 1;
 
     function resize() {
       // Decorative layer — cap DPR so hi-dpi screens don't quadruple fill cost.
@@ -212,8 +213,8 @@ export default function HomeField() {
       tctx!.fillStyle = `rgba(0,0,0,${(1 - Math.exp((-dt * 4) / P.hold)).toFixed(4)})`;
       tctx!.fillRect(0, 0, W, H);
       tctx!.globalCompositeOperation = "source-over";
-      tctx!.strokeStyle = "rgba(255,255,255,0.9)";
-      tctx!.lineWidth = 1.3;
+      tctx!.strokeStyle = "rgba(255,255,255,1)";
+      tctx!.lineWidth = 1.4;
       tctx!.lineCap = "round";
       tctx!.lineJoin = "round";
       tctx!.beginPath();
