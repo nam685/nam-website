@@ -1,26 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { angleFromCenter, lerpDotColor } from "@/lib/homepageContent";
-import {
-  DEFAULT_FIELD_PARAMS as P,
-  COMET_TAIL,
-  circleRadius,
-  beamAspect,
-  polarToXY,
-  xyToPolar,
-  makeGaussian,
-} from "@/lib/homeField";
+import { lerpDotColor } from "@/lib/homepageContent";
+import { DEFAULT_FIELD_PARAMS as P, COMET_TAIL, polarToXY } from "@/lib/homeField";
 
-// One Monte-Carlo suite: a comet walking the staircase out from the photo edge.
-// It keeps only its current + previous point (for the incremental trace segment)
-// and a short bounded tail buffer (for the comet head) — never a full history.
+// One comet per suite: launches from the photo edge along a fixed ray and
+// travels straight outward at constant speed until it clears r_max. No arc,
+// no spotlight — the ray's color is fixed at spawn from the dot it's heading
+// toward, so per-frame work never depends on the cursor.
 interface Particle {
-  i: number;
   r: number;
   th: number;
-  thNext: number;
-  phase: "radial" | "arc";
+  color: [number, number, number];
   done: boolean;
   x: number;
   y: number;
@@ -30,14 +21,13 @@ interface Particle {
 }
 
 /**
- * Animated background behind the home orbit: comets launch from the photo edge,
- * walk outward past the nav dots leaving faint traces, and a cursor "spotlight"
- * brightens the traces near the pointer. Traces + spotlight follow the same hue
- * as the photo rim; the nav dots keep their own colours. Purely decorative.
+ * Animated background behind the home orbit: comets launch from the photo
+ * edge and travel straight outward past the nav dots, leaving a fading trace.
+ * Each ray's color matches the dot in that direction. Purely decorative.
  *
- * The trace layer is a *persistent* bitmap: each frame it fades a touch and only
- * the newest segment of each live comet is drawn onto it — so per-frame work is
- * O(live comets), not O(all points ever drawn).
+ * The trace layer is a *persistent* bitmap: each frame it fades a touch and
+ * only the newest segment of each live comet is drawn onto it — so per-frame
+ * work is O(live comets), not O(all points ever drawn).
  */
 export default function HomeField() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,12 +40,8 @@ export default function HomeField() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const trace = document.createElement("canvas");
-    const light = document.createElement("canvas");
-    const buf = document.createElement("canvas");
     const tctx = trace.getContext("2d");
-    const lctx = light.getContext("2d");
-    const bctx = buf.getContext("2d");
-    if (!tctx || !lctx || !bctx) return;
+    if (!tctx) return;
 
     let W = 0;
     let H = 0;
@@ -63,10 +49,6 @@ export default function HomeField() {
     let cx = 0;
     let cy = 0;
     let R = 0; // pixels per r-unit (= photo radius)
-    // Offscreen-buffer resolution scale (1 = full res). A downscale quarters fill
-    // cost but averages the thin trace lines on upscale (dims them), so keep full
-    // res — the persistent trace layer is what actually made this cheap.
-    const Q = 1;
 
     function resize() {
       // Decorative layer — cap DPR so hi-dpi screens don't quadruple fill cost.
@@ -76,115 +58,40 @@ export default function HomeField() {
       H = rect.height;
       canvas!.width = W * DPR;
       canvas!.height = H * DPR;
-      for (const cn of [trace, light, buf]) {
-        cn.width = Math.max(1, Math.round(W * DPR * Q));
-        cn.height = Math.max(1, Math.round(H * DPR * Q));
-      }
+      trace.width = Math.max(1, Math.round(W * DPR));
+      trace.height = Math.max(1, Math.round(H * DPR));
       cx = W / 2;
       cy = H / 2;
       const container = Math.min(0.75 * window.innerWidth, 0.75 * window.innerHeight, 420);
       R = 0.375 * container;
       // The trace layer persists across frames, so give it a standing transform
       // (resizing a canvas clears it — traces simply rebuild from here).
-      tctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
+      tctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
       tctx!.clearRect(0, 0, W, H);
     }
     resize();
     window.addEventListener("resize", resize);
 
-    const randn = makeGaussian();
     let particles: Particle[] = [];
-    const mouse = { x: 0, y: 0, has: false };
-
-    function onMove(e: MouseEvent) {
-      const rect = canvas!.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.has = true;
-    }
-    window.addEventListener("mousemove", onMove);
 
     function makeParticle(): Particle {
       const th0 = Math.random() * 2 * Math.PI;
-      const r0 = circleRadius(0, P.k1, P.k2);
-      const [x, y] = polarToXY(r0, th0, cx, cy, R);
-      return { i: 0, r: r0, th: th0, thNext: th0, phase: "radial", done: false, x, y, px: x, py: y, tail: [[x, y]] };
+      const deg = ((th0 * 180) / Math.PI + 360) % 360;
+      const [r, g, b] = lerpDotColor(deg);
+      const [x, y] = polarToXY(P.k1, th0, cx, cy, R);
+      return { r: P.k1, th: th0, color: [r, g, b], done: false, x, y, px: x, py: y, tail: [[x, y]] };
     }
 
     function stepParticle(p: Particle, dt: number) {
       p.px = p.x;
       p.py = p.y;
-      const step = P.s * dt;
-      if (p.phase === "radial") {
-        const target = circleRadius(p.i + 1, P.k1, P.k2);
-        p.r += step; // constant spatial speed outward
-        if (p.r >= target) {
-          p.r = target;
-          p.phase = "arc";
-          p.thNext = p.th + randn() * P.eps; // θ_{i+1} ~ N(θ_i, ε)
-        }
-      } else {
-        // arc at constant *spatial* speed → dθ/dt = s / r
-        const astep = step / Math.max(p.r, 1e-3);
-        const dir = Math.sign(p.thNext - p.th) || 1;
-        p.th += dir * astep;
-        if ((dir > 0 && p.th >= p.thNext) || (dir < 0 && p.th <= p.thNext)) {
-          p.th = p.thNext;
-          p.i += 1;
-          p.phase = "radial";
-          if (circleRadius(p.i, P.k1, P.k2) > P.rmax) p.done = true;
-        }
-      }
+      p.r += P.s * dt;
+      if (p.r >= P.rmax) p.done = true;
       const [x, y] = polarToXY(p.r, p.th, cx, cy, R);
       p.x = x;
       p.y = y;
       p.tail.push([x, y]);
       if (p.tail.length > COMET_TAIL) p.tail.shift();
-    }
-
-    function hueRGB(): [number, number, number] {
-      const ang = mouse.has ? angleFromCenter(mouse.x - cx, mouse.y - cy) : 0;
-      const [r, g, b] = lerpDotColor(ang);
-      return [r | 0, g | 0, b | 0];
-    }
-
-    function buildSpotlight(hue: [number, number, number]) {
-      lctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
-      lctx!.clearRect(0, 0, W, H);
-      if (!mouse.has) return;
-      const { r: rc, theta: thc } = xyToPolar(mouse.x - cx, mouse.y - cy, R);
-      const e0px = P.e0 * R;
-      let a = e0px;
-      let b = e0px;
-      let ccx = mouse.x;
-      let ccy = mouse.y;
-      if (rc > P.rdot) {
-        const elong = beamAspect(rc, P.rdot, P.rmax);
-        b = e0px;
-        a = e0px * elong;
-        const centerR = rc - 0.5 * (a - b) / R; // gentle inward trail; → rc as elong → 1
-        [ccx, ccy] = polarToXY(centerR, thc, cx, cy, R);
-      }
-      lctx!.save();
-      lctx!.translate(ccx, ccy);
-      lctx!.rotate(thc); // local +y points radially outward
-      lctx!.scale(b, a);
-      const g = lctx!.createRadialGradient(0, 0, 0, 0, 0, 1);
-      g.addColorStop(0, "rgba(255,255,255,1)");
-      g.addColorStop(0.5, "rgba(255,255,255,0.5)");
-      g.addColorStop(1, "rgba(255,255,255,0)");
-      lctx!.fillStyle = g;
-      lctx!.beginPath();
-      lctx!.arc(0, 0, 1, 0, 2 * Math.PI);
-      lctx!.fill();
-      lctx!.restore();
-      // reveal only where traces exist, then recolour to the field hue
-      lctx!.globalCompositeOperation = "destination-in";
-      lctx!.drawImage(trace, 0, 0, W, H);
-      lctx!.globalCompositeOperation = "source-in";
-      lctx!.fillStyle = `rgb(${hue[0]},${hue[1]},${hue[2]})`;
-      lctx!.fillRect(0, 0, W, H);
-      lctx!.globalCompositeOperation = "source-over";
     }
 
     let raf = 0;
@@ -213,54 +120,32 @@ export default function HomeField() {
       tctx!.fillStyle = `rgba(0,0,0,${(1 - Math.exp((-dt * 4) / P.hold)).toFixed(4)})`;
       tctx!.fillRect(0, 0, W, H);
       tctx!.globalCompositeOperation = "source-over";
-      tctx!.strokeStyle = "rgba(255,255,255,1)";
       tctx!.lineWidth = 1.4;
       tctx!.lineCap = "round";
       tctx!.lineJoin = "round";
-      tctx!.beginPath();
       for (const p of particles) {
+        tctx!.strokeStyle = `rgb(${p.color[0]},${p.color[1]},${p.color[2]})`;
+        tctx!.beginPath();
         tctx!.moveTo(p.px, p.py);
         tctx!.lineTo(p.x, p.y);
+        tctx!.stroke();
       }
-      tctx!.stroke();
-
-      const hue = hueRGB();
-      const [hr, hg, hb] = hue;
-      const hcss = `rgb(${hr},${hg},${hb})`;
 
       ctx!.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx!.clearRect(0, 0, W, H);
 
-      // 1. faint baseline — tint the white bitmap to the hue, draw dim
-      bctx!.setTransform(DPR * Q, 0, 0, DPR * Q, 0, 0);
-      bctx!.globalCompositeOperation = "source-over";
-      bctx!.clearRect(0, 0, W, H);
-      bctx!.drawImage(trace, 0, 0, W, H);
-      bctx!.globalCompositeOperation = "source-in";
-      bctx!.fillStyle = hcss;
-      bctx!.fillRect(0, 0, W, H);
-      bctx!.globalCompositeOperation = "source-over";
+      // 1. faint baseline — the persistent, already-colored trace, drawn dim.
       ctx!.globalAlpha = P.dim;
-      ctx!.drawImage(buf, 0, 0, W, H);
+      ctx!.drawImage(trace, 0, 0, W, H);
       ctx!.globalAlpha = 1;
 
-      // 2. spotlight reveal (hued, additive; gain controls punch)
-      buildSpotlight(hue);
-      ctx!.globalCompositeOperation = "lighter";
-      ctx!.globalAlpha = Math.min(P.gain, 1);
-      ctx!.drawImage(light, 0, 0, W, H);
-      if (P.gain > 1) {
-        ctx!.globalAlpha = P.gain - 1;
-        ctx!.drawImage(light, 0, 0, W, H);
-      }
-      ctx!.globalAlpha = 1;
-
-      // 3. live heads — one smooth tapered tail stroke + a glowing head.
+      // 2. live heads — one smooth tapered tail stroke + a glowing head.
       // Single pass (per-segment alpha/width ramp) keeps it a comet without the
       // ~600 stroke calls/frame a second glow pass would cost.
       ctx!.lineCap = "round";
       ctx!.lineJoin = "round";
       for (const p of particles) {
+        const [hr, hg, hb] = p.color;
         const pts = p.tail;
         const n = pts.length;
         if (n >= 2) {
@@ -289,7 +174,6 @@ export default function HomeField() {
         ctx!.arc(hx, hy, 10, 0, 2 * Math.PI);
         ctx!.fill();
       }
-      ctx!.globalCompositeOperation = "source-over";
 
       raf = requestAnimationFrame(frame);
     }
@@ -298,7 +182,6 @@ export default function HomeField() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", onMove);
     };
   }, []);
 
