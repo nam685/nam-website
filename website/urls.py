@@ -93,4 +93,10 @@ urlpatterns = [
     path("slops/turns/<int:turn_id>/reject/", views.slops_reject),
     path("slops/turns/<int:turn_id>/cancel/", views.slops_cancel),
     path("slops/attachments/<int:attachment_id>/preview/", views.slops_attachment_preview),
+    path("tools/", views.tool_list),
+    path("tools/create/", views.tool_create),
+    path("tools/sync/", views.tool_sync),
+    path("tools/sync-status/", views.tool_sync_status),
+    path("tools/<int:tool_id>/update/", views.tool_update),
+    path("tools/<int:tool_id>/delete/", views.tool_delete),
 ]

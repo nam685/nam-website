@@ -128,6 +128,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "website.tasks.enrich_ladder",
         "schedule": crontab(hour=5, minute=0),
     },
+    "sync-tools-weekly": {
+        "task": "website.tasks.sync_tools",
+        "schedule": crontab(day_of_week=1, hour=6, minute=0),
+    },
 }
 
 SECURE_CONTENT_TYPE_NOSNIFF = True

@@ -74,6 +74,7 @@ Agent showcase page for klaude, a DIY Claude Code harness powered by open-source
 - Rate limiting: 1 submission/hr per IP + 10/hr global cap
 - File downloads: klaude can share files with the user by writing to a per-turn `downloads/` directory; files appear as clickable chips below its message (5 files max, 5 MB each, 10 MB total per turn)
 - Security: separate Linux user, scoped GitHub access, network restrictions
+- **Tools tab**: a public, read-only radar of devops/agent-harness tools alongside the Sessions view. Fed weekly (and on-demand via an admin "Sync now" button) from the [best-of-Agent-Harnesses](https://github.com/RyanAlberts/best-of-Agent-Harnesses) feed, plus manual entries the admin adds (e.g. a coworker's recommendation). Tools move through `watching` → `adopted` / `dropped`; freshly-synced entries carry a "NEW" badge, and any `watching`/`adopted` tool not reviewed in 90 days is flagged "stale" as a nudge to re-review or drop it.
 
 ## Feedback
 

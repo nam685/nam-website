@@ -14,9 +14,11 @@ import { validateFiles, formatSize, ALLOWED_EXTENSIONS } from "@/lib/slopsLimits
 import AttachmentList from "./components/AttachmentList";
 import HeroSection from "./components/HeroSection";
 import MatrixBg from "./components/MatrixBg";
+import ToolsView from "./components/ToolsView";
 import TraceViewer from "./components/TraceViewer";
 
 const ACCENT = "#39ff14";
+const TAB_BAR_HEIGHT = 40;
 
 /* ── Status badge colors ──────────────────────────────── */
 
@@ -52,9 +54,58 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function PageTabBar({
+  active,
+  onChange,
+}: {
+  active: "sessions" | "tools";
+  onChange: (tab: "sessions" | "tools") => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 60,
+        left: 0,
+        right: 0,
+        zIndex: 30,
+        display: "flex",
+        gap: 4,
+        height: TAB_BAR_HEIGHT,
+        alignItems: "center",
+        padding: "0 16px",
+        borderBottom: `1px solid ${ACCENT}40`,
+        background: "#0a0a0a",
+      }}
+    >
+      {(["sessions", "tools"] as const).map((t) => (
+        <button
+          key={t}
+          onClick={() => onChange(t)}
+          style={{
+            padding: "4px 12px",
+            borderRadius: 4,
+            border: `1px solid ${active === t ? ACCENT : "transparent"}`,
+            background: active === t ? `${ACCENT}18` : "transparent",
+            color: active === t ? ACCENT : "#999",
+            fontSize: 12,
+            fontFamily: "monospace",
+            cursor: "pointer",
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+          }}
+        >
+          {t === "sessions" ? "Sessions" : "Tools"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── Main Page ────────────────────────────────────────── */
 
 export default function SlopsPage() {
+  const [pageTab, setPageTab] = useState<"sessions" | "tools">("sessions");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [trace, setTrace] = useState<SessionTrace | null>(null);
@@ -349,15 +400,34 @@ export default function SlopsPage() {
   ) ?? null;
   const hasActiveTurn = !!pendingTurn || !!activeTurn;
 
+  if (pageTab === "tools") {
+    return (
+      <>
+        <PageTabBar active={pageTab} onChange={setPageTab} />
+        <div
+          style={{
+            marginTop: TAB_BAR_HEIGHT,
+            height: `calc(100vh - 60px - ${TAB_BAR_HEIGHT}px)`,
+            display: "flex",
+          }}
+        >
+          <ToolsView adminToken={adminToken} />
+        </div>
+      </>
+    );
+  }
+
   return (
     <div
       className="flex flex-col lg:flex-row"
       style={{
-        height: "calc(100vh - 60px)",
+        height: `calc(100vh - 60px - ${TAB_BAR_HEIGHT}px)`,
+        marginTop: TAB_BAR_HEIGHT,
         fontFamily: "monospace",
         overflow: "hidden",
       }}
     >
+      <PageTabBar active={pageTab} onChange={setPageTab} />
       <MatrixBg />
 
       <button
