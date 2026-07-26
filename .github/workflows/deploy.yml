@@ -44,7 +44,7 @@ jobs:
             # Frontend
             cd frontend
             pnpm install --frozen-lockfile
-            pnpm exec next build
+            NEXT_PUBLIC_SENTRY_DSN="${{ secrets.SENTRY_DSN_FRONTEND }}" pnpm exec next build
             sudo systemctl restart nextjs
 
             # Sync systemd service files + Caddy config
