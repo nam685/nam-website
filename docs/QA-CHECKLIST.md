@@ -308,6 +308,8 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Mobile layout works (sidebar collapses)
 - [ ] Force a turn that errors out (e.g. a prompt klaude can't complete): sidebar badge shows FAILED, not DONE
 - [ ] Submit an image attachment and ask klaude to describe it: read_document's VLM path succeeds (no 401)
+- [ ] Force a turn that errors out while logged out: the error shown is a generic "couldn't be completed" message, not raw provider/technical detail (rate limits, stack traces, endpoint URLs)
+- [ ] Same failed turn while logged in as admin: the real raw error is visible instead
 - [ ] Stats endpoint returns total_sessions, total_turns, success_rate
 - [ ] Submit without files — session appears, turn pending.
 - [ ] Submit with one `.txt` attachment — chip visible before send, attachment listed on turn after send.

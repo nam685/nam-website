@@ -198,6 +198,48 @@ class TestSlopsDetail:
         resp = client.get("/api/slops/?limit=abc")
         assert resp.status_code == 400
 
+    def test_public_endpoints_redact_raw_error(self, client):
+        """Raw provider errors (rate limits, stack traces, ...) must not leak
+        to anonymous visitors — only a generic public-safe message."""
+        s = Session.objects.create(status="failed")
+        Turn.objects.create(
+            session=s,
+            prompt="Test",
+            submitter_ip="1.2.3.4",
+            status="failed",
+            error="Error code: 429 - quota exceeded for gemini-3.6-flash, retry in 24s",
+        )
+        for url in ["/api/slops/", f"/api/slops/{s.id}/"]:
+            data = client.get(url).json()
+            turns = data.get("turns") or data["sessions"][0]["turns"]
+            assert turns[0]["error"] == "This request couldn't be completed. Please try again later."
+            assert "429" not in turns[0]["error"]
+            assert "quota" not in turns[0]["error"]
+
+    def test_public_endpoints_no_error_stays_empty(self, client):
+        s = Session.objects.create(status="done")
+        Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4", status="done", error="")
+        for url in ["/api/slops/", f"/api/slops/{s.id}/"]:
+            data = client.get(url).json()
+            turns = data.get("turns") or data["sessions"][0]["turns"]
+            assert turns[0]["error"] == ""
+
+    def test_admin_list_and_detail_see_raw_error(self, client, auth_headers):
+        """Admins requesting the same public list/detail endpoints (with a
+        Bearer token) should still see the real error for debugging."""
+        s = Session.objects.create(status="failed")
+        Turn.objects.create(
+            session=s,
+            prompt="Test",
+            submitter_ip="1.2.3.4",
+            status="failed",
+            error="Error code: 429 - quota exceeded",
+        )
+        for url in ["/api/slops/", f"/api/slops/{s.id}/"]:
+            data = client.get(url, **auth_headers).json()
+            turns = data.get("turns") or data["sessions"][0]["turns"]
+            assert turns[0]["error"] == "Error code: 429 - quota exceeded"
+
 
 @pytest.mark.django_db
 class TestSlopsApprove:
@@ -391,6 +433,59 @@ class TestSlopsTrace:
         assert len(data["trace"]["messages"]) == 2
         assert data["trace"]["messages"][0]["role"] == "user"
         assert data["trace"]["messages"][1]["role"] == "assistant"
+
+    def test_trace_redacts_raw_error_step_for_public(self, client):
+        """klaude writes its raw failure text into the trace as a normal
+        agent step right before raising (see loop.py's write_agent_step
+        call), independently of the turn's stored `error` field. That text
+        must be redacted here too for anonymous visitors."""
+        raw_error = "Stopped: LLM error — Error code: 429 - quota exceeded for gemini-3.6-flash"
+        s = Session.objects.create(trace_path="/home/klaude/traces/session-1", status="failed")
+        Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4", status="failed", error=raw_error)
+        mock_trace = {
+            "schema_version": "ATIF-v1.4",
+            "steps": [
+                {"source": "user", "message": "do the thing"},
+                {"source": "agent", "message": raw_error, "tool_calls": []},
+            ],
+        }
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/")
+        messages = resp.json()["trace"]["messages"]
+        assert messages[1]["content"] == "This request couldn't be completed. Please try again later."
+        assert "429" not in messages[1]["content"]
+
+    def test_trace_shows_raw_error_step_for_admin(self, client, auth_headers):
+        raw_error = "Stopped: LLM error — Error code: 429 - quota exceeded for gemini-3.6-flash"
+        s = Session.objects.create(trace_path="/home/klaude/traces/session-1", status="failed")
+        Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4", status="failed", error=raw_error)
+        mock_trace = {
+            "schema_version": "ATIF-v1.4",
+            "steps": [
+                {"source": "user", "message": "do the thing"},
+                {"source": "agent", "message": raw_error, "tool_calls": []},
+            ],
+        }
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/", **auth_headers)
+        messages = resp.json()["trace"]["messages"]
+        assert messages[1]["content"] == raw_error
+
+    def test_trace_does_not_redact_unrelated_agent_messages(self, client):
+        """Only content matching a real stored turn error is swapped out —
+        normal agent responses that happen to be short/plain are untouched."""
+        s = Session.objects.create(trace_path="/home/klaude/traces/session-1", status="done")
+        Turn.objects.create(session=s, prompt="Test", submitter_ip="1.2.3.4", status="done", error="")
+        mock_trace = {
+            "schema_version": "ATIF-v1.4",
+            "steps": [
+                {"source": "user", "message": "hello"},
+                {"source": "agent", "message": "hi there", "tool_calls": []},
+            ],
+        }
+        with patch("website.tasks._read_atif_trace", return_value=mock_trace):
+            resp = client.get(f"/api/slops/{s.id}/trace/")
+        assert resp.json()["trace"]["messages"][1]["content"] == "hi there"
 
     def test_trace_isolation_between_sessions(self, client):
         """Each session's trace endpoint must read from its own trace_path, not a shared one."""

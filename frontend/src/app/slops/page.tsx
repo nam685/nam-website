@@ -133,35 +133,42 @@ export default function SlopsPage() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/slops/?limit=50`);
+      const headers: Record<string, string> = {};
+      if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+      const res = await fetch(`${API}/api/slops/?limit=50`, { headers });
       if (!res.ok) return;
       const data: SessionListResponse = await res.json();
       setSessions(data.sessions || []);
     } catch {
       /* silent */
     }
-  }, []);
+  }, [adminToken]);
 
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
 
-  const fetchTrace = useCallback(async (id: number, silent = false) => {
-    if (!silent) setTraceLoading(true);
-    try {
-      const res = await fetch(`${API}/api/slops/${id}/trace/`);
-      if (!res.ok) {
+  const fetchTrace = useCallback(
+    async (id: number, silent = false) => {
+      if (!silent) setTraceLoading(true);
+      try {
+        const headers: Record<string, string> = {};
+        if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+        const res = await fetch(`${API}/api/slops/${id}/trace/`, { headers });
+        if (!res.ok) {
+          if (!silent) setTrace(null);
+          return;
+        }
+        const data: SessionTrace = await res.json();
+        setTrace(data);
+      } catch {
         if (!silent) setTrace(null);
-        return;
+      } finally {
+        if (!silent) setTraceLoading(false);
       }
-      const data: SessionTrace = await res.json();
-      setTrace(data);
-    } catch {
-      if (!silent) setTrace(null);
-    } finally {
-      if (!silent) setTraceLoading(false);
-    }
-  }, []);
+    },
+    [adminToken],
+  );
 
   useEffect(() => {
     if (selectedId !== null) {
@@ -214,7 +221,9 @@ export default function SlopsPage() {
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await fetch(`${API}/api/slops/${selectedId}/trace/`);
+        const headers: Record<string, string> = {};
+        if (adminToken) headers["Authorization"] = `Bearer ${adminToken}`;
+        const res = await fetch(`${API}/api/slops/${selectedId}/trace/`, { headers });
         if (cancelled || !res.ok) return;
         const data: SessionTrace = await res.json();
         if (cancelled) return;
@@ -239,7 +248,7 @@ export default function SlopsPage() {
         tracePollRef.current = null;
       }
     };
-  }, [selectedId, selectedStatus, fetchTrace]);
+  }, [selectedId, selectedStatus, fetchTrace, adminToken]);
 
   /* ── Auto-scroll when new trace steps arrive during running ── */
 
