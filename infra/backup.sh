@@ -28,9 +28,12 @@ docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
 echo "==> Uploading DB dump to ${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age"
 rclone copyto "$DUMP_PATH" "${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age"
 
-echo "==> Syncing media directory to ${BACKUP_B2_REMOTE}/media/"
-mkdir -p "${WORKDIR}/media"
-rclone sync "${WORKDIR}/media" "${BACKUP_B2_REMOTE}/media/" --backup-dir "${BACKUP_B2_REMOTE}/media-deleted/${STAMP}"
+if [ -d "${WORKDIR}/media" ]; then
+  echo "==> Syncing media directory to ${BACKUP_B2_REMOTE}/media/"
+  rclone sync "${WORKDIR}/media" "${BACKUP_B2_REMOTE}/media/" --backup-dir "${BACKUP_B2_REMOTE}/media-deleted/${STAMP}"
+else
+  echo "==> WARNING: ${WORKDIR}/media does not exist locally — skipping media sync (DB backup still proceeds). If this is a freshly rebuilt server, restore media/ from the last known-good backup or re-upload it before the next scheduled run, otherwise media backups will stay stale."
+fi
 
 echo "==> Backup complete, pinging healthchecks.io"
 curl -fsS -m 10 --retry 3 "https://hc-ping.com/${HEALTHCHECKS_BACKUP_UUID}" -o /dev/null

@@ -60,7 +60,7 @@ expected daily ping didn't arrive.
 3. **Install rclone and age on the server**:
    ```bash
    curl https://rclone.org/install.sh | sudo bash
-   sudo apt install -y age
+   sudo apt update && sudo apt install -y age
    rclone config  # create a remote named "b2", type "b2", paste the
                    # Application Key ID / Application Key from step 2
                    # (run this as the `nam` user, not root/sudo — the systemd
@@ -139,6 +139,12 @@ expected daily ping didn't arrive.
    instead of an expiry rule, so files that get deleted or overwritten by
    the nightly `rclone sync` (which propagates server-side deletions) have
    recoverable history rather than a hard cutoff.
+
+   Also add a lifecycle rule scoped to the `media-deleted/` prefix (where
+   `rclone sync --backup-dir` moves files removed from `media/`) that
+   expires objects after 90 days — long enough to notice and recover from
+   an accidental deletion, short enough to keep that prefix from growing
+   unbounded.
 
 ---
 
