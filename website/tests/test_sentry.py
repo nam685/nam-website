@@ -35,3 +35,20 @@ class TestScrubEvent:
         event = {"message": "no request here"}
         result = scrub_event(event, {})
         assert result == {"message": "no request here"}
+
+    def test_strips_oauth_code_from_query_string(self):
+        event = {"request": {"query_string": "code=secret-oauth-code&state=abc", "headers": {}}}
+        result = scrub_event(event, {})
+        assert result["request"]["query_string"] == "[Filtered]"
+
+    def test_handles_event_with_empty_query_string(self):
+        event = {"request": {"query_string": "", "headers": {}}}
+        result = scrub_event(event, {})
+        # Empty query_string is falsy, so it should not be replaced
+        assert result["request"]["query_string"] == ""
+
+    def test_handles_event_with_missing_query_string(self):
+        event = {"request": {"headers": {}}}
+        result = scrub_event(event, {})
+        # Missing query_string should not cause crash and should not add one
+        assert "query_string" not in result["request"]

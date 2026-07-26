@@ -16,7 +16,7 @@ def scrub_event(event: dict, hint: dict) -> dict:
     """Strip sensitive data before an event leaves this process for Sentry.
 
     This app carries admin tokens and OAuth client secrets in request
-    headers/bodies that must never reach Sentry's servers.
+    headers/bodies/query strings that must never reach Sentry's servers.
     """
     request = event.get("request")
     if request:
@@ -24,4 +24,6 @@ def scrub_event(event: dict, hint: dict) -> dict:
         if headers and "Authorization" in headers:
             headers["Authorization"] = "[Filtered]"
         request.pop("data", None)
+        if request.get("query_string"):
+            request["query_string"] = "[Filtered]"
     return event
