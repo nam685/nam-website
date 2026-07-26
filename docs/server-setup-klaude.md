@@ -28,8 +28,12 @@ sudo chmod 750 /home/klaude/traces
 
 ## 4. Lock down nam's secrets
 
+Secrets are stored in Bitwarden Secrets Manager, not `.env` — see
+[`docs/infrastructure.md`](infrastructure.md#secrets-bitwarden-secrets-manager). Lock down the one
+remaining bootstrap secret and SSH keys:
+
 ```bash
-chmod 600 /home/nam/nam-website-deploy/.env
+chmod 600 /etc/nam-website/bws-token
 chmod 600 /home/nam/.ssh/*
 chmod 700 /home/nam/.ssh
 ```
@@ -61,39 +65,41 @@ Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
 [default]
 model = "gemini-flash-latest"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-api_key = "your-key-here"
+api_key_env = "GEMINI_API_KEY"
 context_window = 1000000
 ```
 
-Use `api_key` (the raw value), not `api_key_env`. `website/tasks.py`
-invokes klaude as `sudo -u klaude <bin> ...` with no login shell, `-E`,
-or matching `env_keep` in `/etc/sudoers.d/klaude` — so nothing in
-`/home/klaude/.bashrc` reaches the process, and an `api_key_env`
-pointing at an unset var means silent auth failure in production even
-though a manual `sudo -u klaude bash -lc 'klaude ...'` test would work
-fine (that path *does* source `.bashrc`, masking the gap). Verified by
-running klaude with a fully stripped env (`env -i`) matching the real
-invocation — only `api_key` in the toml made it succeed.
+```bash
+sudo chown klaude:klaude /home/klaude/.klaude.toml
+sudo chmod 600 /home/klaude/.klaude.toml
+```
 
-`gemini-flash-latest` is a moving alias (currently Gemini 3.6 Flash)
-rather than a dated model id, so it keeps working across Google's
-model rotations without edits here. Switched from OpenRouter's
-`openrouter/free` router 2026-07: that router picks a random free
-model per request (quality varied wildly, sometimes landing on
-much weaker models), and its free tier caps out at 50 req/day
-unless you've bought $10 in lifetime credits. Gemini's free tier
-gives a single consistent, capable model at 1,500 req/day, 10 RPM,
-250K TPM — no billing required.
+`GEMINI_API_KEY` itself lives in the `nam-website-prod` Bitwarden Secrets Manager project (see
+[`docs/infrastructure.md`](infrastructure.md#secrets-bitwarden-secrets-manager)), not in a local
+file. **History:** an earlier pass at this doc used a hardcoded `api_key = "..."` literal instead,
+because `website/tasks.py` invokes klaude as `sudo -u klaude <bin> ...` (no login shell, no `-E`,
+and — at the time — no matching `env_keep` in `/etc/sudoers.d/klaude`), so nothing in `.bashrc`
+reached the process and an `api_key_env` pointing at an unset var silently failed in production
+(verified back then with a fully stripped `env -i` test). The #296 Bitwarden migration closes that
+exact gap instead of working around it: `celery.service` and `klaude-worker.service` (both
+`User=nam`) now get `GEMINI_API_KEY` injected via their `bws run` wrapper, and
+`/etc/sudoers.d/klaude` has a scoped `Defaults:nam env_keep += "GEMINI_API_KEY"` line so that one
+var — and only that one — crosses the `sudo -u klaude` user-switch boundary. Re-verified against
+the real invocation path (`sudo -u klaude env`, no `-i`/`-E`) with the var present. Don't reintroduce
+a hardcoded literal here or in `.bashrc` — that's exactly the flat-file-secret problem this
+migration exists to fix.
 
-Since the key sits in `.klaude.toml` in plaintext either way, treat
-the file like `.env`: `chmod 600 /home/klaude/.klaude.toml`.
+`gemini-flash-latest` is a moving alias (currently Gemini 3.6 Flash) rather than a dated model id,
+so it keeps working across Google's model rotations without edits here. Switched from OpenRouter's
+`openrouter/free` router 2026-07: that router picks a random free model per request (quality varied
+wildly, sometimes landing on much weaker models), and its free tier caps out at 50 req/day unless
+you've bought $10 in lifetime credits. Gemini's free tier gives a single consistent, capable model
+at 1,500 req/day, 10 RPM, 250K TPM — no billing required.
 
-Gemini Flash is natively multimodal, so the same `[default]` key also
-covers klaude's `read_document` VLM path (describes images) — no
-separate vision model/key needed, unlike the old OpenRouter setup. If
-you'd rather use OCR-only, set `[vision].backend = "ocr"` in
-`.klaude.toml` — see the klaude USAGE docs for the full `[vision]`
-block.
+Gemini Flash is natively multimodal, so the same key also covers klaude's `read_document` VLM path
+(describes images) — no separate vision model/key needed, unlike the old OpenRouter setup. If you'd
+rather use OCR-only, set `[vision].backend = "ocr"` in `.klaude.toml` — see the klaude USAGE docs
+for the full `[vision]` block.
 
 If Google's free tier isn't smart enough for a given task, `klaude
 --profile pro` can point at a paid `gemini-3-pro`/`gemini-3.6-pro`
@@ -121,11 +127,17 @@ sudo chmod 600 /home/klaude/.ssh/config
 
 ## 8. sudoers rule (nam -> klaude)
 
-Allow the Celery worker (running as nam) to invoke klaude as the klaude user:
+Allow the Celery worker (running as nam) to invoke klaude as the klaude user, and let
+`GEMINI_API_KEY` cross that boundary (see step 6):
 
 ```bash
-echo 'nam ALL=(klaude) NOPASSWD: /home/klaude/.local/bin/klaude' | sudo tee /etc/sudoers.d/klaude
-sudo chmod 440 /etc/sudoers.d/klaude
+cat << 'EOF' | sudo tee /tmp/klaude.sudoers.new
+Defaults:nam env_keep += "GEMINI_API_KEY"
+nam ALL=(klaude) NOPASSWD: /home/klaude/.local/bin/klaude
+EOF
+sudo visudo -cf /tmp/klaude.sudoers.new   # validate before installing
+sudo install -m 440 /tmp/klaude.sudoers.new /etc/sudoers.d/klaude
+rm /tmp/klaude.sudoers.new
 ```
 
 ## 9. Network restrictions (iptables)
@@ -163,7 +175,8 @@ Type=simple
 User=nam
 Group=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-ExecStart=/home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1 -Q slops
+ExecStart=/usr/local/bin/bws run --project-id <project-id> -- /home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1 -Q slops
+EnvironmentFile=/etc/nam-website/bws-token
 Restart=on-failure
 RestartSec=10
 Environment=DJANGO_SETTINGS_MODULE=config.settings
