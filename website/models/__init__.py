@@ -17,6 +17,7 @@ from .session import Session, Turn
 from .thought import Thought
 from .ticker import Ticker
 from .todo import TodoItem, TodoSection
+from .tool import TrackedTool
 from .watch import WatchChannel, WatchVideo
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "Ticker",
     "TodoSection",
     "TodoItem",
+    "TrackedTool",
     "Turn",
     "WatchChannel",
     "WatchVideo",

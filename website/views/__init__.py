@@ -72,6 +72,14 @@ from .slops import (
 )
 from .thought import thought_create, thought_delete, thought_list
 from .todo import todo_list
+from .tools import (
+    tool_create,
+    tool_delete,
+    tool_list,
+    tool_sync,
+    tool_sync_status,
+    tool_update,
+)
 from .watch import (
     watch_auth,
     watch_backfill_stats,
@@ -166,6 +174,12 @@ __all__ = [
     "thought_delete",
     "thought_list",
     "todo_list",
+    "tool_create",
+    "tool_delete",
+    "tool_list",
+    "tool_sync",
+    "tool_sync_status",
+    "tool_update",
     "watch_auth",
     "watch_backfill_stats",
     "watch_callback",

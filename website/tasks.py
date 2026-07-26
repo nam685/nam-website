@@ -331,6 +331,23 @@ def sync_listens():
 
 
 @app.task(max_retries=0)
+def sync_tools():
+    """Weekly sync of the best-of-Agent-Harnesses feed into the slops tool radar."""
+    from website.views.tools import _do_sync
+
+    try:
+        result = _do_sync()
+        logger.info(
+            "Tool radar sync complete: %d fetched, %d created, %d updated",
+            result["fetched"],
+            result["created"],
+            result["updated"],
+        )
+    except Exception:
+        logger.exception("Automated tool radar sync failed")
+
+
+@app.task(max_retries=0)
 def rebuild_listen_graph():
     """Rebuild the listening graph off the request path.
 

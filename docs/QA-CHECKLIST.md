@@ -317,6 +317,18 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Admin: reject a session with attachments — session updates; SSH to server and confirm `ls /home/klaude/workspace/klaude-playground/uploads/<id>/` is gone.
 - [ ] Admin: delete a session with attachments — session dir gone.
 
+### Slops — Tool Radar (/slops, Tools tab)
+- [ ] "Sessions" / "Tools" tab switcher appears at top of `/slops`; clicking "Tools" swaps the view.
+- [ ] Logged out: Tools tab shows Watching/Adopted/Dropped tab strip (Adopted selected by default) with counts, but no "+ Add tool" or "Sync now" controls.
+- [ ] Logged out: switching between Watching/Adopted/Dropped tabs shows the right entries; dropped tools remain visible with their reason in `notes`.
+- [ ] Admin: "+ Add tool" form creates a manual entry (e.g. name/url/notes); it appears in Watching without a "NEW" badge.
+- [ ] Admin: "Sync now" pulls from the best-of-Agent-Harnesses feed; new tools appear in Watching with a "NEW" badge and star count; last-synced time updates.
+- [ ] Admin: re-running Sync does not duplicate existing tools, and does not reset a tool's status/notes you've already changed (only refreshes star count).
+- [ ] Admin: clicking "Adopt" on a Watching tool moves it to the Adopted tab and clears its "NEW" badge.
+- [ ] Admin: clicking "Drop" prompts for a reason; cancelling without a reason keeps the tool unchanged; providing a reason moves it to Dropped with that reason shown.
+- [ ] Admin: a tool whose `last_reviewed_at` is >90 days old shows a "STALE" badge with a "Still relevant" button that clears it.
+- [ ] `GET /api/tools/` is public and returns all statuses (including dropped); mutating endpoints (`create`, `update`, `delete`, `sync`, `sync-status`) all require the admin bearer token.
+
 ### Slops downloads
 - [ ] Submit a prompt instructing klaude to write a small markdown file to `downloads/<session>/<turn>/hello.md`. Approve. After the turn completes, a clickable chip appears below klaude's final message; clicking downloads the bytes.
 - [ ] Submit a prompt instructing klaude to write 6 files. Only 5 chips appear.

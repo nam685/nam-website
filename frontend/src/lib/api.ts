@@ -472,6 +472,34 @@ export interface SlopsStats {
   success_rate: number;
 }
 
+/* ── Slops (Tool Radar) ────────────────────────────── */
+
+export type ToolStatus = "watching" | "adopted" | "dropped";
+
+export interface TrackedTool {
+  id: number;
+  name: string;
+  url: string;
+  description: string;
+  category: string;
+  status: ToolStatus;
+  is_new: boolean;
+  source: string;
+  notes: string;
+  stars: number | null;
+  added_at: string;
+  last_reviewed_at: string;
+  is_stale: boolean;
+}
+
+export interface ToolSyncStatus {
+  last_sync: string | null;
+  error: string | null;
+  fetched?: number;
+  created?: number;
+  updated?: number;
+}
+
 /* ── Audiobook ─────────────────────────────────────── */
 
 export type AudiobookChunkKind =
