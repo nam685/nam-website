@@ -82,7 +82,20 @@ def _fmt_size(n: int) -> str:
     return f"{n / (1024 * 1024):.1f} MB"
 
 
-def _serialize_turn(t, include_ip=False):
+_PUBLIC_ERROR_MESSAGE = "This request couldn't be completed. Please try again later."
+
+
+def _public_error(error: str) -> str:
+    """A visitor-safe stand-in for a turn's raw error text.
+
+    Raw errors can contain internal provider details (rate limits, API
+    endpoints, stack traces) that shouldn't be exposed to the public —
+    admins see the real message via `is_admin=True`.
+    """
+    return _PUBLIC_ERROR_MESSAGE if error else ""
+
+
+def _serialize_turn(t, is_admin=False):
     data = {
         "id": t.id,
         "prompt": t.prompt,
@@ -90,7 +103,7 @@ def _serialize_turn(t, include_ip=False):
         "token_count": t.token_count,
         "tool_calls": t.tool_calls,
         "summary": t.summary,
-        "error": t.error,
+        "error": t.error if is_admin else _public_error(t.error),
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "approved_at": t.approved_at.isoformat() if t.approved_at else None,
         "started_at": t.started_at.isoformat() if t.started_at else None,
@@ -108,12 +121,12 @@ def _serialize_turn(t, include_ip=False):
     data["downloads"] = [
         {"id": d.id, "filename": d.filename, "size": d.size, "oversize": d.oversize} for d in t.downloads.all()
     ]
-    if include_ip:
+    if is_admin:
         data["submitter_ip"] = t.submitter_ip
     return data
 
 
-def _serialize_session(s, turns=None, include_ip=False):
+def _serialize_session(s, turns=None, is_admin=False):
     if turns is None:
         turns = s.turns.all()
     return {
@@ -121,7 +134,7 @@ def _serialize_session(s, turns=None, include_ip=False):
         "workspace": s.workspace,
         "status": s.status,
         "created_at": s.created_at.isoformat() if s.created_at else None,
-        "turns": [_serialize_turn(t, include_ip=include_ip) for t in turns],
+        "turns": [_serialize_turn(t, is_admin=is_admin) for t in turns],
     }
 
 
@@ -146,9 +159,10 @@ def slops_list(request):
     total = qs.count()
     sessions = qs[offset : offset + limit]
 
+    is_admin = _is_admin(request)
     return JsonResponse(
         {
-            "sessions": [_serialize_session(s) for s in sessions],
+            "sessions": [_serialize_session(s, is_admin=is_admin) for s in sessions],
             "total": total,
         }
     )
@@ -164,7 +178,7 @@ def slops_detail(request, session_id):
     except Session.DoesNotExist:
         return JsonResponse({"error": "Not found"}, status=404)
 
-    return JsonResponse(_serialize_session(s))
+    return JsonResponse(_serialize_session(s, is_admin=_is_admin(request)))
 
 
 @csrf_exempt
@@ -327,7 +341,7 @@ def slops_approve(request, turn_id):
 
     run_turn.delay(turn.id)
 
-    return JsonResponse(_serialize_session(session, include_ip=True))
+    return JsonResponse(_serialize_session(session, is_admin=True))
 
 
 def _cleanup_uploads(workspace, session_id, turn_id=None):
@@ -377,7 +391,7 @@ def slops_reject(request, turn_id):
 
     _update_session_status(turn.session)
 
-    return JsonResponse(_serialize_session(turn.session, include_ip=True))
+    return JsonResponse(_serialize_session(turn.session, is_admin=True))
 
 
 @csrf_exempt
@@ -432,18 +446,30 @@ def slops_cancel(request, turn_id):
 
     _update_session_status(turn.session)
 
-    return JsonResponse(_serialize_session(turn.session, include_ip=True))
+    return JsonResponse(_serialize_session(turn.session, is_admin=True))
 
 
-def _atif_to_messages(atif):
-    """Convert ATIF steps to OpenAI chat message format for TraceViewer."""
+def _atif_to_messages(atif, redact_texts=None):
+    """Convert ATIF steps to OpenAI chat message format for TraceViewer.
+
+    `redact_texts` is a set of raw turn-error strings to swap out for the
+    public error message — klaude writes its raw failure text (which can
+    contain internal provider details) into the trace as a normal agent
+    step right before raising, so it leaks here too if not sanitized,
+    independently of the turn-level `error` field handled in
+    `_serialize_turn`.
+    """
+    redact_texts = redact_texts or set()
     messages = []
     for step in atif.get("steps", []):
         source = step.get("source")
         if source == "user":
             messages.append({"role": "user", "content": step.get("message", "")})
         elif source == "agent":
-            msg = {"role": "assistant", "content": step.get("message")}
+            content = step.get("message")
+            if content in redact_texts:
+                content = _PUBLIC_ERROR_MESSAGE
+            msg = {"role": "assistant", "content": content}
             if step.get("tool_calls"):
                 msg["tool_calls"] = [
                     {
@@ -491,7 +517,16 @@ def slops_trace(request, session_id):
     if not atif:
         return JsonResponse({"trace": None})
 
-    return JsonResponse({"trace": {"messages": _atif_to_messages(atif), "step_count": len(atif.get("steps", []))}})
+    redact_texts = set() if _is_admin(request) else {t.error for t in s.turns.all() if t.error}
+
+    return JsonResponse(
+        {
+            "trace": {
+                "messages": _atif_to_messages(atif, redact_texts=redact_texts),
+                "step_count": len(atif.get("steps", [])),
+            }
+        }
+    )
 
 
 @csrf_exempt
