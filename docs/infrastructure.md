@@ -143,6 +143,66 @@ expected daily ping didn't arrive.
 
 ---
 
+## Monitoring
+
+Error tracking (Django + Next.js), uptime monitoring (API health +
+homepage), and cron monitoring (`sync_prices`) via Sentry — all configured
+as code in `infra/sentry/`, not clicked together in the dashboard.
+
+**One-time setup:**
+
+1. Create a Sentry account/org if you don't have one (sentry.io, free
+   tier). Note the org slug and find its default team's slug under
+   Settings > Teams.
+
+2. Create a Sentry Auth Token: Settings > Auth Tokens, scoped to
+   `org:read`, `project:write`, `alerts:write`.
+
+3. From `infra/sentry/`, apply the config (from your own machine — this
+   is operator-managed, not part of CI, same tier as the backup's
+   `rclone`/`age` setup):
+   ```bash
+   cd infra/sentry
+   export SENTRY_AUTH_TOKEN=<token from step 2>
+   tofu init
+   tofu apply -var="sentry_org=personal-0ob" -var="sentry_team=personal"
+   ```
+
+4. Retrieve the two DSNs the apply just produced:
+   ```bash
+   tofu output backend_dsn
+   tofu output frontend_dsn
+   ```
+
+5. Add the backend DSN to Bitwarden Secrets Manager's `nam-website-prod`
+   project as `SENTRY_DSN` (same place every other backend secret lives —
+   see "Secrets (Bitwarden Secrets Manager)" below).
+
+6. Add the frontend DSN as a GitHub Actions repo secret named
+   `SENTRY_DSN_FRONTEND` (repo Settings > Secrets and variables > Actions)
+   — `deploy.yml` bakes it into the Next.js build.
+
+7. In your Sentry account's own notification settings (not part of the
+   Terraform config — this is per-user, not per-org), confirm the
+   registered email is nam685@proton.me, or that your notification
+   preferences route "Issue Owners"/"Active Members" alerts there. The
+   alert rules route to org members via Sentry's own membership model, not
+   a raw email address.
+
+8. Redeploy (or manually restart `django`/`celery` and re-run the frontend
+   build) so both apps pick up their DSNs.
+
+9. Verify: trigger a real error (e.g. temporarily hit a broken endpoint)
+   and confirm it shows up in the relevant Sentry project; check that the
+   two uptime monitors and the `sync-prices` cron monitor show up in
+   Sentry as "OK" after their next check.
+
+**Changing the config later:** edit `infra/sentry/*.tf` and re-run
+`tofu apply` with the same `-var` flags from step 3 — OpenTofu diffs
+against local state and applies only what changed.
+
+---
+
 ## Secrets (Bitwarden Secrets Manager)
 
 Prod secrets — for `django`, `celery`, `sync-prices`, and `klaude-worker` (see
