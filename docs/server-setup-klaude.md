@@ -58,7 +58,8 @@ pip install --user git+https://github.com/nam685/klaude.git
 
 ## 6. Configure klaude
 
-Create `/home/klaude/.klaude.toml`:
+Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
+(no credit card required), then create `/home/klaude/.klaude.toml`:
 
 ```toml
 [default]
@@ -75,18 +76,36 @@ sudo chmod 600 /home/klaude/.klaude.toml
 
 `GEMINI_API_KEY` itself lives in the `nam-website-prod` Bitwarden Secrets Manager project (see
 [`docs/infrastructure.md`](infrastructure.md#secrets-bitwarden-secrets-manager)), not in a local
-file. It reaches the `klaude` user like this: `celery.service` and `klaude-worker.service` (both
-`User=nam`) get it injected via their `bws run` wrapper; `website/tasks.py` shells out to klaude via
-`sudo -u klaude /home/klaude/.local/bin/klaude ...`; and `/etc/sudoers.d/klaude` has a scoped
-`Defaults:nam env_keep += "GEMINI_API_KEY"` line so that one var — and only that one — crosses the
-user-switch boundary. Do not hardcode the key directly in `.klaude.toml` or export it from
-`.bashrc` — both were tried and abandoned because `sudo -u klaude <bin>` (no `-i`, no shell) doesn't
-source `.bashrc`, and a hardcoded value is exactly the flat-file-secret problem Bitwarden migration
-was meant to fix.
+file. **History:** an earlier pass at this doc used a hardcoded `api_key = "..."` literal instead,
+because `website/tasks.py` invokes klaude as `sudo -u klaude <bin> ...` (no login shell, no `-E`,
+and — at the time — no matching `env_keep` in `/etc/sudoers.d/klaude`), so nothing in `.bashrc`
+reached the process and an `api_key_env` pointing at an unset var silently failed in production
+(verified back then with a fully stripped `env -i` test). The #296 Bitwarden migration closes that
+exact gap instead of working around it: `celery.service` and `klaude-worker.service` (both
+`User=nam`) now get `GEMINI_API_KEY` injected via their `bws run` wrapper, and
+`/etc/sudoers.d/klaude` has a scoped `Defaults:nam env_keep += "GEMINI_API_KEY"` line so that one
+var — and only that one — crosses the `sudo -u klaude` user-switch boundary. Re-verified against
+the real invocation path (`sudo -u klaude env`, no `-i`/`-E`) with the var present. Don't reintroduce
+a hardcoded literal here or in `.bashrc` — that's exactly the flat-file-secret problem this
+migration exists to fix.
 
-Gemini Flash is natively multimodal, so the same key covers klaude's `read_document` VLM path too.
-If you'd rather use OCR-only, set `[vision].backend = "ocr"` in `.klaude.toml` — see the klaude
-USAGE docs for the full `[vision]` block.
+`gemini-flash-latest` is a moving alias (currently Gemini 3.6 Flash) rather than a dated model id,
+so it keeps working across Google's model rotations without edits here. Switched from OpenRouter's
+`openrouter/free` router 2026-07: that router picks a random free model per request (quality varied
+wildly, sometimes landing on much weaker models), and its free tier caps out at 50 req/day unless
+you've bought $10 in lifetime credits. Gemini's free tier gives a single consistent, capable model
+at 1,500 req/day, 10 RPM, 250K TPM — no billing required.
+
+Gemini Flash is natively multimodal, so the same key also covers klaude's `read_document` VLM path
+(describes images) — no separate vision model/key needed, unlike the old OpenRouter setup. If you'd
+rather use OCR-only, set `[vision].backend = "ocr"` in `.klaude.toml` — see the klaude USAGE docs
+for the full `[vision]` block.
+
+If Google's free tier isn't smart enough for a given task, `klaude
+--profile pro` can point at a paid `gemini-3-pro`/`gemini-3.6-pro`
+model (Pro was pulled from the free tier in April 2026) — add a
+`[profiles.pro]` block with the same `base_url`/`api_key_env` and
+billing enabled on the Google Cloud project backing the key.
 
 ## 7. GitHub deploy key for klaude-playground
 
@@ -123,7 +142,7 @@ rm /tmp/klaude.sudoers.new
 
 ## 9. Network restrictions (iptables)
 
-Restrict klaude user to outbound HTTPS only (OpenRouter API):
+Restrict klaude user to outbound HTTPS only (Gemini API):
 
 ```bash
 # Allow established connections
