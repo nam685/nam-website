@@ -18,6 +18,7 @@ dependencies = [
     "celery[redis]>=5.4",
     "mgz-fast==1.0.0",
     "aoe2coach @ git+https://github.com/nam685/aoe2coach.git@a3b9cca",
+    "sentry-sdk>=2.66.1",
 ]
 
 [dependency-groups]

@@ -3,6 +3,8 @@ from pathlib import Path
 import environ
 from celery.schedules import crontab
 
+from website.sentry import init_sentry
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
@@ -14,6 +16,9 @@ environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+
+SENTRY_DSN = env("SENTRY_DSN", default="")
+init_sentry(SENTRY_DSN)
 
 INSTALLED_APPS = [
     "django.contrib.admin",

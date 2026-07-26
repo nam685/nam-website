@@ -55,3 +55,10 @@ htmlcov/
 # Real AoE2 recorded games used as local test fixtures contain third-party
 # player names + chat — never commit them to this public repo.
 website/tests/fixtures/*.aoe2record
+
+# OpenTofu state (infra/sentry/) — operator-managed, never committed
+infra/sentry/*.tfstate
+infra/sentry/*.tfstate.backup
+infra/sentry/.terraform/
+infra/sentry/.terraform.lock.hcl
+infra/sentry/*.tfvars

@@ -3,12 +3,14 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
+import sentry_sdk
 from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db.models import F, Max
 
 from website.models import PriceSnapshot, Ticker
+from website.sentry import cron_checkin
 from website.services import PROVIDER_ADAPTERS
 from website.services.alpha_vantage import AlphaVantageQuotaError
 
@@ -17,63 +19,67 @@ class Command(BaseCommand):
     help = "Fetch latest prices for all tracked tickers"
 
     def handle(self, *_args, **_options):
-        # Prioritise least up-to-date tickers: no data first, then oldest
-        tickers = list(
-            Ticker.objects.annotate(latest_date=Max("snapshots__date")).order_by(F("latest_date").asc(nulls_first=True))
-        )
-        errors = []
-        last_av_time: float | None = None
-        av_quota_hit = False
+        with cron_checkin("sync-prices"):
+            # Prioritise least up-to-date tickers: no data first, then oldest
+            tickers = list(
+                Ticker.objects.annotate(latest_date=Max("snapshots__date")).order_by(
+                    F("latest_date").asc(nulls_first=True)
+                )
+            )
+            errors = []
+            last_av_time: float | None = None
+            av_quota_hit = False
 
-        for ticker in tickers:
-            # Skip remaining Alpha Vantage tickers once quota is exhausted
-            if ticker.provider == "alpha_vantage" and av_quota_hit:
-                errors.append({"symbol": ticker.symbol, "message": "Skipped — Alpha Vantage quota exhausted"})
-                self.stderr.write(f"  {ticker.symbol}: SKIPPED (AV quota)")
-                continue
+            for ticker in tickers:
+                # Skip remaining Alpha Vantage tickers once quota is exhausted
+                if ticker.provider == "alpha_vantage" and av_quota_hit:
+                    errors.append({"symbol": ticker.symbol, "message": "Skipped — Alpha Vantage quota exhausted"})
+                    self.stderr.write(f"  {ticker.symbol}: SKIPPED (AV quota)")
+                    continue
 
-            # Rate-limit: 1.5s between Alpha Vantage requests (free key: ~1 req/sec)
-            if ticker.provider == "alpha_vantage" and last_av_time is not None:
-                elapsed = time.monotonic() - last_av_time
-                if elapsed < 1.5:
-                    time.sleep(1.5 - elapsed)
+                # Rate-limit: 1.5s between Alpha Vantage requests (free key: ~1 req/sec)
+                if ticker.provider == "alpha_vantage" and last_av_time is not None:
+                    elapsed = time.monotonic() - last_av_time
+                    if elapsed < 1.5:
+                        time.sleep(1.5 - elapsed)
 
-            adapter = PROVIDER_ADAPTERS.get(ticker.provider)
-            if not adapter:
-                errors.append({"symbol": ticker.symbol, "message": f"Unknown provider: {ticker.provider}"})
-                continue
+                adapter = PROVIDER_ADAPTERS.get(ticker.provider)
+                if not adapter:
+                    errors.append({"symbol": ticker.symbol, "message": f"Unknown provider: {ticker.provider}"})
+                    continue
 
+                try:
+                    history = adapter(ticker.provider_id, days=365)
+                    self._upsert_snapshots(ticker, history)
+                    self.stdout.write(f"  {ticker.symbol}: {len(history)} data points")
+                except AlphaVantageQuotaError as e:
+                    av_quota_hit = True
+                    errors.append({"symbol": ticker.symbol, "message": str(e)})
+                    self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
+                except Exception as e:
+                    errors.append({"symbol": ticker.symbol, "message": str(e)})
+                    self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
+
+                if ticker.provider == "alpha_vantage":
+                    last_av_time = time.monotonic()
+
+            status = {
+                "last_sync": datetime.now().isoformat(),
+                "errors": errors,
+            }
+            cache.set("bets:sync_status", json.dumps(status), timeout=86400)
+
+            if errors:
+                self.stdout.write(f"Sync complete with {len(errors)} error(s)")
+                sentry_sdk.capture_message(f"sync_prices completed with {len(errors)} ticker error(s)", level="warning")
+            else:
+                self.stdout.write(f"Sync complete: {len(tickers)} tickers updated")
+
+            # Advance paper-trading accounts with the freshly-synced prices.
             try:
-                history = adapter(ticker.provider_id, days=365)
-                self._upsert_snapshots(ticker, history)
-                self.stdout.write(f"  {ticker.symbol}: {len(history)} data points")
-            except AlphaVantageQuotaError as e:
-                av_quota_hit = True
-                errors.append({"symbol": ticker.symbol, "message": str(e)})
-                self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
-            except Exception as e:
-                errors.append({"symbol": ticker.symbol, "message": str(e)})
-                self.stderr.write(f"  {ticker.symbol}: ERROR — {e}")
-
-            if ticker.provider == "alpha_vantage":
-                last_av_time = time.monotonic()
-
-        status = {
-            "last_sync": datetime.now().isoformat(),
-            "errors": errors,
-        }
-        cache.set("bets:sync_status", json.dumps(status), timeout=86400)
-
-        if errors:
-            self.stdout.write(f"Sync complete with {len(errors)} error(s)")
-        else:
-            self.stdout.write(f"Sync complete: {len(tickers)} tickers updated")
-
-        # Advance paper-trading accounts with the freshly-synced prices.
-        try:
-            call_command("tick_paper_accounts")
-        except Exception as e:  # noqa: BLE001
-            self.stderr.write(f"Paper tick failed: {e}")
+                call_command("tick_paper_accounts")
+            except Exception as e:  # noqa: BLE001
+                self.stderr.write(f"Paper tick failed: {e}")
 
     def _upsert_snapshots(self, ticker: Ticker, history: list[tuple]) -> None:
         existing_dates = set(PriceSnapshot.objects.filter(ticker=ticker).values_list("date", flat=True))
