@@ -1,9 +1,11 @@
 import json
 from datetime import timedelta
+from io import StringIO
 from unittest.mock import patch
 
 import pytest
 from django.core.cache import cache
+from django.core.management import call_command
 from django.utils import timezone
 
 from website.models import TrackedTool
@@ -311,3 +313,22 @@ class TestToolSyncStatusEndpoint:
         data = client.get("/api/tools/sync-status/", **auth_headers).json()
         assert data["last_sync"] == "2026-07-26T06:00:00"
         assert data["error"] is None
+
+
+@pytest.mark.django_db
+class TestSyncToolsCommand:
+    """This deployment runs periodic tasks via cron + management command, not Celery Beat
+    (CELERY_BEAT_SCHEDULE's sync-tools-weekly entry never actually fires in prod)."""
+
+    @patch("website.views.tools.fetch_harnesses")
+    def test_syncs_feed_into_db(self, mock_fetch):
+        mock_fetch.return_value = FAKE_FEED
+        call_command("sync_tools", stdout=StringIO())
+        assert TrackedTool.objects.count() == 2
+
+    @patch("website.views.tools.fetch_harnesses")
+    def test_prints_summary(self, mock_fetch):
+        mock_fetch.return_value = FAKE_FEED
+        out = StringIO()
+        call_command("sync_tools", stdout=out)
+        assert "fetched 2, created 2, updated 0" in out.getvalue()
