@@ -5,5 +5,5 @@ Description=Sync market prices (bets page)
 Type=oneshot
 User=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-EnvironmentFile=/home/nam/nam-website-deploy/.env
-ExecStart=/home/nam/.local/bin/uv run python manage.py sync_prices
+EnvironmentFile=/etc/nam-website/bws-token
+ExecStart=/usr/local/bin/bws run --project-id ffbc63d1-23df-41c4-a2ff-b49300cf115c -- /home/nam/.local/bin/uv run python manage.py sync_prices

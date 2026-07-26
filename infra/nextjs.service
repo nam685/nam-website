@@ -10,7 +10,6 @@ Environment=PORT=3000
 Environment=HOSTNAME=127.0.0.1
 Environment=PATH=/home/nam/.nvm/versions/node/v20.20.2/bin:/home/nam/.local/share/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/home/nam/.local/share/pnpm/pnpm start
-EnvironmentFile=/home/nam/nam-website-deploy/.env
 Restart=always
 RestartSec=3
 
