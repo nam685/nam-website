@@ -27,6 +27,159 @@ A small daemon runs on the **gaming PC** (not the server) to auto-upload Age of 
 DE recorded games to the site after each match. Setup and operation:
 [`scripts/AOE2_WATCHER.md`](../scripts/AOE2_WATCHER.md).
 
+## Backups
+
+**Prerequisite:** complete [First-time Server Setup](#first-time-server-setup) below
+first — these steps assume the repo is cloned, `.env` exists, and Docker
+services are running.
+
+Nightly encrypted backup of the Postgres database and media directory,
+uploaded offsite to Backblaze B2 (a different provider than Hetzner), with
+a healthchecks.io dead-man's-switch: if the nightly job doesn't run or
+fails partway, healthchecks.io emails nam685@proton.me because the
+expected daily ping didn't arrive.
+
+**One-time setup on the server:**
+
+1. **Generate the age keypair** (do this on your own machine, NOT the
+   server — the private key must never touch the VPS):
+   ```bash
+   age-keygen -o nam-website-backup-key.txt
+   # prints "Public key: age1..." — copy that into BACKUP_AGE_PUBLIC_KEY below
+   ```
+   Store `nam-website-backup-key.txt` somewhere durable and private (password
+   manager, offline drive). This is the ONLY way to decrypt backups — losing
+   it makes all backups permanently unreadable. Full restore procedure is
+   documented separately once the disaster-recovery runbook (issue #291
+   item 5) lands.
+
+2. **Create the B2 bucket**: sign up at backblaze.com, create a bucket named
+   `nam-website-backup` (private), create an Application Key scoped to that
+   bucket.
+
+3. **Install rclone and age on the server**:
+   ```bash
+   curl https://rclone.org/install.sh | sudo bash
+   sudo apt update && sudo apt install -y age
+   rclone config  # create a remote named "b2", type "b2", paste the
+                   # Application Key ID / Application Key from step 2
+                   # (run this as the `nam` user, not root/sudo — the systemd
+                   # service runs as `nam` and needs to see
+                   # ~nam/.config/rclone/rclone.conf)
+   ```
+   This writes `~/.config/rclone/rclone.conf` (already `chmod 600` by
+   rclone) — never commit this file. `age` is installed via apt (not
+   `~/.local/bin`) so it lands on the default `PATH` that systemd services see.
+
+4. **Create the healthchecks.io check**: sign up at healthchecks.io, create
+   a check named "nam-website-backup", schedule "Every 1 day" with a few
+   hours of grace, notification channel = email to nam685@proton.me. Copy
+   the check's UUID (from its ping URL, `https://hc-ping.com/<uuid>`).
+
+5. **Add to `.env`** on the server:
+   ```
+   # BACKUP_AGE_PUBLIC_KEY: public key from step 1
+   BACKUP_AGE_PUBLIC_KEY=age1...
+   BACKUP_B2_REMOTE=b2:nam-website-backup
+   # HEALTHCHECKS_BACKUP_UUID: check UUID from step 4
+   HEALTHCHECKS_BACKUP_UUID=<uuid>
+   ```
+   (systemd's `EnvironmentFile=` only skips lines that *start* with `#` — it
+   does not strip trailing comments, so keep annotations on their own line
+   above each var, not appended after the value.)
+   (If issue #296's Bitwarden Secrets Manager migration has landed by the
+   time you set this up, add these there instead, following whatever
+   pattern #296 established for the other secrets.)
+
+6. **Install the systemd units**:
+   ```bash
+   sudo cp infra/postgres-backup.service infra/postgres-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now postgres-backup.timer
+   ```
+
+7. **Run it once by hand and verify**:
+   ```bash
+   sudo systemctl start postgres-backup.service
+   sudo systemctl is-failed postgres-backup.service   # expect: inactive (means it succeeded, not "failed")
+   journalctl -u postgres-backup.service -n 50        # review the run's output
+   rclone ls b2:nam-website-backup                 # should show today's db/ and media/ objects
+   ```
+   Check healthchecks.io shows a successful check-in.
+
+8. **Do one test restore, on your own machine** (required — an unrestorable
+   backup is worse than no backup, because it creates false confidence).
+   Run this on the machine where the private age key from step 1 lives —
+   **not** the server, since decrypting there would mean the private key
+   touches the VPS. Assumes `docker compose up -d` is running locally (per
+   `make up`) and `rclone`/`age` are installed locally too:
+   ```bash
+   # On your own machine (where the private age key lives) — NOT the server
+   rclone cat b2:nam-website-backup/db/<date>.sql.gz.age \
+     | age -d -i /path/to/nam-website-backup-key.txt \
+     | gunzip > /tmp/restore-test.sql
+   docker compose exec -T db psql -U postgres -c "create database restore_test"
+   docker compose exec -T db psql -U postgres restore_test < /tmp/restore-test.sql
+   docker compose exec -T db psql -U postgres restore_test -c "select count(*) from website_thought;"
+   docker compose exec -T db psql -U postgres -c "drop database restore_test"
+   ```
+   This validates the DB restore path only — the media backup isn't covered
+   by an automated restore test (full media restore coverage is deferred to
+   the disaster-recovery runbook, issue #291 item 5).
+
+9. **Set the B2 bucket lifecycle rule**: in the B2 bucket settings, add a
+   lifecycle rule scoped to the `db/` prefix only that deletes files older
+   than 30 days, so storage cost doesn't grow unbounded. Do **not** apply
+   this rule bucket-wide: `media/` is an `rclone sync` mirror of the live
+   media directory (not append-only dated objects like `db/`), so a flat
+   30-day expiry would delete the current, still-needed copy 30 days after
+   its last upload. This is bucket-side config, not repo code.
+
+   For `media/`, enable B2 file versioning ("keep prior file versions")
+   instead of an expiry rule, so files that get deleted or overwritten by
+   the nightly `rclone sync` (which propagates server-side deletions) have
+   recoverable history rather than a hard cutoff.
+
+   Also add a lifecycle rule scoped to the `media-deleted/` prefix (where
+   `rclone sync --backup-dir` moves files removed from `media/`) that
+   expires objects after 90 days — long enough to notice and recover from
+   an accidental deletion, short enough to keep that prefix from growing
+   unbounded.
+
+---
+
+## Secrets (Bitwarden Secrets Manager)
+
+Prod secrets — for `django`, `celery`, `sync-prices`, and `klaude-worker` (see
+[`docs/server-setup-klaude.md`](server-setup-klaude.md)) — live in a Bitwarden **Secrets Manager**
+project (`nam-website-prod`), not a flat `.env`. This is a distinct product/API from the personal
+Bitwarden vault. Local/dev is unaffected — `docker compose`/`make up` still use a plain `.env`.
+
+Every unit's `ExecStart` is wrapped with `bws run --project-id <project-id> -- <command>`, which
+injects the project's secrets as env vars for that one process only. The single remaining flat-file
+secret is `/etc/nam-website/bws-token` (`BWS_ACCESS_TOKEN=...`, `chmod 600`, owned `nam`, never in
+git) — a read-only machine-account token scoped to just this one project. Functionally equivalent to
+a 1Password Service Account token: one bootstrap credential everything else derives from.
+
+**Current secrets in the project** (mirrors what used to be in prod `.env`, plus `GEMINI_API_KEY`
+for klaude): `DEBUG`, `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `ADMIN_SECRET`, `REDIS_URL`,
+`ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `ALPHA_VANTAGE_API_KEY`, `YTMUSIC_CLIENT_ID`, `YTMUSIC_CLIENT_SECRET`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LASTFM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+`AOE2_CLAUDE_BIN`, `AOE2_COACH_MODEL`, `GEMINI_API_KEY`.
+
+**Standalone scripts** (`scripts/audiobook_*.py`, using `NAM_ADMIN_TOKEN`) are not systemd-managed
+and keep reading a local `.env` when run manually — out of scope for this migration.
+
+**Setting up a new project from scratch** (e.g. after a server rebuild): create the project in the
+Bitwarden Secrets Manager web UI, add all vars above with real values, create a machine account with
+**read-only** access scoped to just that project, generate its access token, and write it to
+`/etc/nam-website/bws-token` per step 3 below.
+
+**Rotation:** storage location changed, values did not — `ADMIN_SECRET`/`SECRET_KEY`/OAuth secrets
+still hold their pre-migration values and should be rotated in a follow-up pass now that the old
+values have sat in a flat file (and server backups/history) for a while.
+
 ---
 
 ## Secrets (Bitwarden Secrets Manager)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Postgres + media backup (encrypted, offsite)
+
+[Service]
+Type=oneshot
+User=nam
+WorkingDirectory=/home/nam/nam-website-deploy
+EnvironmentFile=/home/nam/nam-website-deploy/.env
+ExecStart=/home/nam/nam-website-deploy/infra/backup.sh
