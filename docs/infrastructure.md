@@ -170,8 +170,8 @@ as code in `infra/sentry/`, not clicked together in the dashboard.
 
 4. Retrieve the two DSNs the apply just produced:
    ```bash
-   tofu output backend_dsn
-   tofu output frontend_dsn
+   tofu output -raw backend_dsn
+   tofu output -raw frontend_dsn
    ```
 
 5. Add the backend DSN to Bitwarden Secrets Manager's `nam-website-prod`

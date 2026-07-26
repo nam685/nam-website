@@ -1,17 +1,19 @@
 resource "sentry_project" "backend" {
-  organization = var.sentry_org
-  teams        = [var.sentry_team]
-  name         = "nam-website-backend"
-  slug         = "nam-website-backend"
-  platform     = "python-django"
+  organization  = var.sentry_org
+  teams         = [var.sentry_team]
+  name          = "nam-website-backend"
+  slug          = "nam-website-backend"
+  platform      = "python-django"
+  default_rules = false
 }
 
 resource "sentry_project" "frontend" {
-  organization = var.sentry_org
-  teams        = [var.sentry_team]
-  name         = "nam-website-frontend"
-  slug         = "nam-website-frontend"
-  platform     = "javascript-nextjs"
+  organization  = var.sentry_org
+  teams         = [var.sentry_team]
+  name          = "nam-website-frontend"
+  slug          = "nam-website-frontend"
+  platform      = "javascript-nextjs"
+  default_rules = false
 }
 
 resource "sentry_uptime_monitor" "api_health" {
@@ -82,7 +84,8 @@ resource "sentry_issue_alert" "backend_new_issue_email" {
   frequency    = 30
 
   conditions_v2 = [
-    { first_seen_event = {} }
+    { first_seen_event = {} },
+    { regression_event = {} },
   ]
 
   actions_v2 = [
@@ -105,7 +108,8 @@ resource "sentry_issue_alert" "frontend_new_issue_email" {
   frequency    = 30
 
   conditions_v2 = [
-    { first_seen_event = {} }
+    { first_seen_event = {} },
+    { regression_event = {} },
   ]
 
   actions_v2 = [
