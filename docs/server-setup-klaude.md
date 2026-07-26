@@ -58,22 +58,42 @@ Create `/home/klaude/.klaude.toml`:
 
 ```toml
 [default]
-model = "openrouter/free"
-base_url = "https://openrouter.ai/api/v1"
-api_key_env = "OPENROUTER_API_KEY"
-context_window = 32768
+model = "gemini-flash-latest"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+api_key_env = "GEMINI_API_KEY"
+context_window = 1000000
 ```
+
+`gemini-flash-latest` is a moving alias (currently Gemini 3.6 Flash)
+rather than a dated model id, so it keeps working across Google's
+model rotations without edits here. Switched from OpenRouter's
+`openrouter/free` router 2026-07: that router picks a random free
+model per request (quality varied wildly, sometimes landing on
+much weaker models), and its free tier caps out at 50 req/day
+unless you've bought $10 in lifetime credits. Gemini's free tier
+gives a single consistent, capable model at 1,500 req/day, 10 RPM,
+250K TPM — no billing required.
 
 Set API key:
 ```bash
-echo 'export OPENROUTER_API_KEY="your-key-here"' >> /home/klaude/.bashrc
+echo 'export GEMINI_API_KEY="your-key-here"' >> /home/klaude/.bashrc
 ```
 
-The `OPENROUTER_API_KEY` is also reused by klaude's `read_document`
-VLM path (describes images via Llama 3.2 Vision free). If you'd
-rather use OCR-only, set `[vision].backend = "ocr"` in
-`.klaude.toml` — see the klaude USAGE docs for the full `[vision]`
-block.
+Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
+(no credit card required).
+
+The `GEMINI_API_KEY` is also reused by klaude's `read_document`
+VLM path (describes images) since Gemini Flash is natively
+multimodal — no separate vision model/key needed, unlike the old
+OpenRouter setup. If you'd rather use OCR-only, set
+`[vision].backend = "ocr"` in `.klaude.toml` — see the klaude
+USAGE docs for the full `[vision]` block.
+
+If Google's free tier isn't smart enough for a given task, `klaude
+--profile pro` can point at a paid `gemini-3-pro`/`gemini-3.6-pro`
+model (Pro was pulled from the free tier in April 2026) — add a
+`[profiles.pro]` block with the same `base_url`/`api_key_env` and
+billing enabled on the Google Cloud project backing the key.
 
 ## 7. GitHub deploy key for klaude-playground
 
@@ -104,7 +124,7 @@ sudo chmod 440 /etc/sudoers.d/klaude
 
 ## 9. Network restrictions (iptables)
 
-Restrict klaude user to outbound HTTPS only (OpenRouter API):
+Restrict klaude user to outbound HTTPS only (Gemini API):
 
 ```bash
 # Allow established connections
