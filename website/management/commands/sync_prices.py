@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from decimal import Decimal
 
+import sentry_sdk
 from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
@@ -70,6 +71,7 @@ class Command(BaseCommand):
 
             if errors:
                 self.stdout.write(f"Sync complete with {len(errors)} error(s)")
+                sentry_sdk.capture_message(f"sync_prices completed with {len(errors)} ticker error(s)", level="warning")
             else:
                 self.stdout.write(f"Sync complete: {len(tickers)} tickers updated")
 

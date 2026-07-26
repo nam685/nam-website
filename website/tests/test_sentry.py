@@ -18,6 +18,7 @@ class TestInitSentry:
         _, kwargs = mock_init.call_args
         assert kwargs["dsn"] == "https://fake@o0.ingest.sentry.io/1"
         assert kwargs["send_default_pii"] is False
+        assert kwargs["include_local_variables"] is False
         assert kwargs["before_send"] is scrub_event
 
 

@@ -12,6 +12,7 @@ def init_sentry(dsn: str) -> None:
     sentry_sdk.init(
         dsn=dsn,
         send_default_pii=False,
+        include_local_variables=False,
         before_send=scrub_event,
     )
 
