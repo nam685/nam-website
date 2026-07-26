@@ -176,9 +176,11 @@ Backend (`.env`, see `.env.example`):
 - `CORS_ALLOWED_ORIGINS` — comma-separated allowed origins
 - `CSRF_TRUSTED_ORIGINS` — comma-separated trusted origins
 - `DEBUG` — boolean (default: False)
+- `SENTRY_DSN` — Django error tracking (optional, empty = disabled)
 
 Frontend:
 - `NEXT_PUBLIC_API_URL` — API base URL; empty in prod (Caddy proxies), `http://localhost:8000` for local dev without Caddy
+- `NEXT_PUBLIC_SENTRY_DSN` — Next.js error tracking DSN; baked in at build time via deploy.yml's `SENTRY_DSN_FRONTEND` GitHub Actions secret (optional, empty = disabled)
 
 ## Documentation
 - `docs/README.md` — Customer-facing description of what the website is and does. **Update when adding/removing pages or features.**
