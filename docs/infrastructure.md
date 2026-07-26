@@ -29,6 +29,10 @@ DE recorded games to the site after each match. Setup and operation:
 
 ## Backups
 
+**Prerequisite:** complete [First-time Server Setup](#first-time-server-setup) below
+first — these steps assume the repo is cloned, `.env` exists, and Docker
+services are running.
+
 Nightly encrypted backup of the Postgres database and media directory,
 uploaded offsite to Backblaze B2 (a different provider than Hetzner), with
 a healthchecks.io dead-man's-switch: if the nightly job doesn't run or
@@ -53,14 +57,19 @@ expected daily ping didn't arrive.
    `nam-website-backup` (private), create an Application Key scoped to that
    bucket.
 
-3. **Install and configure rclone on the server**:
+3. **Install rclone and age on the server**:
    ```bash
    curl https://rclone.org/install.sh | sudo bash
+   sudo apt install -y age
    rclone config  # create a remote named "b2", type "b2", paste the
                    # Application Key ID / Application Key from step 2
+                   # (run this as the `nam` user, not root/sudo — the systemd
+                   # service runs as `nam` and needs to see
+                   # ~nam/.config/rclone/rclone.conf)
    ```
    This writes `~/.config/rclone/rclone.conf` (already `chmod 600` by
-   rclone) — never commit this file.
+   rclone) — never commit this file. `age` is installed via apt (not
+   `~/.local/bin`) so it lands on the default `PATH` that systemd services see.
 
 4. **Create the healthchecks.io check**: sign up at healthchecks.io, create
    a check named "nam-website-backup", schedule "Every 1 day" with a few
@@ -69,10 +78,15 @@ expected daily ping didn't arrive.
 
 5. **Add to `.env`** on the server:
    ```
-   BACKUP_AGE_PUBLIC_KEY=age1...       # from step 1
+   # BACKUP_AGE_PUBLIC_KEY: public key from step 1
+   BACKUP_AGE_PUBLIC_KEY=age1...
    BACKUP_B2_REMOTE=b2:nam-website-backup
-   HEALTHCHECKS_BACKUP_UUID=<uuid>     # from step 4
+   # HEALTHCHECKS_BACKUP_UUID: check UUID from step 4
+   HEALTHCHECKS_BACKUP_UUID=<uuid>
    ```
+   (systemd's `EnvironmentFile=` only skips lines that *start* with `#` — it
+   does not strip trailing comments, so keep annotations on their own line
+   above each var, not appended after the value.)
    (If issue #296's Bitwarden Secrets Manager migration has landed by the
    time you set this up, add these there instead, following whatever
    pattern #296 established for the other secrets.)
@@ -87,26 +101,44 @@ expected daily ping didn't arrive.
 7. **Run it once by hand and verify**:
    ```bash
    sudo systemctl start postgres-backup.service
-   sudo systemctl status postgres-backup.service   # should exit 0
+   sudo systemctl is-failed postgres-backup.service   # expect: inactive (means it succeeded, not "failed")
+   journalctl -u postgres-backup.service -n 50        # review the run's output
    rclone ls b2:nam-website-backup                 # should show today's db/ and media/ objects
    ```
    Check healthchecks.io shows a successful check-in.
 
-8. **Do one test restore** (required — an unrestorable backup is worse than
-   no backup, because it creates false confidence):
+8. **Do one test restore, on your own machine** (required — an unrestorable
+   backup is worse than no backup, because it creates false confidence).
+   Run this on the machine where the private age key from step 1 lives —
+   **not** the server, since decrypting there would mean the private key
+   touches the VPS. Assumes `docker compose up -d` is running locally (per
+   `make up`) and `rclone`/`age` are installed locally too:
    ```bash
+   # On your own machine (where the private age key lives) — NOT the server
    rclone cat b2:nam-website-backup/db/<date>.sql.gz.age \
      | age -d -i /path/to/nam-website-backup-key.txt \
      | gunzip > /tmp/restore-test.sql
-   createdb restore_test
-   psql restore_test < /tmp/restore-test.sql
-   psql restore_test -c "select count(*) from website_thought;"  # sanity check
-   dropdb restore_test
+   docker compose exec -T db psql -U postgres -c "create database restore_test"
+   docker compose exec -T db psql -U postgres restore_test < /tmp/restore-test.sql
+   docker compose exec -T db psql -U postgres restore_test -c "select count(*) from website_thought;"
+   docker compose exec -T db psql -U postgres -c "drop database restore_test"
    ```
+   This validates the DB restore path only — the media backup isn't covered
+   by an automated restore test (full media restore coverage is deferred to
+   the disaster-recovery runbook, issue #291 item 5).
 
 9. **Set the B2 bucket lifecycle rule**: in the B2 bucket settings, add a
-   lifecycle rule to delete files older than 30 days, so storage cost
-   doesn't grow unbounded. This is bucket-side config, not repo code.
+   lifecycle rule scoped to the `db/` prefix only that deletes files older
+   than 30 days, so storage cost doesn't grow unbounded. Do **not** apply
+   this rule bucket-wide: `media/` is an `rclone sync` mirror of the live
+   media directory (not append-only dated objects like `db/`), so a flat
+   30-day expiry would delete the current, still-needed copy 30 days after
+   its last upload. This is bucket-side config, not repo code.
+
+   For `media/`, enable B2 file versioning ("keep prior file versions")
+   instead of an expiry rule, so files that get deleted or overwritten by
+   the nightly `rclone sync` (which propagates server-side deletions) have
+   recoverable history rather than a hard cutoff.
 
 ---
 
