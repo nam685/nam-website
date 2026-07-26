@@ -27,3 +27,9 @@ docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
 
 echo "==> Uploading DB dump to ${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age"
 rclone rcat "${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age" < "$DUMP_PATH"
+
+echo "==> Syncing media directory to ${BACKUP_B2_REMOTE}/media/"
+rclone sync "${WORKDIR}/media" "${BACKUP_B2_REMOTE}/media/"
+
+echo "==> Backup complete, pinging healthchecks.io"
+curl -fsS -m 10 --retry 3 "https://hc-ping.com/${HEALTHCHECKS_BACKUP_UUID}" -o /dev/null
