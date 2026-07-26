@@ -307,8 +307,12 @@ class TestListenSync:
 
     @patch("os.path.isfile", return_value=True)
     @patch("ytmusicapi.YTMusic")
-    def test_graph_rebuild_falls_back_inline_if_broker_down(self, mock_ytmusic_cls, _mock_isfile, client, auth_headers):
-        # If the broker is unreachable, degrade to the old inline rebuild rather than skip it.
+    def test_graph_rebuild_skipped_not_inline_if_broker_down(
+        self, mock_ytmusic_cls, _mock_isfile, client, auth_headers
+    ):
+        # If the broker is unreachable we must SKIP the rebuild, never run it inline: the Last.fm
+        # pass takes minutes and would blow gunicorn's 120s timeout, turning a successful sync
+        # (tracks already written) into a confusing "failure". Sync still returns 200.
         mock_yt = MagicMock()
         mock_yt.get_history.return_value = MOCK_HISTORY
         mock_ytmusic_cls.return_value = mock_yt
@@ -318,7 +322,7 @@ class TestListenSync:
             resp = client.post("/api/listens/sync/", **auth_headers)
         assert resp.status_code == 200
         assert resp.json()["graph_rebuilding"] is False
-        inline.assert_called_once()
+        inline.assert_not_called()  # never block the request on the slow rebuild
 
 
 # ── Reauth ────────────────────────────────────────────
@@ -326,7 +330,12 @@ class TestListenSync:
 
 @pytest.mark.django_db
 class TestListenReauth:
-    RAW = "Cookie: SAPISID=abc; __Secure-3PSID=xyz\nOrigin: https://music.youtube.com\nUser-Agent: TestUA"
+    # A realistic paste: SAPISIDHASH is derived from __Secure-3PAPISID, and note there is NO
+    # Authorization header (many YTM POSTs, e.g. /api/stats/playback, don't include one).
+    RAW = (
+        "Cookie: SAPISID=abc; __Secure-3PAPISID=abc; __Secure-3PSID=xyz\n"
+        "Origin: https://music.youtube.com\nUser-Agent: TestUA"
+    )
 
     def _post(self, client, headers_text, auth_headers):
         return client.post(
@@ -369,6 +378,74 @@ class TestListenReauth:
         assert "cookie" in saved
         # The SAPISIDHASH expires in hours; persisting it would re-break sync. Must not be stored.
         assert "authorization" not in saved
+
+    @patch("ytmusicapi.YTMusic")
+    def test_strips_accept_encoding_when_persisting(self, _mock_yt, client, auth_headers):
+        # THE root-cause bug: a pasted `accept-encoding: ..., br, zstd` makes YouTube reply with
+        # brotli/zstd that requests can't decode, so every sync fails as a fake "session expired".
+        # It must never be written to browser.json.
+        raw = self.RAW + "\nAccept-Encoding: gzip, deflate, br, zstd\nContent-Length: 42"
+        m = mock_open()
+        with patch("website.views.listen._is_logged_in", return_value=True), patch("builtins.open", m):
+            resp = self._post(client, raw, auth_headers)
+        assert resp.status_code == 200
+        saved = json.loads("".join(call.args[0] for call in m().write.call_args_list))
+        assert "accept-encoding" not in saved
+        assert "content-length" not in saved
+        assert "cookie" in saved  # the useful bits survive
+
+    def test_accepts_paste_without_authorization_header(self, client, auth_headers, tmp_path):
+        # Regression: a paste with no Authorization header (e.g. /api/stats/playback) must NOT be
+        # rejected as "oauth JSON provided". YTMusic() is NOT mocked here — we rely on the real
+        # determine_auth_type detecting BROWSER from the SAPISIDHASH we derive from the cookie.
+        # (open() is left real so YTMusic can read its bundled locale files; we redirect the write
+        # to a tmp path instead.)
+        assert "authorization" not in self.RAW.lower()
+        auth_file = tmp_path / "browser.json"
+        with (
+            patch("website.views.listen._is_logged_in", return_value=True),
+            patch("website.views.listen._get_auth_path", return_value=str(auth_file)),
+        ):
+            resp = self._post(client, self.RAW, auth_headers)
+        assert resp.status_code == 200, resp.json()
+        assert resp.json()["ok"] is True
+        saved = json.loads(auth_file.read_text())
+        assert "authorization" not in saved  # computed SAPISIDHASH is never persisted (it expires)
+
+
+def test_sanitize_headers_drops_volatile_keys():
+    dirty = {
+        "cookie": "SAPISID=abc",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "content-encoding": "gzip",
+        "content-length": "42",
+        "content-type": "application/json",
+        "user-agent": "UA",
+    }
+    clean = listen._sanitize_headers(dirty)
+    assert clean == {"cookie": "SAPISID=abc", "user-agent": "UA"}
+
+
+def test_authorize_headers_derives_sapisidhash_from_cookie():
+    headers = {"cookie": "SAPISID=abc; __Secure-3PAPISID=abc", "origin": "https://music.youtube.com"}
+    out = listen._authorize_headers(headers)
+    assert "SAPISIDHASH" in out["authorization"]
+
+
+def test_authorize_headers_leaves_existing_authorization_untouched():
+    headers = {"cookie": "SAPISID=abc; __Secure-3PAPISID=abc", "authorization": "SAPISIDHASH existing"}
+    assert listen._authorize_headers(headers)["authorization"] == "SAPISIDHASH existing"
+
+
+def test_load_browser_headers_auto_heals_accept_encoding():
+    # An already-saved browser.json with accept-encoding must be sanitized on load, so an existing
+    # broken file starts working the moment this ships — no re-auth required.
+    cookie = "__Secure-3PAPISID=abc; SAPISID=abc; foo=bar"
+    on_disk = json.dumps({"cookie": cookie, "accept-encoding": "gzip, deflate, br, zstd"})
+    with patch("os.path.isfile", return_value=True), patch("builtins.open", mock_open(read_data=on_disk)):
+        headers = listen._load_browser_headers()
+    assert "accept-encoding" not in headers
+    assert headers["cookie"] == cookie
 
 
 # ── Sync status ───────────────────────────────────────

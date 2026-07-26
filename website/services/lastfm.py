@@ -35,6 +35,41 @@ def fetch_similar_artists(name: str, api_key: str, limit: int = 50) -> list[dict
     return out
 
 
+def fetch_artist_top_tags(name: str, api_key: str, limit: int = 5) -> list[dict]:
+    """Return [{'name': str, 'count': int}] for an artist's top Last.fm tags (genre/mood).
+
+    Tags are the crowd-assigned genre labels. They form the multipartite connective layer of
+    the music graph: artists sharing a tag get bridged, so niche/orphan artists reach the giant
+    component instead of forming isolated islands.
+    """
+    try:
+        resp = httpx.get(
+            BASE_URL,
+            params={
+                "method": "artist.gettoptags",
+                "artist": name,
+                "api_key": api_key,
+                "format": "json",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        logger.warning("Last.fm artist.gettoptags failed for %r", name)
+        return []
+    out = []
+    for t in data.get("toptags", {}).get("tag", [])[:limit]:
+        try:
+            count = int(t.get("count", 0))
+        except (ValueError, TypeError):
+            count = 0
+        name_ = t.get("name")
+        if name_:
+            out.append({"name": name_, "count": count})
+    return out
+
+
 def fetch_similar_tracks(artist: str, title: str, api_key: str, limit: int = 50) -> list[dict]:
     """Return [{'artist': str, 'title': str, 'match': float}] for similar tracks (CF-derived)."""
     try:
