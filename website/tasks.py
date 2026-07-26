@@ -191,7 +191,7 @@ def _execute_klaude(turn, is_continuation):
     if is_continuation:
         cmd.append("-c")
     effective_prompt = _build_downloads_prefix(session, turn) + _build_prompt_with_attachments(turn)
-    cmd += [effective_prompt, "--auto-approve", "--session-dir", trace_dir]
+    cmd += [effective_prompt, "--auto-approve", "--json", "--session-dir", trace_dir]
 
     result = subprocess.run(
         cmd,
@@ -215,7 +215,7 @@ def _execute_klaude(turn, is_continuation):
             summary = step["message"][:500]
             break
 
-    error = result.stderr if result.returncode != 0 else ""
+    error = _parse_klaude_error(result)
     if not error and not atif:
         error = "klaude produced no trace output"
 
@@ -225,6 +225,31 @@ def _execute_klaude(turn, is_continuation):
         "tool_calls": tool_calls_count,
         "error": error,
     }
+
+
+def _parse_klaude_error(result):
+    """Extract the failure reason from a `klaude --json` subprocess result.
+
+    In --json mode klaude always prints exactly one JSON object to stdout
+    with an "error" key (null on success) — see klaude's docs/SERVER.md.
+    That's the authoritative signal: klaude prints its human-readable
+    "Error: ..." text to stdout (not stderr) even without --json, so a
+    stderr-only check silently missed failures — a nonzero exit with empty
+    stderr was read as success. Fall back to returncode/stderr/stdout only
+    if the output isn't parseable JSON (e.g. the process was killed before
+    it could print).
+    """
+    try:
+        output = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        output = None
+
+    if isinstance(output, dict) and "error" in output:
+        return output["error"] or ""
+
+    if result.returncode != 0:
+        return result.stderr.strip() or result.stdout.strip() or f"klaude exited with code {result.returncode}"
+    return ""
 
 
 @app.task(max_retries=0)

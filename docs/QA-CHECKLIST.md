@@ -306,6 +306,8 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Rate limiting: per-IP (1/hr) + global (10/hr) both enforced
 - [ ] Nav wheel includes slops entry
 - [ ] Mobile layout works (sidebar collapses)
+- [ ] Force a turn that errors out (e.g. a prompt klaude can't complete): sidebar badge shows FAILED, not DONE
+- [ ] Submit an image attachment and ask klaude to describe it: read_document's VLM path succeeds (no 401)
 - [ ] Stats endpoint returns total_sessions, total_turns, success_rate
 - [ ] Submit without files — session appears, turn pending.
 - [ ] Submit with one `.txt` attachment — chip visible before send, attachment listed on turn after send.
