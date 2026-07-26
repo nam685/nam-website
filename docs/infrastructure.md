@@ -19,7 +19,10 @@
 - **Next.js frontend** — port 3000, systemd service (`nextjs`)
 - **Django backend** — port 8000, systemd service (`django`) via gunicorn
 - **Celery worker** — systemd service (`celery`), uses Redis as broker
-- **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet, `restart: unless-stopped`)
+- **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet, `restart: unless-stopped`).
+  Postgres requires `scram-sha-256` for every connection, including local socket/127.0.0.1/::1 — a
+  custom `infra/pg_hba.conf` (mounted via `docker-entrypoint-initdb.d`) replaces the stock image's
+  default `trust` rule for those addresses. See issue #298.
 
 ### Off-server: AoE2 recorded-game watcher
 
@@ -30,8 +33,8 @@ DE recorded games to the site after each match. Setup and operation:
 ## Backups
 
 **Prerequisite:** complete [First-time Server Setup](#first-time-server-setup) below
-first — these steps assume the repo is cloned, `.env` exists, and Docker
-services are running.
+first — these steps assume the repo is cloned, the Bitwarden bootstrap secret
+(`/etc/nam-website/bws-token`) is set up, and Docker services are running.
 
 Nightly encrypted backup of the Postgres database and media directory,
 uploaded offsite to Backblaze B2 (a different provider than Hetzner), with
@@ -76,20 +79,12 @@ expected daily ping didn't arrive.
    hours of grace, notification channel = email to nam685@proton.me. Copy
    the check's UUID (from its ping URL, `https://hc-ping.com/<uuid>`).
 
-5. **Add to `.env`** on the server:
-   ```
-   # BACKUP_AGE_PUBLIC_KEY: public key from step 1
-   BACKUP_AGE_PUBLIC_KEY=age1...
-   BACKUP_B2_REMOTE=b2:nam-website-backup
-   # HEALTHCHECKS_BACKUP_UUID: check UUID from step 4
-   HEALTHCHECKS_BACKUP_UUID=<uuid>
-   ```
-   (systemd's `EnvironmentFile=` only skips lines that *start* with `#` — it
-   does not strip trailing comments, so keep annotations on their own line
-   above each var, not appended after the value.)
-   (If issue #296's Bitwarden Secrets Manager migration has landed by the
-   time you set this up, add these there instead, following whatever
-   pattern #296 established for the other secrets.)
+5. **Add to Bitwarden Secrets Manager** (project `nam-website-prod` — see
+   "Secrets (Bitwarden Secrets Manager)" below), not a flat `.env` (there
+   isn't one on the server anymore, per issue #296):
+   - `BACKUP_AGE_PUBLIC_KEY` — public key from step 1
+   - `BACKUP_B2_REMOTE` — `b2:nam-website-backup`
+   - `HEALTHCHECKS_BACKUP_UUID` — check UUID from step 4
 
 6. **Install the systemd units**:
    ```bash
@@ -162,11 +157,12 @@ git) — a read-only machine-account token scoped to just this one project. Func
 a 1Password Service Account token: one bootstrap credential everything else derives from.
 
 **Current secrets in the project** (mirrors what used to be in prod `.env`, plus `GEMINI_API_KEY`
-for klaude): `DEBUG`, `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `ADMIN_SECRET`, `REDIS_URL`,
-`ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `GITHUB_CLIENT_ID`,
-`GITHUB_CLIENT_SECRET`, `ALPHA_VANTAGE_API_KEY`, `YTMUSIC_CLIENT_ID`, `YTMUSIC_CLIENT_SECRET`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LASTFM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
-`AOE2_CLAUDE_BIN`, `AOE2_COACH_MODEL`, `GEMINI_API_KEY`.
+for klaude and the `postgres-backup` trio below): `DEBUG`, `SECRET_KEY`, `POSTGRES_PASSWORD`,
+`DATABASE_URL`, `ADMIN_SECRET`, `REDIS_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`,
+`CSRF_TRUSTED_ORIGINS`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALPHA_VANTAGE_API_KEY`,
+`YTMUSIC_CLIENT_ID`, `YTMUSIC_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`LASTFM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `AOE2_CLAUDE_BIN`, `AOE2_COACH_MODEL`,
+`GEMINI_API_KEY`, `BACKUP_AGE_PUBLIC_KEY`, `BACKUP_B2_REMOTE`, `HEALTHCHECKS_BACKUP_UUID`.
 
 **Standalone scripts** (`scripts/audiobook_*.py`, using `NAM_ADMIN_TOKEN`) are not systemd-managed
 and keep reading a local `.env` when run manually — out of scope for this migration.
@@ -176,43 +172,9 @@ Bitwarden Secrets Manager web UI, add all vars above with real values, create a 
 **read-only** access scoped to just that project, generate its access token, and write it to
 `/etc/nam-website/bws-token` per step 3 below.
 
-**Rotation:** storage location changed, values did not — `ADMIN_SECRET`/`SECRET_KEY`/OAuth secrets
-still hold their pre-migration values and should be rotated in a follow-up pass now that the old
-values have sat in a flat file (and server backups/history) for a while.
-
----
-
-## Secrets (Bitwarden Secrets Manager)
-
-Prod secrets — for `django`, `celery`, `sync-prices`, and `klaude-worker` (see
-[`docs/server-setup-klaude.md`](server-setup-klaude.md)) — live in a Bitwarden **Secrets Manager**
-project (`nam-website-prod`), not a flat `.env`. This is a distinct product/API from the personal
-Bitwarden vault. Local/dev is unaffected — `docker compose`/`make up` still use a plain `.env`.
-
-Every unit's `ExecStart` is wrapped with `bws run --project-id <project-id> -- <command>`, which
-injects the project's secrets as env vars for that one process only. The single remaining flat-file
-secret is `/etc/nam-website/bws-token` (`BWS_ACCESS_TOKEN=...`, `chmod 600`, owned `nam`, never in
-git) — a read-only machine-account token scoped to just this one project. Functionally equivalent to
-a 1Password Service Account token: one bootstrap credential everything else derives from.
-
-**Current secrets in the project** (mirrors what used to be in prod `.env`, plus `GEMINI_API_KEY`
-for klaude): `DEBUG`, `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `ADMIN_SECRET`, `REDIS_URL`,
-`ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `GITHUB_CLIENT_ID`,
-`GITHUB_CLIENT_SECRET`, `ALPHA_VANTAGE_API_KEY`, `YTMUSIC_CLIENT_ID`, `YTMUSIC_CLIENT_SECRET`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LASTFM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
-`AOE2_CLAUDE_BIN`, `AOE2_COACH_MODEL`, `GEMINI_API_KEY`.
-
-**Standalone scripts** (`scripts/audiobook_*.py`, using `NAM_ADMIN_TOKEN`) are not systemd-managed
-and keep reading a local `.env` when run manually — out of scope for this migration.
-
-**Setting up a new project from scratch** (e.g. after a server rebuild): create the project in the
-Bitwarden Secrets Manager web UI, add all vars above with real values, create a machine account with
-**read-only** access scoped to just that project, generate its access token, and write it to
-`/etc/nam-website/bws-token` per step 3 below.
-
-**Rotation:** storage location changed, values did not — `ADMIN_SECRET`/`SECRET_KEY`/OAuth secrets
-still hold their pre-migration values and should be rotated in a follow-up pass now that the old
-values have sat in a flat file (and server backups/history) for a while.
+**Rotation:** `ADMIN_SECRET` and `SECRET_KEY` were rotated 2026-07-26 via the Bitwarden web UI.
+OAuth client secrets and other free-tier third-party keys still hold their pre-migration values
+(deliberately deferred — see backlog/memory for the cost/benefit reasoning).
 
 ---
 

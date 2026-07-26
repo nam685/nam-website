@@ -50,7 +50,7 @@ jobs:
             # Sync systemd service files + Caddy config
             cd ~/nam-website-deploy
             RELOAD_SYSTEMD=false
-            for svc in django nextjs celery sync-prices; do
+            for svc in django nextjs celery sync-prices postgres-backup; do
               if ! diff -q infra/$svc.service /etc/systemd/system/$svc.service > /dev/null 2>&1; then
                 sudo cp infra/$svc.service /etc/systemd/system/$svc.service
                 RELOAD_SYSTEMD=true

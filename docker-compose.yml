@@ -10,6 +10,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/pg_hba.conf:/docker-entrypoint-initdb.d/pg_hba.conf:ro
+      - ./infra/pg-init-hba.sh:/docker-entrypoint-initdb.d/pg-init-hba.sh:ro
 
   redis:
     image: redis:7-alpine
