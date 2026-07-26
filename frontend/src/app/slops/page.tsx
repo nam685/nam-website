@@ -457,7 +457,7 @@ export default function SlopsPage() {
         className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}
         style={{
           position: "fixed",
-          top: 60,
+          top: 60 + TAB_BAR_HEIGHT,
           left: 0,
           bottom: 0,
           width: sidebarCollapsed ? 40 : 280,
