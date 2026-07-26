@@ -17,7 +17,7 @@ def init_sentry(dsn: str) -> None:
     )
 
 
-def scrub_event(event: dict, hint: dict) -> dict:
+def scrub_event(event: dict, _hint: dict) -> dict:
     """Strip sensitive data before an event leaves this process for Sentry.
 
     This app carries admin tokens and OAuth client secrets in request
