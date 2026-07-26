@@ -15,6 +15,7 @@ set -euo pipefail
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAMP="$(date +%F)"
 DUMP_PATH="/tmp/nam-website-db-${STAMP}.sql.gz.age"
+trap 'rm -f "$DUMP_PATH"' EXIT
 
 cd "$WORKDIR"
 
@@ -26,4 +27,3 @@ docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
 
 echo "==> Uploading DB dump to ${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age"
 rclone rcat "${BACKUP_B2_REMOTE}/db/${STAMP}.sql.gz.age" < "$DUMP_PATH"
-rm -f "$DUMP_PATH"
