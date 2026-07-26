@@ -8,6 +8,7 @@ set -euo pipefail
 
 POSTGRES_DB="${POSTGRES_DB:-nam_website}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD not set}"
 : "${BACKUP_AGE_PUBLIC_KEY:?BACKUP_AGE_PUBLIC_KEY not set}"
 : "${BACKUP_B2_REMOTE:?BACKUP_B2_REMOTE not set}"
 : "${HEALTHCHECKS_BACKUP_UUID:?HEALTHCHECKS_BACKUP_UUID not set}"
@@ -20,7 +21,8 @@ trap 'rm -f "$DUMP_PATH"' EXIT
 cd "$WORKDIR"
 
 echo "==> Dumping Postgres ($POSTGRES_DB)"
-docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
+# Local socket connections require scram-sha-256 auth (see issue #298), so pg_dump needs PGPASSWORD.
+docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
   | gzip \
   | age -r "$BACKUP_AGE_PUBLIC_KEY" \
   > "$DUMP_PATH"
