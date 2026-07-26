@@ -56,6 +56,17 @@ expected daily ping didn't arrive.
    documented separately once the disaster-recovery runbook (issue #291
    item 5) lands.
 
+   **If you store this in Bitwarden, use your personal vault — NOT the
+   Secrets Manager project the server's `bws run` pulls from.** Anything in
+   that project gets injected into the server's environment on every
+   backup run, which defeats the entire point of keeping the private key
+   off the VPS. (This happened once already — see the git history around
+   2026-07-26 for the incident and rotation.) If it ends up there by
+   mistake, treat the keypair as compromised: delete the secret, generate
+   a fresh keypair, and update `BACKUP_AGE_PUBLIC_KEY` to the new public
+   key — old backups stay decryptable with the old private key until they
+   age out of the B2 retention window.
+
 2. **Create the B2 bucket**: sign up at backblaze.com, create a bucket named
    `nam-website-backup` (private), create an Application Key scoped to that
    bucket.

@@ -63,6 +63,34 @@ describe("groupToolsByStatus", () => {
     const groups = groupToolsByStatus(tools);
     expect(groups.watching[0].id).toBe(2);
   });
+
+  it("sorts by stars descending within is_new groups", () => {
+    const tools = [
+      makeTool({ id: 1, status: "watching", is_new: false, stars: 10 }),
+      makeTool({ id: 2, status: "watching", is_new: false, stars: 500 }),
+      makeTool({ id: 3, status: "watching", is_new: false, stars: 100 }),
+    ];
+    const groups = groupToolsByStatus(tools);
+    expect(groups.watching.map((t) => t.id)).toEqual([2, 3, 1]);
+  });
+
+  it("sorts manual entries with null stars last within their is_new group", () => {
+    const tools = [
+      makeTool({ id: 1, status: "watching", is_new: false, stars: null }),
+      makeTool({ id: 2, status: "watching", is_new: false, stars: 5 }),
+    ];
+    const groups = groupToolsByStatus(tools);
+    expect(groups.watching.map((t) => t.id)).toEqual([2, 1]);
+  });
+
+  it("keeps is_new as the primary sort ahead of star count", () => {
+    const tools = [
+      makeTool({ id: 1, status: "watching", is_new: false, stars: 99999 }),
+      makeTool({ id: 2, status: "watching", is_new: true, stars: 1 }),
+    ];
+    const groups = groupToolsByStatus(tools);
+    expect(groups.watching.map((t) => t.id)).toEqual([2, 1]);
+  });
 });
 
 describe("formatStarCount", () => {

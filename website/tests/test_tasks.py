@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -136,6 +137,89 @@ class TestExecuteKlaudeUsesPrefix:
         prompt_args = [a for a in cmd if a.startswith("[downloads")]
         assert prompt_args, f"no downloads-prefixed prompt in {cmd!r}"
         assert "do the thing" in prompt_args[0]
+        assert "--json" in cmd
+
+
+@pytest.mark.django_db
+class TestExecuteKlaudeErrorDetection:
+    """Regression coverage for the "quiet fail" bug: klaude prints its
+    human-readable error to stdout (not stderr) in non-json mode, and a
+    stderr-only check missed nonzero-exit failures entirely, so a turn
+    that hit e.g. an LLM API error still got marked "done". Fixed by
+    passing --json and reading its structured `error` field."""
+
+    def _run(self, returncode, stdout, stderr=""):
+        s = Session.objects.create(workspace="ws", trace_path="/home/klaude/traces/ws/1")
+        t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1", status="approved")
+        with (
+            patch("website.tasks.subprocess.run") as mock_run,
+            patch("website.tasks._read_atif_trace", return_value={"steps": [{"source": "agent"}]}),
+        ):
+
+            def fake_run(cmd, **_kwargs):
+                if any("/klaude" in (a or "") for a in cmd):
+                    return MagicMock(returncode=returncode, stdout=stdout, stderr=stderr)
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            mock_run.side_effect = fake_run
+            from website.tasks import _execute_klaude
+
+            return _execute_klaude(t, is_continuation=False)
+
+    def test_success_json_output_gives_empty_error(self):
+        result = self._run(0, json.dumps({"error": None, "token_count": 5, "tool_calls": 1}))
+        assert result["error"] == ""
+
+    def test_failed_llm_call_surfaced_from_json_error_field(self):
+        """The exact scenario from the production incident: klaude exits
+        nonzero with the failure text on stdout (--json) and empty stderr —
+        this must be caught as a failure, not silently marked done."""
+        payload = json.dumps(
+            {"error": "Stopped: LLM error — Error code: 400 - thought_signature missing", "token_count": 40}
+        )
+        result = self._run(1, payload, stderr="")
+        assert "thought_signature" in result["error"]
+
+    def test_nonjson_stdout_falls_back_to_stderr(self):
+        result = self._run(1, "not json", stderr="boom: connection refused")
+        assert result["error"] == "boom: connection refused"
+
+    def test_nonjson_stdout_falls_back_to_stdout_when_stderr_empty(self):
+        """Mirrors klaude's pre---json behavior (errors printed to stdout);
+        must still be caught if --json output is somehow unparseable."""
+        result = self._run(1, "Error: something broke", stderr="")
+        assert result["error"] == "Error: something broke"
+
+    def test_totally_empty_output_still_reports_nonzero_exit(self):
+        result = self._run(1, "", stderr="")
+        assert "1" in result["error"]
+        assert result["error"] != ""
+
+    def test_run_turn_marks_failed_on_quiet_stdout_error(self):
+        """End-to-end: run_turn() must mark the turn/session failed when
+        klaude's JSON error field is set, even with a clean exit-adjacent
+        empty stderr."""
+        s = Session.objects.create(workspace="ws2", trace_path="/home/klaude/traces/ws2/1")
+        t = Turn.objects.create(session=s, prompt="x", submitter_ip="127.0.0.1", status="approved")
+        payload = json.dumps({"error": "Stopped: LLM error — 400 INVALID_ARGUMENT", "token_count": 12})
+        with (
+            patch("website.tasks.subprocess.run") as mock_run,
+            patch("website.tasks._read_atif_trace", return_value={"steps": [{"source": "agent"}]}),
+        ):
+
+            def fake_run(cmd, **_kwargs):
+                if any("/klaude" in (a or "") for a in cmd):
+                    return MagicMock(returncode=1, stdout=payload, stderr="")
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            mock_run.side_effect = fake_run
+            run_turn(t.id)
+
+        t.refresh_from_db()
+        s.refresh_from_db()
+        assert t.status == "failed"
+        assert "INVALID_ARGUMENT" in t.error
+        assert s.status == "failed"
 
 
 def _mock_find_result(pairs):
