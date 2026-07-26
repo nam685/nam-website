@@ -147,6 +147,73 @@ export interface GraphSearchResult {
   thumbnail_url: string;
 }
 
+/* ── Listens graph: full diagnostic (admin-gated) ──────── */
+
+/** Node types in the full graph — includes "tag", which the patch graph omits. */
+export type GraphFullNodeType = "track" | "artist" | "album" | "tag";
+export type GraphFullEdgeType = "structural" | "tag" | "affinity";
+
+export interface GraphFullNode {
+  id: string; // "<node_type>:<key>" — globally unique, use as force-graph id
+  key: string;
+  node_type: GraphFullNodeType;
+  title: string;
+  subtitle: string;
+  video_id: string;
+  play_count: number;
+  is_liked: boolean;
+  is_subscribed: boolean;
+  in_library: boolean;
+  degree: number; // total degree in full graph
+  component: number; // 0 = giant component; 1..N = smaller components (sorted desc by size)
+}
+
+export interface GraphFullEdge {
+  source: string; // node id ("<node_type>:<key>")
+  target: string; // node id
+  edge_type: GraphFullEdgeType;
+  source_kind: string; // "" for structural/tag; "colisten"|"similar_artist"|"similar_track" for affinity
+  weight: number;
+}
+
+export interface GraphSummary {
+  node_count: number;
+  edge_count: number;
+  component_count: number;
+  giant_size: number; // size of component 0
+  component_sizes: number[]; // desc
+  islands: {
+    component: number;
+    size: number;
+    nodes: { id: string; node_type: string; title: string }[];
+  }[]; // comps of size <= 5
+  degree: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    histogram: Record<string, number>; // "deg" -> count
+  };
+  top_hubs: {
+    id: string;
+    node_type: string;
+    title: string;
+    degree: number;
+    play_count: number;
+  }[]; // top 20 by degree
+  edge_type_counts: Record<string, number>;
+  source_kind_counts: Record<string, number>;
+  articulation_points: { id: string; node_type: string; title: string }[]; // within giant component
+  bridges: { source: string; target: string }[]; // within giant component
+  tagless_artists: number;
+}
+
+export interface GraphFull {
+  nodes: GraphFullNode[];
+  edges: GraphFullEdge[];
+  summary: GraphSummary;
+}
+
 export interface WatchVideo {
   id: number;
   youtube_video_id: string;

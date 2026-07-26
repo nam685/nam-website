@@ -11,6 +11,7 @@ class MusicNode(models.Model):
         ARTIST = "artist"
         ALBUM = "album"
         TRACK = "track"
+        TAG = "tag"  # Last.fm genre/mood — the multipartite connective layer
 
     node_type = models.CharField(max_length=8, choices=NodeType.choices)
     key = models.CharField(max_length=600)  # video_id | artist_lower | "artist::album"
@@ -24,6 +25,7 @@ class MusicNode(models.Model):
     is_subscribed = models.BooleanField(default=False)
     in_library = models.BooleanField(default=False)
     recommend_score = models.FloatField(default=0.0)
+    degree = models.PositiveIntegerField(default=0)  # incident-edge count; set during graph rebuild
 
     class Meta:
         unique_together = [("node_type", "key")]

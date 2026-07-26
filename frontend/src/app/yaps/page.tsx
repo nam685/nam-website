@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type Thought, API } from "@/lib/api";
-import { store, storeDel, getAdminToken } from "@/lib/auth";
+import { store, storeDel, getAdminToken, useIsAdmin } from "@/lib/auth";
 import { formatDate } from "@/lib/date";
 import { clearDraft, loadDraft, saveDraft, withImages } from "@/lib/thoughtDraft";
 
@@ -319,7 +319,7 @@ function Lightbox({
   const t = images[index];
   const hasPrev = index > 0;
   const hasNext = index < images.length - 1;
-  const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  const isAdmin = useIsAdmin();
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
