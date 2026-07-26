@@ -1,6 +1,8 @@
 from unittest.mock import patch
 
-from website.sentry import init_sentry, scrub_event
+import pytest
+
+from website.sentry import cron_checkin, init_sentry, scrub_event
 
 
 class TestInitSentry:
@@ -52,3 +54,31 @@ class TestScrubEvent:
         result = scrub_event(event, {})
         # Missing query_string should not cause crash and should not add one
         assert "query_string" not in result["request"]
+
+
+class TestCronCheckin:
+    @patch("website.sentry.sentry_sdk.crons.capture_checkin")
+    def test_success_path_reports_in_progress_then_ok(self, mock_checkin):
+        mock_checkin.return_value = "checkin-id-123"
+        with cron_checkin("sync-prices"):
+            pass
+
+        assert mock_checkin.call_count == 2
+        first_call, second_call = mock_checkin.call_args_list
+        assert first_call.kwargs["monitor_slug"] == "sync-prices"
+        assert first_call.kwargs["status"] == "in_progress"
+        assert second_call.kwargs["monitor_slug"] == "sync-prices"
+        assert second_call.kwargs["check_in_id"] == "checkin-id-123"
+        assert second_call.kwargs["status"] == "ok"
+
+    @patch("website.sentry.sentry_sdk.crons.capture_checkin")
+    def test_error_path_reports_error_and_reraises(self, mock_checkin):
+        mock_checkin.return_value = "checkin-id-456"
+        with pytest.raises(ValueError, match="boom"):
+            with cron_checkin("sync-prices"):
+                raise ValueError("boom")
+
+        assert mock_checkin.call_count == 2
+        _, second_call = mock_checkin.call_args_list
+        assert second_call.kwargs["check_in_id"] == "checkin-id-456"
+        assert second_call.kwargs["status"] == "error"
