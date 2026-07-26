@@ -9,6 +9,7 @@ import {
   dotHueCss,
 } from "@/lib/homepageContent";
 import { API } from "@/lib/api";
+import HomeField from "@/components/HomeField";
 
 export default function Home() {
   // Pick one photo per page load (1..5), stable for the session.
@@ -29,21 +30,50 @@ export default function Home() {
     const photoWrap = photoRef.current;
     if (!orbit || !ambient) return;
 
-    function onMove(e: MouseEvent) {
+    // Cache the orbit's center — recomputed only on resize, not on every
+    // mousemove — since getBoundingClientRect() forces a layout read.
+    let cx = 0;
+    let cy = 0;
+    function measure() {
       const rect = orbit!.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = e.clientX - cx;
-      const dy = e.clientY - cy;
-      const angle = angleFromCenter(dx, dy);
+      cx = rect.left + rect.width / 2;
+      cy = rect.top + rect.height / 2;
+    }
+    measure();
+
+    // Raw mousemove can fire far more often than the display refreshes
+    // (especially on high-poll-rate mice). Coalesce to at most one
+    // DOM write per animation frame, and skip the write entirely when
+    // the resulting color hasn't meaningfully changed.
+    let pendingX = 0;
+    let pendingY = 0;
+    let rafId: number | null = null;
+    let lastAngle: number | null = null;
+
+    function apply() {
+      rafId = null;
+      const dx = pendingX - cx;
+      const dy = pendingY - cy;
+      const angle = Math.round(angleFromCenter(dx, dy));
+      if (angle === lastAngle) return;
+      lastAngle = angle;
       const [r, g, b] = lerpDotColor(angle);
       ambient!.style.background = `radial-gradient(circle, rgba(${r},${g},${b},0.12) 0%, transparent 70%)`;
       photoWrap?.style.setProperty("--hue", `rgb(${r},${g},${b})`);
     }
 
-    document.addEventListener("mousemove", onMove);
+    function onMove(e: MouseEvent) {
+      pendingX = e.clientX;
+      pendingY = e.clientY;
+      if (rafId === null) rafId = requestAnimationFrame(apply);
+    }
+
+    window.addEventListener("resize", measure);
+    document.addEventListener("mousemove", onMove, { passive: true });
     return () => {
+      window.removeEventListener("resize", measure);
       document.removeEventListener("mousemove", onMove);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, []);
 
@@ -60,6 +90,9 @@ export default function Home() {
         justifyContent: "center",
       }}
     >
+      {/* Animated particle field (decorative, behind everything) */}
+      <HomeField />
+
       {/* Ambient glow */}
       <div
         ref={ambientRef}

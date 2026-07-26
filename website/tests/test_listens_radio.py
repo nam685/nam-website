@@ -50,7 +50,9 @@ def graph(db):  # noqa: ARG001
 def test_radio_next_returns_related_tracks(graph):  # noqa: ARG001
     tracks = music_graph.radio_next("seed", exclude_video_ids=[], limit=5)
     vids = {t["video_id"] for t in tracks}
-    assert vids == {"rel1", "rel2"}  # related, not `far`, not the seed itself
+    # Related tracks reliably surface via the walk; `far` may appear via the ε-teleport (rare jump).
+    assert {"rel1", "rel2"} <= vids
+    assert vids <= {"rel1", "rel2", "far"}  # only tracks that exist, never the seed itself
 
 
 @pytest.mark.django_db
@@ -68,7 +70,9 @@ def test_radio_next_track_shape(graph):  # noqa: ARG001
 def test_radio_next_respects_exclude(graph):  # noqa: ARG001
     tracks = music_graph.radio_next("seed", exclude_video_ids=["rel1"], limit=5)
     vids = {t["video_id"] for t in tracks}
-    assert vids == {"rel2"}
+    assert "rel1" not in vids  # excluded video never emitted (even via teleport)
+    assert "rel2" in vids
+    assert vids <= {"rel2", "far"}
 
 
 @pytest.mark.django_db
@@ -77,8 +81,19 @@ def test_radio_next_unknown_seed_returns_empty(graph):  # noqa: ARG001
 
 
 @pytest.mark.django_db
-def test_radio_next_isolated_node_returns_empty(graph):  # noqa: ARG001
-    assert music_graph.radio_next("far", exclude_video_ids=[], limit=5) == []
+def test_walk_isolated_seed_dead_ends_without_teleport(graph):  # noqa: ARG001
+    # 'far' is disconnected: a pure neighbourhood walk (teleport off) dead-ends → empty.
+    assert music_graph.walk("far", exclude_video_ids=[], limit=5, teleport_prob=0.0) == []
+
+
+@pytest.mark.django_db
+def test_walk_teleport_surfaces_isolated_seed(graph):  # noqa: ARG001
+    import random as _random
+
+    # With ε-teleport, radio from an isolated seed still surfaces songs (jumps to the giant),
+    # so a stray lone song never leaves the queue empty.
+    got = music_graph.walk("far", exclude_video_ids=[], limit=3, teleport_prob=0.5, rng=_random.Random(0))
+    assert len(got) > 0
 
 
 @pytest.mark.django_db
@@ -98,8 +113,8 @@ def test_radio_next_skips_zero_weight_only_neighbours():
     seed = _track_node("z_seed", "Seed", "A")
     rel = _track_node("z_rel", "Rel", "A")
     MusicEdge.objects.create(source=seed, target=rel, edge_type="similar_track", weight=0.0)
-    # Only neighbour has score 0 -> no candidates, and no crash.
-    assert music_graph.radio_next("z_seed", exclude_video_ids=[], limit=5) == []
+    # The zero-weight edge is not walkable, so with teleport off there are no candidates (no crash).
+    assert music_graph.walk("z_seed", exclude_video_ids=[], limit=5, teleport_prob=0.0) == []
 
 
 @pytest.mark.django_db
@@ -144,14 +159,15 @@ def test_radio_endpoint_returns_tracks(client, graph):  # noqa: ARG001
     resp = client.get("/api/listens/radio/", {"seed": "seed"})
     assert resp.status_code == 200
     vids = {t["video_id"] for t in resp.json()["tracks"]}
-    assert vids == {"rel1", "rel2"}
+    assert {"rel1", "rel2"} <= vids <= {"rel1", "rel2", "far"}  # `far` may appear via ε-teleport
 
 
 @pytest.mark.django_db
 def test_radio_endpoint_honours_exclude(client, graph):  # noqa: ARG001
     resp = client.get("/api/listens/radio/", {"seed": "seed", "exclude": "rel1"})
     assert resp.status_code == 200
-    assert {t["video_id"] for t in resp.json()["tracks"]} == {"rel2"}
+    vids = {t["video_id"] for t in resp.json()["tracks"]}
+    assert "rel1" not in vids and "rel2" in vids and vids <= {"rel2", "far"}
 
 
 @pytest.mark.django_db

@@ -7,8 +7,8 @@ Requires=docker.service
 Type=simple
 User=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-ExecStart=/home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1
-EnvironmentFile=/home/nam/nam-website-deploy/.env
+ExecStart=/usr/local/bin/bws run --project-id ffbc63d1-23df-41c4-a2ff-b49300cf115c -- /home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1
+EnvironmentFile=/etc/nam-website/bws-token
 Restart=always
 RestartSec=5
 

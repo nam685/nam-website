@@ -4,7 +4,7 @@
 
 - **Provider:** Hetzner Cloud
 - **Public IP:** 46.224.162.194
-- **Architecture:** aarch64 (ARM64)
+- **Architecture:** x86_64
 - **OS:** Ubuntu
 - **Node.js:** v20
 
@@ -148,6 +148,40 @@ expected daily ping didn't arrive.
 
 ---
 
+## Secrets (Bitwarden Secrets Manager)
+
+Prod secrets — for `django`, `celery`, `sync-prices`, and `klaude-worker` (see
+[`docs/server-setup-klaude.md`](server-setup-klaude.md)) — live in a Bitwarden **Secrets Manager**
+project (`nam-website-prod`), not a flat `.env`. This is a distinct product/API from the personal
+Bitwarden vault. Local/dev is unaffected — `docker compose`/`make up` still use a plain `.env`.
+
+Every unit's `ExecStart` is wrapped with `bws run --project-id <project-id> -- <command>`, which
+injects the project's secrets as env vars for that one process only. The single remaining flat-file
+secret is `/etc/nam-website/bws-token` (`BWS_ACCESS_TOKEN=...`, `chmod 600`, owned `nam`, never in
+git) — a read-only machine-account token scoped to just this one project. Functionally equivalent to
+a 1Password Service Account token: one bootstrap credential everything else derives from.
+
+**Current secrets in the project** (mirrors what used to be in prod `.env`, plus `GEMINI_API_KEY`
+for klaude): `DEBUG`, `SECRET_KEY`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `ADMIN_SECRET`, `REDIS_URL`,
+`ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`, `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `ALPHA_VANTAGE_API_KEY`, `YTMUSIC_CLIENT_ID`, `YTMUSIC_CLIENT_SECRET`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LASTFM_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
+`AOE2_CLAUDE_BIN`, `AOE2_COACH_MODEL`, `GEMINI_API_KEY`.
+
+**Standalone scripts** (`scripts/audiobook_*.py`, using `NAM_ADMIN_TOKEN`) are not systemd-managed
+and keep reading a local `.env` when run manually — out of scope for this migration.
+
+**Setting up a new project from scratch** (e.g. after a server rebuild): create the project in the
+Bitwarden Secrets Manager web UI, add all vars above with real values, create a machine account with
+**read-only** access scoped to just that project, generate its access token, and write it to
+`/etc/nam-website/bws-token` per step 3 below.
+
+**Rotation:** storage location changed, values did not — `ADMIN_SECRET`/`SECRET_KEY`/OAuth secrets
+still hold their pre-migration values and should be rotated in a follow-up pass now that the old
+values have sat in a flat file (and server backups/history) for a while.
+
+---
+
 ## First-time Server Setup
 
 Run these steps once on a new server. The deploy CI only restarts services — it does not install dependencies.
@@ -180,13 +214,30 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo 
 sudo apt update && sudo apt install caddy -y
 ```
 
-### 3. Clone repo and create .env
+### 3. Clone repo and install bws
 
 ```bash
 git clone https://github.com/nam685/nam-website.git ~/nam-website-deploy
 cd ~/nam-website-deploy
-cp .env.example .env
-nano .env   # set SECRET_KEY, POSTGRES_PASSWORD, ADMIN_SECRET (use python3 secrets generator)
+```
+
+Prod secrets are stored in **Bitwarden Secrets Manager** (project `nam-website-prod`), not a flat `.env` — see "Secrets (Bitwarden Secrets Manager)" below for the full list of vars and how to populate a new project. Install the `bws` CLI:
+
+```bash
+cd /tmp
+curl -sL -o bws.zip https://github.com/bitwarden/sdk-sm/releases/latest/download/bws-x86_64-unknown-linux-gnu-<version>.zip
+unzip bws.zip -d bws-extracted
+sudo install -m 755 bws-extracted/bws /usr/local/bin/bws
+rm -rf bws.zip bws-extracted
+```
+
+Create the one bootstrap secret — a read-only machine-account access token scoped to the `nam-website-prod` project only:
+
+```bash
+sudo mkdir -p /etc/nam-website
+echo 'BWS_ACCESS_TOKEN=<machine-account-token>' | sudo tee /etc/nam-website/bws-token
+sudo chown nam:nam /etc/nam-website/bws-token
+sudo chmod 600 /etc/nam-website/bws-token
 ```
 
 ### 4. Start Docker services (PostgreSQL + Redis)
@@ -199,18 +250,23 @@ docker compose up -d
 
 ```bash
 uv sync
-uv run python manage.py migrate
+set -a; source /etc/nam-website/bws-token; set +a
+bws run --project-id <project-id> -- uv run python manage.py migrate
 ```
 
 ### 6. Install systemd services
+
+Each unit's `ExecStart` is prefixed with `bws run --project-id <project-id> -- ...` and reads `EnvironmentFile=/etc/nam-website/bws-token` (see step 3) instead of a flat `.env`. `nextjs.service` needs neither — the frontend reads no secret env vars.
 
 ```bash
 sudo cp infra/django.service /etc/systemd/system/django.service
 sudo cp infra/nextjs.service /etc/systemd/system/nextjs.service
 sudo cp infra/celery.service /etc/systemd/system/celery.service
+sudo cp infra/sync-prices.service /etc/systemd/system/sync-prices.service
+sudo cp infra/sync-prices.timer /etc/systemd/system/sync-prices.timer
 sudo systemctl daemon-reload
-sudo systemctl enable django nextjs celery
-sudo systemctl start django nextjs celery
+sudo systemctl enable django nextjs celery sync-prices.timer
+sudo systemctl start django nextjs celery sync-prices.timer
 ```
 
 ### 7. Configure Caddy

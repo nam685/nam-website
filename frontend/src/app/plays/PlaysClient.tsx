@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { API } from "@/lib/api";
 import type { LichessStatus } from "@/lib/api";
-import { fetchAdminNonce, store } from "@/lib/auth";
+import { fetchAdminNonce, store, useIsAdmin } from "@/lib/auth";
 
 const OpeningExplorer = dynamic(() => import("@/components/OpeningExplorer"), {
   ssr: false,
@@ -35,7 +35,7 @@ export default function PlaysClient({
   const [tab, setTab] = useState<Tab>(
     section === "aoe2" ? "empires" : "explorer",
   );
-  const [isAdmin, setIsAdmin] = useState(false);
+  const isAdmin = useIsAdmin();
   const [lichessStatus, setLichessStatus] = useState<LichessStatus | null>(
     null,
   );
@@ -47,20 +47,6 @@ export default function PlaysClient({
   useEffect(() => {
     setTab(section === "aoe2" ? "empires" : "explorer");
   }, [section]);
-
-  // Check admin status
-  useEffect(() => {
-    const token = store("adminToken");
-    if (!token) return;
-
-    fetch(`${API}/api/auth/check/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => {
-        if (r.ok) setIsAdmin(true);
-      })
-      .catch(() => {});
-  }, []);
 
   // Fetch Lichess connection status
   useEffect(() => {
