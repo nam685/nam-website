@@ -27,6 +27,87 @@ A small daemon runs on the **gaming PC** (not the server) to auto-upload Age of 
 DE recorded games to the site after each match. Setup and operation:
 [`scripts/AOE2_WATCHER.md`](../scripts/AOE2_WATCHER.md).
 
+## Backups
+
+Nightly encrypted backup of the Postgres database and media directory,
+uploaded offsite to Backblaze B2 (a different provider than Hetzner), with
+a healthchecks.io dead-man's-switch: if the nightly job doesn't run or
+fails partway, healthchecks.io emails nam685@proton.me because the
+expected daily ping didn't arrive.
+
+**One-time setup on the server:**
+
+1. **Generate the age keypair** (do this on your own machine, NOT the
+   server — the private key must never touch the VPS):
+   ```bash
+   age-keygen -o nam-website-backup-key.txt
+   # prints "Public key: age1..." — copy that into BACKUP_AGE_PUBLIC_KEY below
+   ```
+   Store `nam-website-backup-key.txt` somewhere durable and private (password
+   manager, offline drive). This is the ONLY way to decrypt backups — losing
+   it makes all backups permanently unreadable. Full restore procedure is
+   documented separately once the disaster-recovery runbook (issue #291
+   item 5) lands.
+
+2. **Create the B2 bucket**: sign up at backblaze.com, create a bucket named
+   `nam-website-backup` (private), create an Application Key scoped to that
+   bucket.
+
+3. **Install and configure rclone on the server**:
+   ```bash
+   curl https://rclone.org/install.sh | sudo bash
+   rclone config  # create a remote named "b2", type "b2", paste the
+                   # Application Key ID / Application Key from step 2
+   ```
+   This writes `~/.config/rclone/rclone.conf` (already `chmod 600` by
+   rclone) — never commit this file.
+
+4. **Create the healthchecks.io check**: sign up at healthchecks.io, create
+   a check named "nam-website-backup", schedule "Every 1 day" with a few
+   hours of grace, notification channel = email to nam685@proton.me. Copy
+   the check's UUID (from its ping URL, `https://hc-ping.com/<uuid>`).
+
+5. **Add to `.env`** on the server:
+   ```
+   BACKUP_AGE_PUBLIC_KEY=age1...       # from step 1
+   BACKUP_B2_REMOTE=b2:nam-website-backup
+   HEALTHCHECKS_BACKUP_UUID=<uuid>     # from step 4
+   ```
+   (If issue #296's Bitwarden Secrets Manager migration has landed by the
+   time you set this up, add these there instead, following whatever
+   pattern #296 established for the other secrets.)
+
+6. **Install the systemd units**:
+   ```bash
+   sudo cp infra/postgres-backup.service infra/postgres-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now postgres-backup.timer
+   ```
+
+7. **Run it once by hand and verify**:
+   ```bash
+   sudo systemctl start postgres-backup.service
+   sudo systemctl status postgres-backup.service   # should exit 0
+   rclone ls b2:nam-website-backup                 # should show today's db/ and media/ objects
+   ```
+   Check healthchecks.io shows a successful check-in.
+
+8. **Do one test restore** (required — an unrestorable backup is worse than
+   no backup, because it creates false confidence):
+   ```bash
+   rclone cat b2:nam-website-backup/db/<date>.sql.gz.age \
+     | age -d -i /path/to/nam-website-backup-key.txt \
+     | gunzip > /tmp/restore-test.sql
+   createdb restore_test
+   psql restore_test < /tmp/restore-test.sql
+   psql restore_test -c "select count(*) from website_thought;"  # sanity check
+   dropdb restore_test
+   ```
+
+9. **Set the B2 bucket lifecycle rule**: in the B2 bucket settings, add a
+   lifecycle rule to delete files older than 30 days, so storage cost
+   doesn't grow unbounded. This is bucket-side config, not repo code.
+
 ---
 
 ## First-time Server Setup
