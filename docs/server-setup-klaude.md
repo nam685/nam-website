@@ -28,8 +28,12 @@ sudo chmod 750 /home/klaude/traces
 
 ## 4. Lock down nam's secrets
 
+Secrets are stored in Bitwarden Secrets Manager, not `.env` — see
+[`docs/infrastructure.md`](infrastructure.md#secrets-bitwarden-secrets-manager). Lock down the one
+remaining bootstrap secret and SSH keys:
+
 ```bash
-chmod 600 /home/nam/nam-website-deploy/.env
+chmod 600 /etc/nam-website/bws-token
 chmod 600 /home/nam/.ssh/*
 chmod 700 /home/nam/.ssh
 ```
@@ -58,22 +62,31 @@ Create `/home/klaude/.klaude.toml`:
 
 ```toml
 [default]
-model = "openrouter/free"
-base_url = "https://openrouter.ai/api/v1"
-api_key_env = "OPENROUTER_API_KEY"
-context_window = 32768
+model = "gemini-flash-latest"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+api_key_env = "GEMINI_API_KEY"
+context_window = 1000000
 ```
 
-Set API key:
 ```bash
-echo 'export OPENROUTER_API_KEY="your-key-here"' >> /home/klaude/.bashrc
+sudo chown klaude:klaude /home/klaude/.klaude.toml
+sudo chmod 600 /home/klaude/.klaude.toml
 ```
 
-The `OPENROUTER_API_KEY` is also reused by klaude's `read_document`
-VLM path (describes images via Llama 3.2 Vision free). If you'd
-rather use OCR-only, set `[vision].backend = "ocr"` in
-`.klaude.toml` — see the klaude USAGE docs for the full `[vision]`
-block.
+`GEMINI_API_KEY` itself lives in the `nam-website-prod` Bitwarden Secrets Manager project (see
+[`docs/infrastructure.md`](infrastructure.md#secrets-bitwarden-secrets-manager)), not in a local
+file. It reaches the `klaude` user like this: `celery.service` and `klaude-worker.service` (both
+`User=nam`) get it injected via their `bws run` wrapper; `website/tasks.py` shells out to klaude via
+`sudo -u klaude /home/klaude/.local/bin/klaude ...`; and `/etc/sudoers.d/klaude` has a scoped
+`Defaults:nam env_keep += "GEMINI_API_KEY"` line so that one var — and only that one — crosses the
+user-switch boundary. Do not hardcode the key directly in `.klaude.toml` or export it from
+`.bashrc` — both were tried and abandoned because `sudo -u klaude <bin>` (no `-i`, no shell) doesn't
+source `.bashrc`, and a hardcoded value is exactly the flat-file-secret problem Bitwarden migration
+was meant to fix.
+
+Gemini Flash is natively multimodal, so the same key covers klaude's `read_document` VLM path too.
+If you'd rather use OCR-only, set `[vision].backend = "ocr"` in `.klaude.toml` — see the klaude
+USAGE docs for the full `[vision]` block.
 
 ## 7. GitHub deploy key for klaude-playground
 
@@ -95,11 +108,17 @@ sudo chmod 600 /home/klaude/.ssh/config
 
 ## 8. sudoers rule (nam -> klaude)
 
-Allow the Celery worker (running as nam) to invoke klaude as the klaude user:
+Allow the Celery worker (running as nam) to invoke klaude as the klaude user, and let
+`GEMINI_API_KEY` cross that boundary (see step 6):
 
 ```bash
-echo 'nam ALL=(klaude) NOPASSWD: /home/klaude/.local/bin/klaude' | sudo tee /etc/sudoers.d/klaude
-sudo chmod 440 /etc/sudoers.d/klaude
+cat << 'EOF' | sudo tee /tmp/klaude.sudoers.new
+Defaults:nam env_keep += "GEMINI_API_KEY"
+nam ALL=(klaude) NOPASSWD: /home/klaude/.local/bin/klaude
+EOF
+sudo visudo -cf /tmp/klaude.sudoers.new   # validate before installing
+sudo install -m 440 /tmp/klaude.sudoers.new /etc/sudoers.d/klaude
+rm /tmp/klaude.sudoers.new
 ```
 
 ## 9. Network restrictions (iptables)
@@ -137,7 +156,8 @@ Type=simple
 User=nam
 Group=nam
 WorkingDirectory=/home/nam/nam-website-deploy
-ExecStart=/home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1 -Q slops
+ExecStart=/usr/local/bin/bws run --project-id <project-id> -- /home/nam/.local/bin/uv run celery -A config worker --loglevel=info --concurrency=1 -Q slops
+EnvironmentFile=/etc/nam-website/bws-token
 Restart=on-failure
 RestartSec=10
 Environment=DJANGO_SETTINGS_MODULE=config.settings
