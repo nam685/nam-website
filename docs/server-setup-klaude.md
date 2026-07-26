@@ -54,15 +54,26 @@ pip install --user git+https://github.com/nam685/klaude.git
 
 ## 6. Configure klaude
 
-Create `/home/klaude/.klaude.toml`:
+Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
+(no credit card required), then create `/home/klaude/.klaude.toml`:
 
 ```toml
 [default]
 model = "gemini-flash-latest"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-api_key_env = "GEMINI_API_KEY"
+api_key = "your-key-here"
 context_window = 1000000
 ```
+
+Use `api_key` (the raw value), not `api_key_env`. `website/tasks.py`
+invokes klaude as `sudo -u klaude <bin> ...` with no login shell, `-E`,
+or matching `env_keep` in `/etc/sudoers.d/klaude` — so nothing in
+`/home/klaude/.bashrc` reaches the process, and an `api_key_env`
+pointing at an unset var means silent auth failure in production even
+though a manual `sudo -u klaude bash -lc 'klaude ...'` test would work
+fine (that path *does* source `.bashrc`, masking the gap). Verified by
+running klaude with a fully stripped env (`env -i`) matching the real
+invocation — only `api_key` in the toml made it succeed.
 
 `gemini-flash-latest` is a moving alias (currently Gemini 3.6 Flash)
 rather than a dated model id, so it keeps working across Google's
@@ -74,20 +85,15 @@ unless you've bought $10 in lifetime credits. Gemini's free tier
 gives a single consistent, capable model at 1,500 req/day, 10 RPM,
 250K TPM — no billing required.
 
-Set API key:
-```bash
-echo 'export GEMINI_API_KEY="your-key-here"' >> /home/klaude/.bashrc
-```
+Since the key sits in `.klaude.toml` in plaintext either way, treat
+the file like `.env`: `chmod 600 /home/klaude/.klaude.toml`.
 
-Get a free key from [Google AI Studio](https://aistudio.google.com/apikey)
-(no credit card required).
-
-The `GEMINI_API_KEY` is also reused by klaude's `read_document`
-VLM path (describes images) since Gemini Flash is natively
-multimodal — no separate vision model/key needed, unlike the old
-OpenRouter setup. If you'd rather use OCR-only, set
-`[vision].backend = "ocr"` in `.klaude.toml` — see the klaude
-USAGE docs for the full `[vision]` block.
+Gemini Flash is natively multimodal, so the same `[default]` key also
+covers klaude's `read_document` VLM path (describes images) — no
+separate vision model/key needed, unlike the old OpenRouter setup. If
+you'd rather use OCR-only, set `[vision].backend = "ocr"` in
+`.klaude.toml` — see the klaude USAGE docs for the full `[vision]`
+block.
 
 If Google's free tier isn't smart enough for a given task, `klaude
 --profile pro` can point at a paid `gemini-3-pro`/`gemini-3.6-pro`
