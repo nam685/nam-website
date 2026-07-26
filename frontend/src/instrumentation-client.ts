@@ -14,7 +14,6 @@ if (dsn) {
     dsn,
     sendDefaultPii: false,
     beforeSend: scrubSentryEvent,
-    tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
 
     // Session Replay is intentionally NOT enabled: this app's /sudo login
     // page and GitHub/Google/Lichess OAuth callback flows must not risk
