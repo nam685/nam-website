@@ -7,6 +7,7 @@ const mk = (id: number, image: string | null): Thought => ({
   id,
   content: "",
   image,
+  video: null,
   created_at: "2026-01-01T00:00:00Z",
 });
 

@@ -18,6 +18,18 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Site works over HTTPS (Caddy auto-TLS)
 - [ ] `/api/health/` returns 200
 
+## Home
+
+- [ ] Landing orbit renders: center profile photo + section dots, no console errors (no hydration warning)
+- [ ] Profile photo is circular, served from `/media/profile/profile-N.webp`, and varies between reloads (random per load)
+- [ ] Photo rim + edge tint track the mouse, matching the ambient glow hue (e.g. red near `yaps`, cyan near `plays`)
+- [ ] Photo sized ~75% of the center→dot distance; layout holds on mobile (orbit goes 85vw)
+- [ ] Section dots are all the same size
+- [ ] Particle field animates behind the orbit: comets launch from the photo edge and leave traces that fade after a few seconds
+- [ ] Cursor spotlight brightens nearby traces — round near the center, stretching into a smooth radial beam toward the edges (no sudden jump in shape)
+- [ ] Field traces + spotlight share the cursor hue (same as the photo rim); section dots keep their own colors
+- [ ] With OS "reduce motion" enabled, the field does not animate; dots + photo still work
+
 ## Auth (/sudo)
 
 - [ ] Login form appears at `/sudo`
@@ -27,7 +39,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Protected pages redirect to `/sudo` when not logged in
 - [ ] Token expires after 7 days
 
-## Thinks
+## Yaps
 
 - [ ] Feed loads as a single-column timeline and paginates
 - [ ] "Load more" fetches the next page
@@ -35,16 +47,20 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Admin can submit a text-only post (succeeds)
 - [ ] Admin can submit an image-only post (succeeds)
 - [ ] Admin can submit a post with both text and image (succeeds)
+- [ ] Admin can submit a video-only post (succeeds) and it plays inline with controls
+- [ ] Admin can submit a post with text + video (succeeds)
+- [ ] Submitting both an image and a video together is rejected
+- [ ] Oversized video (>50 MB) or non-mp4/webm file is rejected
 - [ ] 18-hour cooldown is enforced — rapid reposts are blocked
 - [ ] Content length limit (2000 chars) is enforced
-- [ ] Image attach works via drag-and-drop, paste, and click-to-browse
+- [ ] Image/video attach works via click-to-browse (and image via drag-and-drop / paste)
 - [ ] Large image fills the column width; small image renders at natural size (not stretched)
 - [ ] Clicking an image opens the full-screen lightbox
 - [ ] Lightbox: ← / → navigate only between image posts (text-only posts skipped)
 - [ ] Lightbox: Esc closes the lightbox
 - [ ] Lightbox: admin delete button removes the post and closes the lightbox
 - [ ] Typed text in the compose box survives a redirect to `/sudo` to log in and is restored on return
-- [ ] Visiting `/draws` 301-redirects to `/thinks`
+- [ ] Visiting `/draws` and `/thinks` 301-redirect to `/yaps`
 
 ## Codes
 
@@ -77,7 +93,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] No "▶ PLAY", SYNC, or AUTH controls visible when logged out
 
 ### Admin
-- [ ] Sync button appears and triggers sync
+- [ ] A single Sync/Auth button appears (no separate Auth button); it reads SYNC and triggers a sync.
 - [ ] Sync cooldown (5 min) is enforced
 - [ ] Google Takeout import works via POST /api/listens/import/
 - [ ] Sync also pulls liked tracks (synced_liked count in response)
@@ -85,13 +101,31 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Sync rebuilds the graph (nodes/edges refresh after new tracks land)
 - [ ] `python manage.py build_music_graph` rebuilds the graph from the CLI
 - [ ] "▶ PLAY" appears on a selected node's card (track plays; artist/album plays its top track)
-- [ ] AUTH button toggles re-auth form with textarea for pasting browser headers
+- [ ] After a sync reports the YTM session expired (auth_expired), the button flips to AUTH and opens the re-auth panel; a successful re-auth reverts it to SYNC.
 - [ ] Re-auth saves headers and validates YTMusic init before writing
 - [ ] Daily automated sync runs via Celery Beat (also rebuilds the graph)
 - [ ] Clicking play opens the mini player
 - [ ] Mini player: play/pause, next/prev, shuffle, repeat, seek
-- [ ] Mini player persists when navigating to other pages (/watches, /thinks, etc.)
+- [ ] Mini player persists when navigating to other pages (/watches, /yaps, etc.)
 - [ ] Mini player minimize/close work
+- [ ] Listens: the ∞ (radio) toggle in the player turns orange when enabled
+- [ ] Listens: with radio on, playing a single track keeps auto-playing related tracks (queue never ends)
+- [ ] Listens: with radio off, playback stops at the end of the queue
+- [ ] Listens: radio state survives a page reload (persisted in session)
+- [ ] `/listens` shuffle button: pressing it repeatedly surfaces visibly different clusters (not the same few hub tracks every time).
+- [ ] Radio/shuffle keep flowing without stalling (graph is one connected component — no dead-end islands).
+- [ ] /listens: loading a new patch (shuffle / clicking a node) centers the view on the seed node and zooms in enough to read every node's title (does not zoom out to frame the whole patch).
+
+### Listens graph diagnostic (admin)
+- [ ] /listens: an admin-only "⊹ FULL GRAPH" button (next to SHUFFLE) links to /listens/graph; it is absent when not logged in.
+- [ ] `/listens/graph` redirects to `/sudo` when not logged in; loads the full graph when authenticated.
+- [ ] `GET /api/listens/graph/` returns 401/403 without a Bearer token, 200 with a valid admin token (served from the rebuild-warmed cache).
+- [ ] Full graph renders as one dominant connected component (giant), islands (if any) shown in distinct colors.
+- [ ] Node size scales with degree; no single low-play-count node dominates as a mega-hub.
+- [ ] Edge-type filter toggles (structural / tag / colisten / similar_artist / similar_track / content) show/hide edges.
+- [ ] Stats panel: component count, degree histogram, top hubs, islands, articulation points/bridges, tag-less artist count.
+- [ ] After a graph rebuild, component count is ~1 and the old degree-8 plateau / 395-edge hubs are gone.
+- [ ] /listens/graph: zoomed out renders as flat dots with edges hidden and stays smooth on a large graph; zooming in restores glow, focus ring, and labels.
 
 ### Responsive
 - [ ] Mobile: stats bar compact, single-column layouts, player becomes bottom bar
@@ -139,7 +173,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] `/feed.xml` returns valid RSS XML
 - [ ] Feed contains thought entries with correct titles and dates
 
-## Plays — Lichess Integration
+## Plays — Chess tab (Lichess)
 
 - [ ] Explorer tab loads with starting position and Chessground board
 - [ ] Making moves on the board fetches explorer data from Lichess
@@ -158,6 +192,52 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] Game actions: abort, resign, offer draw
 - [ ] Game end: result displayed, "New Game" returns to creator
 - [ ] Mobile: board and panels stack vertically
+
+## Plays — AoE 2 tab
+
+- [ ] `/plays` redirects to `/plays/chess`; the full-width "Chess" / "AoE 2" selector spans the content width and clicking each navigates to `/plays/chess` and `/plays/aoe2` respectively (URL path reflects the active game).
+- [ ] The game selector sits flush under the top nav (no large gap above it).
+- [ ] AoE 2 section: stats header shows current ELO, W/L record, total games, and top civilization.
+- [ ] Full-width two-pane layout: a selectable game list on the left, a tabbed detail pane on the right, spanning the full page (no narrow max-width column).
+- [ ] Featured game (or `?game=`, or newest) is selected by default; selecting another game swaps the detail pane.
+- [ ] Every analyzed game in the list shows a colored opening tag (Scouts / Archers / Fast Castle / …) — never a blank/missing badge, even for haiku-coached games where the LLM omitted the `- Opening:` line (it falls back to the deterministic classifier). Backfill older blank tags with `uv run python manage.py aoe2_backfill_openings`.
+- [ ] The detail pane opens on the **Coach** tab by default.
+- [ ] Switching detail tabs (Coach / Economy / Army & Stats / Mistakes) does NOT re-fetch or reload data. There is **no** separate Technology tab — its tech timeline now lives in the Army & Stats graph's below-axis lanes.
+- [ ] In the Army & Stats graph: each tech/unit icon matches its name (e.g. Horse Collar shows a collar, Knight shows a knight) — no wrong art; every known name shows a real icon (no monogram fallback for coach-vocabulary names), and a genuinely-unknown name shows a "?" chip (never a broken image or a bare dot).
+- [ ] **Army & Stats** tab leads with the build-order guess, then ONE unified full-width production graph (stacked areas above the axis, m:ss time labels in their own band below, below-zero tech-research icon LANES — eco / military / university stacked, not all on one row — age-up guide-lines + age icons spanning the chart, vertical legend on the right), then the APM/efficiency panel. The old "produced strip" text is gone; **Mistakes** is its own separate tab.
+- [ ] On desktop each tab's content fits without the detail pane scrolling.
+- [ ] Opponent is shown by civilization only — no player names visible anywhere in the UI.
+- [ ] No chat text appears anywhere in the UI or in raw API responses (`/api/aoe2/` and `/api/aoe2/<id>/`).
+- [ ] Visiting `/plays/aoe2?game=<id>` (and the legacy `/plays?game=<id>`, which redirects) deep-links to the AoE 2 section with that game selected.
+- [ ] ⋮ menu copies a share link (`/plays/aoe2?game=<id>`) to the clipboard.
+- [ ] Admin: file upload box is visible; uploading a valid `.aoe2record` processes and shows the game.
+- [ ] Non-admin: upload box is not visible.
+- [ ] Uploading a non-1v1 recording (team game, single-player, vs-AI) results in a "skipped" response and no new game appears publicly.
+
+### AoE 2 tab — detail tabs (aoe2coach v2)
+
+- [ ] **Coach** tab shows: the coach verdict rendered as Markdown (headings, bold, lists — no raw `#`/`**` or agent scaffolding), the top build-order guess with a confidence %, the strategic-map minimap, and a basics grid (result, matchup, map, length, Feudal/Castle/Imperial, APM, ELO).
+- [ ] The minimap (you = blue, opponent = red) shows building dots, walls, forward buildings ringed, engagement markers, and base centroids; footnote reads "shows where things were *built*, not what survived".
+- [ ] **Economy** tab shows TWO clearly separated blocks with their units labeled: "Worker allocation — villager COUNTS per resource" (per-age stacked bars) and "Resource balance — resource AMOUNTS spent" (per-resource spend bars). Counts and amounts are never conflated.
+- [ ] Economy: floating flags render (e.g. "⚠ floating wood (+49%)") when present; collected totals and relic gold show "unavailable"; both blocks carry a `~est` badge.
+- [ ] **Army & Stats** production graph labels the areas as "produced" cumulative (never "live"); the unit legend on the right shows swatch + real icon + name + total; the below-zero icon row mixes unit-production and tech/upgrade icons at their times; build-order candidates (at the top of the tab) show matched (✓) / missed (✗) signal chips.
+- [ ] The Army & Stats graph's below-axis tech timeline shows age-arrival guide-lines and tech-research markers in separate stacked lanes (eco / military / university), each marker using a real AoE2 DE icon (100% coverage for coach-vocabulary names), with a "?" chip for genuinely-unknown names.
+- [ ] APM split reads "APM N — X eco · Y military · Z other" with the caption "commands per minute, by what they controlled" (not the old cryptic "eco N mil N other").
+- [ ] The chess|AoE 2 selector stays full width when **Chess** is selected (the chess *content* below it stays in the reading column); the AoE 2 tab's base font reads a notch larger than before.
+- [ ] Efficiency: TC idle is shown as a **pre-cap %** labeled "idle before 200 pop, age-ups excluded" (not an absolute mm:ss).
+- [ ] Mistakes list shows severity + confidence-tier badge + "Fix" + learn-more deep-link; a game with none shows "No mistakes detected" (never an invented one).
+- [ ] A match analyzed before the v2 upgrade (no reconstruction) still renders cleanly — coach text + basics, no broken/empty panels, no console errors.
+- [ ] Raw `/api/aoe2/<id>/` response includes `reconstruction` (with `efficiency.precap_window_s`), `map_geometry`, `classifier`, `mistakes`, `economy` (with `worker_allocation` + `resource_balance`), `map_images`, and `coach_tier`; still no player names or chat anywhere.
+
+### AoE 2 — build-order library (`/plays/aoe2/builds`)
+
+- [ ] `/plays/aoe2/builds` loads without auth and lists all eleven builds grouped by family (Scouts, Archers, Men-at-Arms, Drush, Knights, Fast Castle, Drush → Fast Castle, Trash); each card shows name + family + one-line summary and links to its learn page.
+- [ ] A build learn page (e.g. `/plays/aoe2/builds/archers-1-range`) shows the name, family badge, recommended civs, summary, and source (Hera guide + page).
+- [ ] The learn page's phase-laned timeline graphic renders Dark Age → Feudal → Castle (→ Imperial) lanes; Feudal/Castle/Imperial lanes show the age target (arrival time / vils at click); each step renders a real AoE2 DE icon where its task maps to one, with a clean monogram glyph fallback otherwise.
+- [ ] The ordered step list (phase, villager count, task) and the "what's next" transitions both render.
+- [ ] An unknown build id (e.g. `/plays/aoe2/builds/not-a-real-build`) returns a 404 page, and `GET /api/aoe2/builds/not-a-real-build/` returns HTTP 404 (not 500).
+- [ ] On the Coach tab, the top build-order guess is a link that navigates to `/plays/aoe2/builds/<build_id>` for the matching learn page.
+- [ ] The build-library pages use the cyan `/plays` accent and the plays page background (no accent flash on uncached load).
 
 ## Performance
 

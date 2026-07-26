@@ -23,6 +23,11 @@ nam685.de {
         respond "Forbidden" 403
     }
 
+    # Raw AoE2 recorded games — contain opponent names + chat; never served publicly
+    handle /media/aoe2/* {
+        respond "Forbidden" 403
+    }
+
     # Uploaded media files
     handle /media/* {
         root * /home/nam/nam-website-deploy

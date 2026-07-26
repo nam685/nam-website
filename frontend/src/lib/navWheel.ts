@@ -1,7 +1,7 @@
 // Pure nav-wheel logic — extracted so it can be unit-tested without a DOM.
 
 export const NAV_ITEMS = [
-  { label: "thinks", href: "/thinks", accent: "#FF1744" },
+  { label: "yaps", href: "/yaps", accent: "#FF1744" },
   { label: "codes", href: "/codes", accent: "#22c55e" },
   { label: "grinds", href: "/grinds", accent: "#f59e0b" },
   { label: "listens", href: "/listens", accent: "#f97316" },

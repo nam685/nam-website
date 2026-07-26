@@ -1,7 +1,6 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   API,
   type GraphPatch,
@@ -9,54 +8,31 @@ import {
   type ListenStats,
   type ListenTrack,
 } from "@/lib/api";
-import { getAdminToken, store, storeDel } from "@/lib/auth";
-import { edgeColor, edgeDashed, nodeRadius, toForceData, type ForceNode } from "@/lib/graph";
+import { getAdminToken, storeDel, useIsAdmin } from "@/lib/auth";
+import { toForceData, type ForceNode } from "@/lib/graph";
+import GraphCanvas from "@/components/GraphCanvas";
 import { usePlayer } from "@/lib/player";
-
-// Cast to permissive type at import boundary: react-force-graph-2d's callback
-// prop types expect its own internal NodeObject/LinkObject generics which are
-// incompatible with our strongly-typed ForceNode/ForceLink shapes. Casting
-// here avoids wholesale `as any` on every individual prop callback.
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
-  ssr: false,
-}) as React.ComponentType<Record<string, unknown>>;
+import Link from "next/link";
 
 const ACCENT = "#f97316";
 
 export default function ListensGraphPage() {
   const player = usePlayer();
-  const isAdmin = typeof window !== "undefined" && !!store("adminToken");
+  // Gate admin controls (SYNC / AUTH) behind a *server-validated* admin token — a stale/expired
+  // token must not surface these buttons.
+  const isAdmin = useIsAdmin();
   const [patch, setPatch] = useState<GraphPatch | null>(null);
   const [stats, setStats] = useState<ListenStats | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphSearchResult[]>([]);
-  const [selected, setSelected] = useState<ForceNode | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [syncMessage, setSyncMessage] = useState("");
   const [showReauth, setShowReauth] = useState(false);
   const [reauthHeaders, setReauthHeaders] = useState("");
   const [reauthStatus, setReauthStatus] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [reauthError, setReauthError] = useState("");
-  const fgRef = useRef<{
-    zoomToFit?: (ms: number, px: number) => void;
-    d3Force?: (name: string) => { strength?: (n: number) => void; distance?: (n: number) => void } | undefined;
-  } | null>(null);
-  // Auto-fit only once per patch (on first settle) — not on every engine stop, or
-  // interacting with the graph (dragging a node reheats the sim) would yank the view back.
-  const fittedRef = useRef(false);
-  // Measure the canvas container so the graph fills it (full page width, tall).
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dims, setDims] = useState({ width: 1000, height: 600 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setDims({ width: el.clientWidth, height: el.clientHeight });
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const [authNeeded, setAuthNeeded] = useState(false);
 
   // Admin actions require a valid token; bounce expired/absent sessions to the login.
   const handleAuthExpired = () => {
@@ -68,16 +44,35 @@ export default function ListensGraphPage() {
     const qs = seed ? `?seed=${encodeURIComponent(seed)}&type=${type ?? ""}` : "";
     const data: GraphPatch = await fetch(`${API}/api/listens/graph/patch/${qs}`).then((r) => r.json());
     setPatch(data);
-    setSelected(null);
   }, []);
 
-  useEffect(() => {
-    loadPatch();
+  const loadStats = useCallback(() => {
     fetch(`${API}/api/listens/stats/`)
       .then((r) => r.json())
       .then(setStats)
       .catch(() => {});
-  }, [loadPatch]);
+  }, []);
+
+  // Timers that reload the graph while the async (Celery) rebuild runs, so freshly-synced tracks
+  // appear without a manual refresh. Tracked so they can be cleared on unmount / re-sync.
+  const rebuildPollRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearRebuildPoll = useCallback(() => {
+    rebuildPollRef.current.forEach(clearTimeout);
+    rebuildPollRef.current = [];
+  }, []);
+  useEffect(() => clearRebuildPoll, [clearRebuildPoll]);
+
+  useEffect(() => {
+    loadPatch();
+    loadStats();
+  }, [loadPatch, loadStats]);
+
+  // Follow the player: whenever the playing track changes (next/prev/auto-advance/radio), re-center
+  // the graph on that song — same as clicking its node. Lets you "walk the graph" hands-free.
+  const currentVideoId = player.queue[player.currentIndex]?.video_id;
+  useEffect(() => {
+    if (currentVideoId) loadPatch(currentVideoId, "song");
+  }, [currentVideoId, loadPatch]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -92,15 +87,6 @@ export default function ListensGraphPage() {
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
-
-  // On each new patch: allow one auto-fit, and spread nodes apart so a dense patch
-  // sprawls to fill the canvas instead of collapsing into a tight ball.
-  useEffect(() => {
-    fittedRef.current = false;
-    if (!patch) return;
-    fgRef.current?.d3Force?.("charge")?.strength?.(-320);
-    fgRef.current?.d3Force?.("link")?.distance?.(70);
-  }, [patch]);
 
   const playNode = (node: ForceNode) => {
     if (!isAdmin || !node.video_id) return;
@@ -121,27 +107,61 @@ export default function ListensGraphPage() {
     const token = getAdminToken(); // redirects to /sudo if no token
     if (!token) return;
     setSyncStatus("syncing");
+    setSyncMessage("");
     try {
       const res = await fetch(`${API}/api/listens/sync/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      // 401 = admin token expired (bounce to login). YTM-cookie expiry is 409 — handled below
+      // so it doesn't get mistaken for admin-token expiry and log the user out.
       if (res.status === 401) {
         handleAuthExpired();
         return;
       }
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.auth_expired) {
+        setSyncStatus("error");
+        setSyncMessage("YouTube Music session expired — re-authenticate below, then sync again.");
+        setAuthNeeded(true);
+        setShowReauth(true);
+        return; // leave the message + panel up; don't auto-clear
+      }
       if (!res.ok) {
         setSyncStatus("error");
+        setSyncMessage(data.error || "Sync failed.");
       } else {
-        const data = await res.json();
         setSyncStatus("done");
-        // Sync rebuilds the graph server-side; refresh the current patch.
-        if (data.synced > 0 || data.synced_liked > 0) loadPatch();
+        const newCount = (data.synced || 0) + (data.synced_liked || 0);
+        // Tracks land in the DB immediately, so refresh the stats now — the total/today counters
+        // jump right away instead of requiring a manual page reload.
+        loadStats();
+        if (newCount > 0 && data.graph_rebuilding) {
+          // The graph rebuild (Last.fm pass) runs asynchronously in Celery and takes a few minutes.
+          // Poll the graph a handful of times so the new nodes appear on their own once it finishes.
+          setSyncMessage(`Synced ${newCount} tracks — graph updating in the background (~a few min).`);
+          clearRebuildPoll();
+          rebuildPollRef.current = [60, 150, 300].map((s) =>
+            setTimeout(() => {
+              loadPatch();
+              loadStats();
+            }, s * 1000),
+          );
+        } else if (newCount > 0) {
+          setSyncMessage(`Synced ${newCount} tracks.`);
+          loadPatch();
+        } else {
+          setSyncMessage("Already up to date.");
+        }
       }
     } catch {
       setSyncStatus("error");
+      setSyncMessage("Network error.");
     }
-    setTimeout(() => setSyncStatus("idle"), 3000);
+    setTimeout(() => {
+      setSyncStatus("idle");
+      setSyncMessage("");
+    }, 4000);
   };
 
   const saveReauth = async () => {
@@ -156,7 +176,11 @@ export default function ListensGraphPage() {
         body: JSON.stringify({ headers: reauthHeaders }),
       });
       if (res.status === 401) {
-        handleAuthExpired();
+        // Admin token expired. Do NOT redirect/clear — that discards the pasted headers and is
+        // exactly how this silently failed before. Keep the textarea; the user can re-login in a
+        // new tab and click Save again (getAdminToken reads the refreshed token from storage).
+        setReauthError("Admin login expired. Open /sudo in another tab, log in, then click SAVE again — your pasted headers are kept.");
+        setReauthStatus("error");
         return;
       }
       const data = await res.json();
@@ -165,6 +189,9 @@ export default function ListensGraphPage() {
         setReauthStatus("error");
       } else {
         setReauthStatus("done");
+        setAuthNeeded(false);
+        setSyncStatus("idle");
+        setSyncMessage("");
         setTimeout(() => {
           setShowReauth(false);
           setReauthHeaders("");
@@ -240,35 +267,75 @@ export default function ListensGraphPage() {
           ↻ SHUFFLE
         </button>
         {isAdmin && (
+          <Link
+            href="/listens/graph"
+            style={{
+              background: "rgba(249,115,22,0.12)",
+              border: `1px solid ${ACCENT}`,
+              borderRadius: 6,
+              padding: "8px 14px",
+              color: ACCENT,
+              fontSize: 10,
+              fontFamily: "monospace",
+              letterSpacing: 1,
+              cursor: "pointer",
+              textDecoration: "none",
+            }}
+          >
+            ⊹ FULL GRAPH
+          </Link>
+        )}
+        {isAdmin && (
           <>
             <button
-              onClick={doSync}
+              onClick={() => {
+                if (authNeeded) {
+                  if (!getAdminToken()) return;
+                  setShowReauth((v) => !v);
+                } else {
+                  doSync();
+                }
+              }}
               disabled={syncStatus === "syncing"}
               style={{
-                background: "none", border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
-                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
+                background: authNeeded || showReauth ? "rgba(249,115,22,0.15)" : "none",
+                border: `1px solid rgba(249,115,22,0.3)`,
+                borderRadius: 6,
+                padding: "8px 14px",
+                color: ACCENT,
+                fontSize: 10,
+                fontFamily: "monospace",
+                letterSpacing: 1,
+                cursor: "pointer",
               }}
             >
-              {syncStatus === "syncing" ? "SYNCING..." : syncStatus === "done" ? "SYNCED!" : syncStatus === "error" ? "FAILED" : "SYNC"}
-            </button>
-            <button
-              onClick={() => {
-                if (!getAdminToken()) return;
-                setShowReauth(!showReauth);
-              }}
-              style={{
-                background: showReauth ? "rgba(249,115,22,0.15)" : "none",
-                border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 6,
-                padding: "8px 14px", color: ACCENT, fontSize: 10, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
-              }}
-            >
-              AUTH
+              {authNeeded
+                ? "AUTH"
+                : syncStatus === "syncing"
+                  ? "SYNCING..."
+                  : syncStatus === "done"
+                    ? "SYNCED!"
+                    : syncStatus === "error"
+                      ? "FAILED"
+                      : "SYNC"}
             </button>
           </>
         )}
       </div>
+
+      {isAdmin && syncMessage && (
+        <div
+          style={{
+            color: syncStatus === "error" ? "#f87171" : "#888",
+            fontSize: 11,
+            fontFamily: "monospace",
+            padding: "0 4px 8px",
+            lineHeight: 1.5,
+          }}
+        >
+          {syncMessage}
+        </div>
+      )}
 
       {isAdmin && showReauth && (
         <div style={{ background: "rgba(20,20,20,0.8)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 8, padding: 16, marginBottom: 8 }}>
@@ -320,160 +387,23 @@ export default function ListensGraphPage() {
             {stats.today}
             <span style={{ color: "#666", fontSize: 8, letterSpacing: 1, marginLeft: 5 }}>TODAY</span>
           </span>
-          {(() => {
-            const seedNode = patch?.nodes.find((n) => n.key === patch.seed);
-            if (!seedNode) return null;
-            return (
-              <span style={{ color: "#888", fontSize: 11, marginLeft: "auto" }}>
-                centered on · <span style={{ color: "#ccc" }}>{seedNode.title}</span>
-                {seedNode.subtitle ? <span style={{ color: "#666" }}> — {seedNode.subtitle}</span> : null}
-              </span>
-            );
-          })()}
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        style={{
-          // Full-bleed: break out of the centered max-width layout to span the page width.
-          width: "100vw",
-          marginLeft: "calc(50% - 50vw)",
-          height: "calc(100vh - 200px)",
-          minHeight: 480,
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          overflow: "hidden",
-          background: "#0a0a0a",
+      <GraphCanvas
+        data={data}
+        seedKey={patch?.seed ?? null}
+        hovered={hovered}
+        onNodeHover={(node) => setHovered(node ? node.key : null)}
+        onNodeClick={(node) => {
+          // Click = walk the graph: play (admin) and re-center on this node.
+          if (isAdmin) playNode(node);
+          loadPatch(node.key, node.node_type);
         }}
-      >
-        <ForceGraph2D
-          ref={fgRef as never}
-          width={dims.width}
-          height={dims.height}
-          graphData={data}
-          backgroundColor="#0a0a0a"
-          nodeRelSize={1}
-          cooldownTicks={120}
-          onEngineStop={() => {
-            if (!fittedRef.current) {
-              fgRef.current?.zoomToFit?.(400, 80);
-              fittedRef.current = true;
-            }
-          }}
-          linkColor={(l: { edge_type: string }) => edgeColor(l.edge_type as never)}
-          linkLineDash={(l: { edge_type: string }) => (edgeDashed(l.edge_type as never) ? [3, 3] : null)}
-          linkWidth={(l: { edge_type: string; weight: number }) =>
-            l.edge_type.startsWith("similar") ? 1 + l.weight * 1.5 : 0.8
-          }
-          onNodeClick={(node: ForceNode) => {
-            setSelected(node);
-          }}
-          onNodeHover={(node: ForceNode | null) => setHovered(node ? node.key : null)}
-          nodePointerAreaPaint={(
-            node: ForceNode & { x: number; y: number },
-            color: string,
-            ctx: CanvasRenderingContext2D,
-          ) => {
-            // Match the hover/click hit-area to the drawn dot (nodes are small).
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, nodeRadius(node.play_count) + 2, 0, 2 * Math.PI);
-            ctx.fill();
-          }}
-          nodeCanvasObject={(node: ForceNode & { x: number; y: number }, ctx: CanvasRenderingContext2D, scale: number) => {
-            const isSeed = patch?.seed === node.key;
-            const isHovered = hovered === node.key;
-            // Hover grows the dot ~1.6x, just like the home-page constellation.
-            const r = nodeRadius(node.play_count) * (isHovered ? 1.6 : 1);
-            const fill = isSeed ? ACCENT : "#c2540a";
-            // Glowing dot like the home-page constellation (boxShadow → canvas shadowBlur).
-            ctx.save();
-            ctx.shadowColor = fill;
-            ctx.shadowBlur = r * (isSeed || isHovered ? 2.4 : 1.5);
-            ctx.globalAlpha = isHovered ? 1 : 0.92;
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-            ctx.fillStyle = fill;
-            ctx.fill();
-            ctx.restore();
-            if (node.is_liked) {
-              ctx.strokeStyle = "#ffd400";
-              ctx.lineWidth = 2 / scale;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 2, 0, 2 * Math.PI);
-              ctx.stroke();
-            }
-            if (node.is_subscribed) {
-              ctx.strokeStyle = ACCENT;
-              ctx.setLineDash([2, 2]);
-              ctx.lineWidth = 1.5 / scale;
-              ctx.beginPath();
-              ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
-              ctx.stroke();
-              ctx.setLineDash([]);
-            }
-            // Label the seed, the hovered node, and (when zoomed in) larger nodes —
-            // avoids a wall of overlapping text at the default overview zoom.
-            if (isSeed || isHovered || scale > 1.6) {
-              const label = node.title.length > 18 ? node.title.slice(0, 17) + "…" : node.title;
-              ctx.font = `${10 / scale}px monospace`;
-              ctx.fillStyle = "#ccc";
-              ctx.textAlign = "center";
-              ctx.fillText(label, node.x, node.y + r + 9 / scale);
-            }
-          }}
-        />
-      </div>
-
-      {selected && (
-        <div
-          style={{
-            position: "absolute", right: 14, bottom: 14, width: 200, background: "#141414",
-            border: `1px solid rgba(249,115,22,0.3)`, borderRadius: 8, padding: 10,
-          }}
-        >
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {selected.thumbnail_url ? (
-              <img src={selected.thumbnail_url} alt="" style={{ width: 40, height: 40, borderRadius: 4, objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: 40, height: 40, borderRadius: 4, background: "#c2540a" }} />
-            )}
-            <div style={{ minWidth: 0 }}>
-              <div style={{ color: "#eee", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {selected.title}
-              </div>
-              <div style={{ color: "#888", fontSize: 9 }}>
-                {selected.subtitle || selected.node_type} · {selected.play_count}×
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
-            {isAdmin && selected.video_id && (
-              <button
-                onClick={() => playNode(selected)}
-                style={{
-                  flex: 1, background: "rgba(249,115,22,0.15)", border: `1px solid ${ACCENT}`,
-                  borderRadius: 5, padding: 5, color: ACCENT, fontSize: 9, fontFamily: "monospace",
-                  letterSpacing: 1, cursor: "pointer",
-                }}
-              >
-                ▶ PLAY
-              </button>
-            )}
-            <button
-              onClick={() => loadPatch(selected.key, selected.node_type)}
-              style={{
-                flex: 1, background: "#1d1d1d", border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 5, padding: 5, color: "#aaa", fontSize: 9, fontFamily: "monospace",
-                letterSpacing: 1, cursor: "pointer",
-              }}
-            >
-              ⊙ CENTER
-            </button>
-          </div>
-        </div>
-      )}
+        alwaysLabel
+        centerOnSeed
+        minimalThreshold={0}
+      />
     </div>
   );
 }

@@ -1,3 +1,17 @@
+from .aoe2 import (
+    aoe2_build_detail,
+    aoe2_builds_list,
+    aoe2_clip,
+    aoe2_coach,
+    aoe2_delete,
+    aoe2_detail,
+    aoe2_feature,
+    aoe2_list,
+    aoe2_reanalyze,
+    aoe2_stats,
+    aoe2_sync_status,
+    aoe2_upload,
+)
 from .audiobook import (
     audiobook_audio,
     audiobook_chunk_exists,
@@ -34,12 +48,13 @@ from .lichess import lichess_auth, lichess_callback, lichess_disconnect, lichess
 from .listen import (
     listen_import,
     listen_list,
+    listen_radio,
     listen_reauth,
     listen_stats,
     listen_sync,
     listen_sync_status,
 )
-from .listen_graph import graph_patch, graph_search
+from .listen_graph import graph_full, graph_patch, graph_search
 from .project import project_list
 from .slops import (
     slops_approve,
@@ -77,6 +92,18 @@ from .watch import (
 )
 
 __all__ = [
+    "aoe2_build_detail",
+    "aoe2_builds_list",
+    "aoe2_clip",
+    "aoe2_coach",
+    "aoe2_delete",
+    "aoe2_detail",
+    "aoe2_feature",
+    "aoe2_list",
+    "aoe2_reanalyze",
+    "aoe2_stats",
+    "aoe2_sync_status",
+    "aoe2_upload",
     "audiobook_audio",
     "audiobook_chunk_exists",
     "audiobook_manifest",
@@ -112,10 +139,12 @@ __all__ = [
     "lichess_explorer",
     "lichess_status",
     "lichess_token",
+    "graph_full",
     "graph_patch",
     "graph_search",
     "listen_import",
     "listen_list",
+    "listen_radio",
     "listen_reauth",
     "listen_stats",
     "listen_sync",

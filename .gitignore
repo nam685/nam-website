@@ -21,6 +21,7 @@ media/
 .env
 .env.local
 .env.*.local
+scripts/aoe2_watcher.env
 
 # Auth credentials
 browser.json
@@ -50,3 +51,7 @@ oauth.json
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Real AoE2 recorded games used as local test fixtures contain third-party
+# player names + chat — never commit them to this public repo.
+website/tests/fixtures/*.aoe2record

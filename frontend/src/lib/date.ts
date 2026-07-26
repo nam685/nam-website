@@ -1,4 +1,4 @@
-/** Format ISO date as YYYY-MM-DD (en-CA locale). Used on /thinks. */
+/** Format ISO date as YYYY-MM-DD (en-CA locale). Used on /yaps. */
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA");
 }

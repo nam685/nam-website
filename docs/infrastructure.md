@@ -21,6 +21,12 @@
 - **Celery worker** — systemd service (`celery`), uses Redis as broker
 - **PostgreSQL + Redis** — via Docker Compose (localhost-only, not exposed to internet, `restart: unless-stopped`)
 
+### Off-server: AoE2 recorded-game watcher
+
+A small daemon runs on the **gaming PC** (not the server) to auto-upload Age of Empires 2
+DE recorded games to the site after each match. Setup and operation:
+[`scripts/AOE2_WATCHER.md`](../scripts/AOE2_WATCHER.md).
+
 ---
 
 ## First-time Server Setup
@@ -133,6 +139,14 @@ Set in GitHub → repo → Settings → Branches → Add rule for `main`:
 Merge settings (repo → Settings → General):
 - [x] Allow squash merging only (disable merge commits and rebase)
 - [x] Automatically delete head branches
+
+---
+
+## Server-only media assets
+
+Some media is served from the deploy media root (`/home/nam/nam-website-deploy/media/`, exposed at `/media/*` by Caddy) but is **not** stored in git — it's uploaded out-of-band.
+
+- **Homepage profile photos** (`/media/profile/profile-1..5.webp`): the rotating circular portrait on the landing page. Produced locally from source images with ImageMagick (`-auto-orient -resize 700x -gravity North -crop 700x700+0+220`, webp q82) and uploaded with `scp media/profile/*.webp hetzner:/home/nam/nam-website-deploy/media/profile/`. To change the photos, regenerate and re-scp; the frontend just expects `profile-1..5.webp` to exist.
 
 ---
 

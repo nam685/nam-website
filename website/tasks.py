@@ -4,13 +4,73 @@ import os
 import re
 import subprocess
 
+from aoe2coach import BENCHMARKS, build_timeline, coach, compute_metrics, parse_rec, render_dual_log
+from django.conf import settings as dj_settings
 from django.utils import timezone
+from django.utils import timezone as dj_timezone
 
 from config.celery import app
-from website.models import Download, Turn
+from website.aoe2.opening import cap_opening, opening_from_classifier
+from website.aoe2.v2 import build_bundle
+from website.models import Aoe2Match, Download, Turn
 from website.slops_limits import MAX_FILES_PER_TURN, MAX_SINGLE_FILE, MAX_TOTAL_UPLOAD
 
 logger = logging.getLogger(__name__)
+
+
+def _run_coach(salient_log, metrics, result, bundle=None, model=None):
+    """Prod wrapper: read settings, call the pure aoe2coach.coach(), own graceful degradation.
+
+    `model` overrides the configured AOE2_COACH_MODEL for this run. Featured matches pass "opus";
+    everything else uses the volume default (haiku) — the Max sub only sustains a handful of opus
+    agentic runs per window before silently downgrading, so opus is reserved for hand-picked matches.
+
+    Returns (coach_analysis, coach_model, opening, tier). On any failure returns ("", "", "", "")
+    so analysis still completes and the rich data is saved.
+
+    When `bundle` (the v2 preprocessing bundle from website.aoe2.v2.build_bundle) is supplied, the
+    AGENTIC coach v2 path runs: coach() builds a per-match workspace from the Reconstruction,
+    classifier candidates, mistakes, economy, and strategic-map PNGs, runs the read-only agent over
+    it, and falls back to single-shot facts-only on any failure. Without a bundle the legacy v1
+    embedded-benchmark path runs (back-compat).
+    """
+    try:
+        model = model or getattr(dj_settings, "AOE2_COACH_MODEL", "haiku")
+        claude_bin = getattr(dj_settings, "AOE2_CLAUDE_BIN", "claude")
+        # Reasoning effort for the agentic coach. Default "high" (NOT xhigh): xhigh's huge per-run
+        # thinking-token load makes the Max sub silently downgrade opus->haiku under rate limits.
+        effort = getattr(dj_settings, "AOE2_COACH_EFFORT", "high")
+        kwargs = {"effort": effort}
+        if bundle is not None:
+            kwargs.update(
+                {
+                    "reconstruction": bundle.get("recon_obj") or bundle.get("reconstruction"),
+                    "candidates": bundle.get("candidates"),
+                    "economy": bundle.get("economy"),
+                    "mistakes": bundle.get("mistakes"),
+                    "map_pngs": bundle.get("map_png_paths"),
+                }
+            )
+        out = coach(
+            metrics, salient_log, benchmarks=BENCHMARKS, result=result, model=model, claude_bin=claude_bin, **kwargs
+        )
+        # The LLM's `- Opening:` read is authoritative, but haiku volume runs often omit it. Fall
+        # back to the deterministic #3 classifier so the opening tag is never blank for a coached match.
+        # Cap the LLM read to a terse badge — haiku sometimes writes a whole sentence into it.
+        opening = cap_opening(out.opening_tag) or _classifier_opening(bundle)
+        return out.raw_text, out.model_used, opening, getattr(out, "tier", "")
+    except Exception:  # noqa: BLE001
+        logger.warning("Coach stage failed — storing empty coach_analysis")
+        # Coach blew up, but the deterministic classifier still gives us an opening tag.
+        return "", "", _classifier_opening(bundle), ""
+
+
+def _classifier_opening(bundle) -> str:
+    """Opening family from a bundle's classifier, or "" when there's no bundle/candidate."""
+    if bundle is None:
+        return ""
+    return opening_from_classifier(bundle.get("classifier", {}))
+
 
 KLAUDE_USER = "klaude"
 KLAUDE_BIN = "/home/klaude/.local/bin/klaude"
@@ -254,11 +314,298 @@ def _register_downloads(turn):
 
 @app.task(max_retries=0)
 def sync_listens():
-    """Daily sync of YouTube Music history + liked tracks."""
+    """Daily sync of YouTube Music history + liked tracks (rebuilds the graph inline — no
+    request timeout to worry about on the beat schedule)."""
     from website.views.listen import _do_sync
 
     try:
         result = _do_sync()
-        logger.info("Listens sync complete: %d history, %d liked", result["synced_history"], result["synced_liked"])
+        logger.info(
+            "Listens sync complete: %d history, %d liked, %d frequent",
+            result["synced_history"],
+            result["synced_liked"],
+            result["synced_frequent"],
+        )
     except Exception:
         logger.exception("Automated listens sync failed (likely expired browser auth)")
+
+
+@app.task(max_retries=0)
+def rebuild_listen_graph():
+    """Rebuild the listening graph off the request path.
+
+    The Last.fm similarity pass takes minutes; the web sync view dispatches this so it doesn't
+    exceed gunicorn's request timeout. Non-fatal by construction (`_rebuild_graph` never raises).
+    """
+    from website.views.listen import _rebuild_graph
+
+    _rebuild_graph()
+
+
+@app.task(max_retries=0)
+def enrich_ladder():
+    """Daily task: fetch current ELO/rank from Relic and backfill per-match relic data.
+
+    Steps:
+    1. GET getPersonalStat → cache current ELO/rank in Redis under ``aoe2:ladder_stat``.
+    2. GET getRecentMatchHistory → for each 1v1 RM match not yet enriched, try to match
+       against a local Aoe2Match using played_at proximity + civ alignment.
+
+    Matching approach
+    -----------------
+    For rows where played_at is set (extracted from the rec filename at upload), we use
+    that for the ±2h window.  Rows without played_at fall back to created_at as a rough proxy.
+
+    Match-to-local-row algorithm (best-effort):
+    - For each relic match (with completiontime epoch) find unenriched Aoe2Match rows
+      whose effective_time (played_at if set, else created_at) is within 2 hours.
+    - Among those candidates, prefer the row whose my_civ matches the relic civ name.
+    - If exactly one candidate passes, enrich it.  If multiple pass, take the closest.
+    - If no match, log at DEBUG and skip (next daily run will retry once new recs arrive).
+
+    The task is idempotent: rows with relic_match_id already set are skipped.
+    """
+
+    from datetime import datetime as dt
+    from datetime import timedelta
+    from datetime import timezone as dt_tz
+
+    import django.db.models.functions as dbf
+    from django.core.cache import cache
+    from django.utils import timezone as tz
+
+    from website.aoe2.relic import get_personal_stat, get_recent_1v1_matches
+
+    profile_id = dj_settings.AOE2_PROFILE_ID
+
+    # -- 1. Current ladder ELO/rank ------------------------------------------
+    try:
+        stat = get_personal_stat(profile_id)
+        cache.set("aoe2:ladder_stat", stat, timeout=None)  # persisted until next run
+        logger.info("enrich_ladder: current ELO=%s rank=%s", stat.get("rating"), stat.get("rank"))
+    except Exception:
+        logger.exception("enrich_ladder: failed to fetch personal stat")
+        # Non-fatal: continue to backfill existing rows.
+
+    # -- 2. Backfill per-match relic data ------------------------------------
+    try:
+        relic_matches = get_recent_1v1_matches(profile_id)
+    except Exception:
+        logger.exception("enrich_ladder: failed to fetch recent match history")
+        return
+
+    enriched = 0
+    skipped = 0
+
+    for rm in relic_matches:
+        # Skip already-matched matches (idempotent by relic_match_id uniqueness check).
+        if Aoe2Match.objects.filter(relic_match_id=rm["relic_match_id"]).exists():
+            skipped += 1
+            continue
+
+        if not rm.get("completiontime"):
+            logger.debug("enrich_ladder: relic match %s has no completiontime, skipping", rm["relic_match_id"])
+            continue
+
+        completion_dt = dt.fromtimestamp(rm["completiontime"], tz=dt_tz.utc)
+
+        # Candidate rows: unenriched done matches within ±2 hours of completiontime.
+        window = timedelta(hours=2)
+        # Use played_at when set; fall back to created_at.
+        candidates = (
+            Aoe2Match.objects.filter(
+                analysis_status=Aoe2Match.Status.DONE,
+                relic_match_id__isnull=True,
+            )
+            .annotate(
+                effective_time=dbf.Coalesce("played_at", "created_at"),
+            )
+            .filter(
+                effective_time__gte=completion_dt - window,
+                effective_time__lte=completion_dt + window,
+            )
+        )
+
+        if not candidates.exists():
+            logger.debug(
+                "enrich_ladder: no candidate rows within ±2h of relic match %s (completion=%s)",
+                rm["relic_match_id"],
+                completion_dt,
+            )
+            continue
+
+        # Take the row whose effective_time is closest to completiontime.
+        # NOTE: Relic civ_id uses a different numeric scheme than our dat-based
+        # civ names, so a civ equality check would silently reject valid matches.
+        # We rely solely on the ±2h time window + closest-time tiebreak.
+        best = None
+        best_delta = None
+        for row in candidates:
+            eff = row.played_at or row.created_at
+            if eff is None:
+                continue
+            delta = abs((eff - completion_dt).total_seconds())
+            if best_delta is None or delta < best_delta:
+                best = row
+                best_delta = delta
+
+        if best is None:
+            continue
+
+        best.relic_match_id = rm["relic_match_id"]
+        best.relic_enriched_at = tz.now()
+        if rm.get("my_new") is not None:
+            best.my_elo = rm["my_new"]
+        if rm.get("my_old") is not None and rm.get("my_new") is not None:
+            best.my_rating_change = rm["my_new"] - rm["my_old"]
+        if rm.get("opp_new") is not None:
+            best.opponent_elo = rm["opp_new"]
+        if rm.get("my_outcome") in ("win", "loss"):
+            best.my_result = rm["my_outcome"]
+        best.save(
+            update_fields=[
+                "relic_match_id",
+                "relic_enriched_at",
+                "my_elo",
+                "my_rating_change",
+                "opponent_elo",
+                "my_result",
+            ]
+        )
+        enriched += 1
+        logger.info("enrich_ladder: enriched match id=%s relic_match_id=%s", best.id, rm["relic_match_id"])
+
+    logger.info("enrich_ladder: done — enriched=%d skipped_already_done=%d", enriched, skipped)
+
+
+@app.task(max_retries=0)
+def analyze_match(match_id, run_coach=True):
+    """Parse a stored rec into metrics + the v2 preprocessing bundle.
+
+    Gates:
+    - ranked 1v1 only: non-ranked or non-1v1 → analysis_status="skipped" (not shown publicly).
+    - ranked detection: header["de"]["rated"] boolean, verified reliable across all DE recs.
+
+    `run_coach` (default True): when False, run ONLY the deterministic preprocessing (reconstruction,
+    economy, classifier, mistakes, strategic map) and skip the LLM coach — the "preprocess now, coach
+    lazy" path for bulk backfills (the opus coach is the slow / session-limited stage). Run the coach
+    later with `coach_match`. Failures → status="error" with error_detail stored.
+    """
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return
+
+    match.analysis_status = Aoe2Match.Status.PARSING
+    match.save(update_fields=["analysis_status"])
+
+    try:
+        rec = parse_rec(match.rec_file.path, dj_settings.AOE2_PROFILE_ID)
+
+        # Gate: ranked 1v1 only. Non-ranked or non-1v1 games are silently skipped.
+        if not rec.is_ranked or not rec.is_1v1 or rec.me is None or rec.opponent is None:
+            match.analysis_status = Aoe2Match.Status.SKIPPED
+            match.save(update_fields=["analysis_status"])
+            return
+
+        timeline = build_timeline(rec.ops, rec.me["number"])
+        metrics = compute_metrics(timeline, rec.duration_ms)
+        timeline_payload = {k: v for k, v in timeline.items()}
+        # Dual log (ME full + OPP key) for the coach; legacy single-player log preserved too.
+        dual_log = render_dual_log(rec.ops, rec.me["number"], rec.opponent["number"], timeline["action_count"])
+        timeline_payload["salient_log"] = dual_log
+
+        # Stage 2: aoe2coach v2 preprocessing bundle — reconstruct → classify → detect_mistakes →
+        # estimate_economy → render strategic-map PNGs. Each producer is internally guarded; a total
+        # failure here degrades to the empty bundle (legacy v1 coach path) rather than blocking save.
+        bundle = None
+        try:
+            bundle = build_bundle(rec, dj_settings.MEDIA_ROOT, match.id)
+        except Exception:  # noqa: BLE001
+            logger.exception("aoe2coach v2 bundle failed for %s — falling back to v1 coach", match_id)
+
+        # Stage 4: LLM coach — graceful; failure must not block the rich data being saved.
+        # With a bundle, the agentic opus coach v2 runs over the per-match workspace. Skipped entirely
+        # when run_coach is False (preprocess-now / coach-lazy) — coach it later with coach_match. When
+        # skipped we leave the EXISTING coach fields untouched (a re-preprocess never wipes a prior
+        # analysis); a brand-new match simply keeps its empty defaults.
+
+        match.map_name = rec.map_name
+        match.duration_seconds = rec.duration_ms // 1000
+        match.game_version = rec.version
+        match.my_civ = rec.me["civ_name"]
+        match.opponent_civ = rec.opponent["civ_name"]
+        match.my_result = rec.my_result
+        match.timeline = timeline_payload
+        if bundle is not None:
+            match.reconstruction = bundle.get("reconstruction", {})
+            match.map_geometry = bundle.get("map_geometry", {})
+            match.classifier = bundle.get("classifier", {})
+            match.mistakes = bundle.get("mistakes", [])
+            match.economy = bundle.get("economy", {})
+            match.map_images = bundle.get("map_images", [])
+            # Deterministic opening baseline (no LLM) — a coached run overrides it below with the
+            # LLM's read when present. Ensures preprocess-only matches still carry an opening tag.
+            metrics["opening"] = _classifier_opening(bundle)
+        if run_coach:
+            # Featured (⭐) matches get opus; everything else the volume default (haiku).
+            coach_model_choice = "opus" if match.featured else None
+            coach_analysis, coach_model, opening, coach_tier = _run_coach(
+                dual_log, metrics, rec.my_result, bundle=bundle, model=coach_model_choice
+            )
+            metrics["opening"] = opening
+            match.coach_analysis = coach_analysis
+            match.coach_model = coach_model
+            match.coach_tier = coach_tier
+        match.metrics = metrics
+        match.analyzed_at = dj_timezone.now()
+        match.analysis_status = Aoe2Match.Status.DONE
+        match.save()
+    except Exception as exc:  # noqa: BLE001 — fail loud, store the reason
+        logger.exception("analyze_match failed for %s", match_id)
+        match.analysis_status = Aoe2Match.Status.ERROR
+        match.error_detail = str(exc)[:2000]
+        match.save(update_fields=["analysis_status", "error_detail"])
+
+
+@app.task(max_retries=0)
+def coach_match(match_id):
+    """Run ONLY the LLM coach for an already-preprocessed match (the lazy half of preprocess-now).
+
+    Rebuilds the v2 bundle (re-parse + build_bundle is deterministic and cheap — it gives the coach
+    the reconstruction object, classifier candidates, and freshly-rendered map PNGs it needs) and runs
+    `_run_coach` over it, reusing the stored salient log + metrics. Saves the coach fields ONLY ON
+    SUCCESS, so a session-limited / failed run never wipes an existing coach analysis. No-op for
+    matches that aren't done or aren't ranked-1v1.
+    """
+    try:
+        match = Aoe2Match.objects.get(id=match_id)
+    except Aoe2Match.DoesNotExist:
+        return
+    try:
+        rec = parse_rec(match.rec_file.path, dj_settings.AOE2_PROFILE_ID)
+        if not rec.is_ranked or not rec.is_1v1 or rec.me is None or rec.opponent is None:
+            return
+        bundle = None
+        try:
+            bundle = build_bundle(rec, dj_settings.MEDIA_ROOT, match.id)
+        except Exception:  # noqa: BLE001
+            logger.exception("coach_match bundle rebuild failed for %s — coaching facts-only", match_id)
+        dual_log = (match.timeline or {}).get("salient_log", "")
+        metrics = match.metrics or {}
+        # Featured (⭐) matches get opus; everything else the volume default (haiku).
+        coach_model_choice = "opus" if match.featured else None
+        coach_analysis, coach_model, opening, coach_tier = _run_coach(
+            dual_log, metrics, rec.my_result, bundle=bundle, model=coach_model_choice
+        )
+        if not coach_analysis:
+            logger.warning("coach_match got empty coach for %s (rate-limited?) — leaving existing untouched", match_id)
+            return
+        metrics["opening"] = opening
+        match.coach_analysis = coach_analysis
+        match.coach_model = coach_model
+        match.coach_tier = coach_tier
+        match.metrics = metrics
+        match.save(update_fields=["coach_analysis", "coach_model", "coach_tier", "metrics"])
+    except Exception:  # noqa: BLE001 — never crash the worker; the deterministic data is already saved
+        logger.exception("coach_match failed for %s", match_id)

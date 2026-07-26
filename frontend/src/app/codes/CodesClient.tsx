@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { API } from "@/lib/api";
-import { fetchAdminNonce, store } from "@/lib/auth";
+import { fetchAdminNonce, useIsAdmin } from "@/lib/auth";
 import { getContribColor } from "@/lib/contributions";
 import { formatRelativeDate } from "@/lib/date";
 import { CyberGrid, HexDecorations } from "@/components/CyberGrid";
@@ -40,6 +40,16 @@ const PROJECTS: CodeProject[] = [
     status: "wip",
     github_url: "https://github.com/nam685/klaude",
     live_url: "/slops",
+  },
+  {
+    title: "aoe2coach",
+    slug: "aoe2coach",
+    description:
+      "AI coach for Age of Empires 2. Reconstructs matches from replay files and gives build-order and economy feedback.",
+    tags: ["python", "ai", "claude"],
+    status: "wip",
+    github_url: "https://github.com/nam685/aoe2coach",
+    live_url: "/plays",
   },
 ];
 
@@ -383,11 +393,7 @@ function ContributionGraph({ calendar }: { calendar: ContributionCalendar }) {
 /* ── Refresh button ──────────────────────────────── */
 
 function RefreshButton() {
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    if (store("adminToken")) setIsAdmin(true);
-  }, []);
+  const isAdmin = useIsAdmin();
 
   if (!isAdmin) return null;
 
@@ -485,8 +491,8 @@ export default function CodesClient({
         {/* Project cards */}
         <div
           style={{
-            display: "flex",
-            flexWrap: "wrap",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
             gap: "1.5rem",
             position: "relative",
             zIndex: 2,

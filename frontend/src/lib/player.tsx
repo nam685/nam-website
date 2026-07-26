@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 import type { ListenTrack } from "@/lib/api";
+import { fetchRadioTracks } from "@/lib/api";
+import { buildExcludeList, shouldTopUp } from "@/lib/radio";
 
 /* ── YouTube IFrame API global types ─────────────────────── */
 
@@ -69,6 +71,7 @@ interface PersistedPlayerState {
   progress: number;
   shuffle: boolean;
   repeat: RepeatMode;
+  radio: boolean;
   visible: boolean;
   minimized: boolean;
 }
@@ -104,6 +107,7 @@ interface PlayerState {
   duration: number;
   shuffle: boolean;
   repeat: RepeatMode;
+  radio: boolean;
   visible: boolean;
   minimized: boolean;
 }
@@ -117,6 +121,7 @@ interface PlayerActions {
   seek: (seconds: number) => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
+  toggleRadio: () => void;
   toggleMinimize: () => void;
   close: () => void;
 }
@@ -133,6 +138,7 @@ const defaultState: PlayerContextValue = {
   duration: 0,
   shuffle: false,
   repeat: "off",
+  radio: false,
   visible: false,
   minimized: false,
   play: noop,
@@ -143,6 +149,7 @@ const defaultState: PlayerContextValue = {
   seek: noop,
   toggleShuffle: noop,
   cycleRepeat: noop,
+  toggleRadio: noop,
   toggleMinimize: noop,
   close: noop,
 };
@@ -163,6 +170,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
+  const [radio, setRadio] = useState(false);
   const [visible, setVisible] = useState(false);
   const [minimized, setMinimized] = useState(false);
 
@@ -175,6 +183,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const userRequestedPauseRef = useRef(false);
   const resumeAttemptRef = useRef(0);
 
+  // Guards a radio top-up fetch in flight; pending flag advances once tracks land.
+  const radioFetchingRef = useRef(false);
+  const radioPendingAdvanceRef = useRef(false);
+
   // On restore, seek to saved position once playback starts
   const seekOnPlayRef = useRef<number | null>(null);
 
@@ -186,6 +198,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const currentIndexRef = useRef(currentIndex);
   const shuffleRef = useRef(shuffle);
   const repeatRef = useRef(repeat);
+  const radioRef = useRef(radio);
   const playingRef = useRef(playing);
   const progressRef = useRef(progress);
   const visibleRef = useRef(visible);
@@ -194,6 +207,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   currentIndexRef.current = currentIndex;
   shuffleRef.current = shuffle;
   repeatRef.current = repeat;
+  radioRef.current = radio;
   playingRef.current = playing;
   progressRef.current = progress;
   visibleRef.current = visible;
@@ -235,6 +249,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setCurrentIndex(saved.currentIndex);
     setShuffle(saved.shuffle);
     setRepeat(saved.repeat);
+    setRadio(saved.radio ?? false);
     setVisible(true);
     setMinimized(saved.minimized);
     setProgress(saved.progress);
@@ -261,10 +276,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       progress: progressRef.current,
       shuffle,
       repeat,
+      radio,
       visible,
       minimized,
     });
-  }, [queue, currentIndex, playing, shuffle, repeat, visible, minimized]);
+  }, [queue, currentIndex, playing, shuffle, repeat, radio, visible, minimized]);
 
   useEffect(() => {
     const handler = () => {
@@ -276,6 +292,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         progress: progressRef.current,
         shuffle: shuffleRef.current,
         repeat: repeatRef.current,
+        radio: radioRef.current,
         visible: visibleRef.current,
         minimized: minimizedRef.current,
       });
@@ -297,6 +314,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("nam:pause-music", onPauseMusic);
     return () => window.removeEventListener("nam:pause-music", onPauseMusic);
   }, []);
+
+  /* ── Radio: proactively top up the queue as it nears the end ── */
+
+  useEffect(() => {
+    // Radio only extends the queue during straight-through playback. Shuffle and
+    // repeat-all already continue forever on the existing queue, and repeat-one
+    // replays in place — topping up in those modes would grow the queue unboundedly
+    // without ever consuming the appended tracks. This mirrors handleTrackEnd, whose
+    // radio branch is only reachable when shuffle is off and repeat is "off".
+    if (!radio || !playing || shuffle || repeat !== "off") return;
+    if (shouldTopUp(queue.length, currentIndex, true)) {
+      void fetchAndAppendRadio();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, radio, queue.length, playing, shuffle, repeat]);
+
+  /* ── Radio: advance once freshly-fetched tracks land in the queue ── */
+
+  useEffect(() => {
+    if (!radioPendingAdvanceRef.current) return;
+    const idx = currentIndexRef.current;
+    if (idx + 1 < queue.length) {
+      radioPendingAdvanceRef.current = false;
+      const nextIdx = idx + 1;
+      setCurrentIndex(nextIdx);
+      loadTrackAtIndex(nextIdx, queue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue]);
 
   /* ── Progress polling ──────────────────────────────────── */
 
@@ -444,6 +490,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } else if (rep === "all" && q.length > 0) {
       setCurrentIndex(0);
       loadTrackAtIndex(0, q);
+    } else if (radioRef.current) {
+      // Radio: queue ran dry — fetch more, then advance when they arrive
+      // (handled by the queue-growth effect). No-op if a top-up is already in flight.
+      radioPendingAdvanceRef.current = true;
+      void fetchAndAppendRadio();
     } else {
       userRequestedPauseRef.current = true; // queue exhausted — don't auto-resume
       setPlaying(false);
@@ -467,6 +518,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     },
     [createPlayerAndLoad],
   );
+
+  /* ── Radio: fetch related tracks and append to the queue ── */
+
+  const fetchAndAppendRadio = useCallback(async (): Promise<ListenTrack[]> => {
+    if (radioFetchingRef.current) return [];
+    const q = queueRef.current;
+    const idx = currentIndexRef.current;
+    const seed = q[idx];
+    if (!seed) return [];
+    radioFetchingRef.current = true;
+    try {
+      const more = await fetchRadioTracks(seed.video_id, buildExcludeList(q));
+      if (more.length) {
+        setQueue((prev) => [...prev, ...more]);
+      } else if (radioPendingAdvanceRef.current) {
+        // Genuinely no related tracks — stop gracefully.
+        radioPendingAdvanceRef.current = false;
+        userRequestedPauseRef.current = true;
+        setPlaying(false);
+      }
+      return more;
+    } finally {
+      radioFetchingRef.current = false;
+    }
+  }, []);
 
   /* ── Actions ───────────────────────────────────────────── */
 
@@ -601,6 +677,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const toggleRadio = useCallback(() => {
+    setRadio((r) => !r);
+  }, []);
+
   const toggleMinimize = useCallback(() => {
     setMinimized((m) => !m);
   }, []);
@@ -630,6 +710,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     duration,
     shuffle,
     repeat,
+    radio,
     visible: visible && currentTrack !== null,
     minimized,
     play,
@@ -640,6 +721,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     seek,
     toggleShuffle,
     cycleRepeat,
+    toggleRadio,
     toggleMinimize,
     close,
   };

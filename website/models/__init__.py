@@ -1,3 +1,4 @@
+from .aoe2_match import Aoe2Match
 from .attachment import Attachment
 from .download import Download
 from .feedback import Feedback
@@ -19,6 +20,7 @@ from .todo import TodoItem, TodoSection
 from .watch import WatchChannel, WatchVideo
 
 __all__ = [
+    "Aoe2Match",
     "Attachment",
     "Download",
     "Feedback",

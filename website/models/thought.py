@@ -4,6 +4,7 @@ from django.db import models
 class Thought(models.Model):
     content = models.TextField(blank=True)
     image = models.ImageField(upload_to="thoughts/%Y/%m/", blank=True, null=True)
+    video = models.FileField(upload_to="thoughts/videos/%Y/%m/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_published = models.BooleanField(default=True)
 

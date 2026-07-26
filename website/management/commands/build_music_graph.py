@@ -32,7 +32,8 @@ class Command(BaseCommand):
             try:
                 result = _do_sync(progress=progress)
                 self.stdout.write(
-                    f"Synced {result['synced_history']} plays + {result['synced_liked']} liked; graph rebuilt."
+                    f"Synced {result['synced_history']} plays + {result['synced_liked']} liked "
+                    f"+ {result['synced_frequent']} frequent; graph rebuilt."
                 )
                 return
             except Exception as e:

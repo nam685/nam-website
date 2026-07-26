@@ -15,6 +15,8 @@ from ..models import Thought
 COOLDOWN = timedelta(hours=18)
 ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
 MAX_DIM = 2000
+ALLOWED_VIDEO_EXTS = (".mp4", ".webm")
+MAX_VIDEO_SIZE = 50 * 1024 * 1024
 
 
 def _process_image(image_file):
@@ -49,6 +51,20 @@ def _process_image(image_file):
     return SimpleUploadedFile(f"thought.{ext}", buf.getvalue(), content_type=f"image/{save_fmt.lower()}"), None
 
 
+def _validate_video(video_file):
+    """Validate an uploaded video. Stored as-is (compressed client-side, no server transcode).
+
+    Returns (video_file, None) on success or (None, JsonResponse) on error.
+    """
+    if video_file.size > MAX_VIDEO_SIZE:
+        return None, JsonResponse({"error": "Video too large (max 50MB)"}, status=400)
+    if not video_file.name.lower().endswith(ALLOWED_VIDEO_EXTS):
+        return None, JsonResponse(
+            {"error": f"Unsupported video format. Allowed: {', '.join(ALLOWED_VIDEO_EXTS)}"}, status=400
+        )
+    return video_file, None
+
+
 def thought_list(request):
     thoughts = Thought.objects.filter(is_published=True)
     paginator = Paginator(thoughts, 10)
@@ -60,6 +76,7 @@ def thought_list(request):
                 "id": t.id,
                 "content": t.content,
                 "image": t.image.url if t.image else None,
+                "video": t.video.url if t.video else None,
                 "created_at": t.created_at.isoformat(),
             }
             for t in page
@@ -81,12 +98,15 @@ def thought_create(request):
     if latest and timezone.now() - latest.created_at < COOLDOWN:
         return JsonResponse({"error": "Chill. Too much thinking for today."}, status=429)
 
-    # content is optional in the model (image-only posts); enforce "text or image" here for API creates.
+    # content is optional in the model (media-only posts); enforce "text or media" here for API creates.
     content = (request.POST.get("content") or "").strip()
     image_file = request.FILES.get("image")
+    video_file = request.FILES.get("video")
 
-    if not content and not image_file:
-        return JsonResponse({"error": "Need text or an image"}, status=400)
+    if image_file and video_file:
+        return JsonResponse({"error": "Attach an image or a video, not both"}, status=400)
+    if not content and not image_file and not video_file:
+        return JsonResponse({"error": "Need text, an image, or a video"}, status=400)
     if len(content) > 2000:
         return JsonResponse({"error": "Too long (max 2000 chars)"}, status=400)
 
@@ -96,12 +116,19 @@ def thought_create(request):
         if err:
             return err
 
-    thought = Thought.objects.create(content=content, image=processed)
+    video = None
+    if video_file:
+        video, err = _validate_video(video_file)
+        if err:
+            return err
+
+    thought = Thought.objects.create(content=content, image=processed, video=video)
     return JsonResponse(
         {
             "id": thought.id,
             "content": thought.content,
             "image": thought.image.url if thought.image else None,
+            "video": thought.video.url if thought.video else None,
             "created_at": thought.created_at.isoformat(),
         },
         status=201,
@@ -118,5 +145,7 @@ def thought_delete(request, thought_id):  # noqa: ARG001
         return JsonResponse({"error": "Thought not found"}, status=404)
     if thought.image:
         thought.image.delete(save=False)
+    if thought.video:
+        thought.video.delete(save=False)
     thought.delete()
     return JsonResponse({"ok": True})

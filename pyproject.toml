@@ -16,6 +16,8 @@ dependencies = [
     "ytmusicapi>=1.9",
     "httpx>=0.28.1",
     "celery[redis]>=5.4",
+    "mgz-fast==1.0.0",
+    "aoe2coach @ git+https://github.com/nam685/aoe2coach.git@a3b9cca",
 ]
 
 [dependency-groups]

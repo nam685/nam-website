@@ -12,9 +12,11 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
 
 from ..auth import require_admin
 from ..models import ListenTrack
+from ..services import music_graph
 from ..utils import parse_json_body, parse_pagination
 
 logger = logging.getLogger(__name__)
@@ -22,9 +24,45 @@ logger = logging.getLogger(__name__)
 BROWSER_JSON_PATH = "browser.json"
 VIEW_COUNT_RE = re.compile(r"^\d+\.?\d*\s*[MKBmkb]?\s*views?$", re.IGNORECASE)
 
+# Hop-by-hop / request-specific headers that must not be forwarded when we probe YTM ourselves.
+_PROBE_SKIP_HEADERS = {"content-length", "host", "connection", "te", "accept-encoding"}
+
+# Headers that must never be persisted into / loaded from browser.json.
+#
+# The pasted headers come from a real browser request, so they carry request-instance junk that
+# breaks ytmusicapi when replayed:
+#   - `accept-encoding: ..., br, zstd` is the killer. ytmusicapi forwards it verbatim, YouTube
+#     replies brotli/zstd-compressed, and the server's `requests` can't decode br/zstd → the body
+#     is binary garbage → `resp.json()` raises JSONDecodeError → every sync looks like an expired
+#     session. (Our own login probe strips accept-encoding, so it always decoded and reported
+#     "logged in" — which is exactly why this hid for so long.) Dropping it lets requests use its
+#     own gzip/deflate, which it can always decode.
+#   - content-* describe that original request's body, not ytmusicapi's JSON POSTs.
+_VOLATILE_HEADERS = {"accept-encoding", "content-length", "content-encoding", "content-type"}
+
+
+def _sanitize_headers(headers):
+    """Strip request-instance headers that break ytmusicapi when replayed (see _VOLATILE_HEADERS)."""
+    return {k: v for k, v in headers.items() if k.lower() not in _VOLATILE_HEADERS}
+
+
+# The browse response embeds {"key": "logged_in", "value": "0|1"} in its serviceTrackingParams.
+_LOGGED_IN_RE = re.compile(r'logged_in"[^}]*?"value":\s*"(\d)"', re.DOTALL)
+
+
+class YTMAuthError(RuntimeError):
+    """Raised when YouTube Music credentials are missing or the session is logged out.
+
+    Distinct from generic errors so callers can surface a clear "re-authenticate" message
+    instead of an opaque 502 — the cookie silently expiring is the #1 cause of sync no-ops.
+    """
+
+
 # Rate limit: 1 sync per 5 minutes
 SYNC_COOLDOWN = 300
 _SYNC_KEY = "listens_last_sync_ts"
+
+RADIO_EXCLUDE_CAP = 40  # cap exclude list size to keep the URL sane
 
 
 def listen_list(request):
@@ -52,25 +90,48 @@ def listen_list(request):
     return JsonResponse({"tracks": data, "total": total})
 
 
+@require_GET
+def listen_radio(request):
+    """Return tracks related to a seed video for endless radio (public)."""
+    seed = request.GET.get("seed", "").strip()
+    if not seed:
+        return JsonResponse({"error": "seed required"}, status=400)
+    exclude_raw = request.GET.get("exclude", "")
+    exclude = [v for v in (s.strip() for s in exclude_raw.split(",")) if v][:RADIO_EXCLUDE_CAP]
+    tracks = music_graph.radio_next(seed, exclude_video_ids=exclude)
+    return JsonResponse({"tracks": tracks})
+
+
 def _get_auth_path():
     return os.environ.get("YTMUSIC_BROWSER_JSON", BROWSER_JSON_PATH)
 
 
-def _load_browser_headers():
-    """Load + authorize the YTM browser.json headers dict, or None if not configured."""
+def _authorize_headers(headers):
+    """Compute the SAPISIDHASH `authorization` header from the cookie if it's not already present.
+
+    ytmusicapi's `determine_auth_type` classifies a header dict as BROWSER *only* if `authorization`
+    contains "SAPISIDHASH"; with no authorization it defaults to OAUTH and raises "oauth_credentials
+    not provided". Pasted requests may or may not carry an Authorization header (e.g. /browse does,
+    /api/stats/playback does not), so we must derive it ourselves from the cookie rather than depend
+    on which request the user happened to copy. Mutates and returns `headers`.
+    """
     from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
+    if "authorization" not in headers and headers.get("cookie"):
+        sapisid = sapisid_from_cookie(headers["cookie"])
+        origin = headers.get("origin", "https://music.youtube.com")
+        headers["authorization"] = get_authorization(sapisid + " " + origin)
+    return headers
+
+
+def _load_browser_headers():
+    """Load + authorize the YTM browser.json headers dict, or None if not configured."""
     auth_path = _get_auth_path()
     if not os.path.isfile(auth_path):
         return None
 
     with open(auth_path) as f:
-        headers = json.load(f)
-    if "authorization" not in headers and "cookie" in headers:
-        sapisid = sapisid_from_cookie(headers["cookie"])
-        origin = headers.get("origin", "https://music.youtube.com")
-        headers["authorization"] = get_authorization(sapisid + " " + origin)
-    return headers
+        return _authorize_headers(_sanitize_headers(json.load(f)))
 
 
 def _init_ytmusic():
@@ -81,6 +142,64 @@ def _init_ytmusic():
     if headers is None:
         return None, "Browser auth not configured. Run: ytmusicapi browser"
     return YTMusic(headers), None
+
+
+def _is_logged_in(headers):
+    """Probe YTM to confirm `headers` is an *authenticated* session, not just structurally valid.
+
+    `YTMusic(headers)` construction never hits the network, so a logged-out cookie passes it
+    silently — then every sync returns zero. We hit the history browse endpoint and read the
+    `logged_in` flag YouTube echoes back. Returns False on any error (treat as not-logged-in).
+    """
+    import requests
+    from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
+
+    cookie = (headers or {}).get("cookie", "")
+    if not cookie:
+        return False
+    try:
+        origin = headers.get("origin", "https://music.youtube.com")
+        probe_headers = {k: v for k, v in headers.items() if k.lower() not in _PROBE_SKIP_HEADERS}
+        probe_headers["authorization"] = get_authorization(sapisid_from_cookie(cookie) + " " + origin)
+        body = {
+            "browseId": "FEmusic_history",
+            "context": {"client": {"clientName": "WEB_REMIX", "clientVersion": "1.20240101.00.00", "hl": "en"}},
+        }
+        resp = requests.post(
+            "https://music.youtube.com/youtubei/v1/browse",
+            params={"alt": "json"},
+            json=body,
+            headers=probe_headers,
+            timeout=20,
+        )
+        match = _LOGGED_IN_RE.search(resp.text)
+        return bool(match) and match.group(1) == "1"
+    except Exception:
+        logger.warning("YTM login probe failed", exc_info=True)
+        return False
+
+
+# get_history occasionally returns an empty body even though the login probe reports a live
+# session (a "half-dead" cookie). ytmusicapi surfaces that as a JSONDecodeError on the empty
+# response. Retry a few times to absorb transient blips; if it stays empty the cookie genuinely
+# needs re-auth, so raise YTMAuthError — the view turns that into a 409 (actionable re-auth
+# prompt) rather than an opaque 502 that reads as a silent failure.
+_HISTORY_RETRY_ATTEMPTS = 3
+
+
+def _get_history_with_retry(yt):
+    last_exc = None
+    for attempt in range(_HISTORY_RETRY_ATTEMPTS):
+        try:
+            return yt.get_history()
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            logger.warning(
+                "YTM get_history returned an empty/non-JSON body (attempt %d/%d)",
+                attempt + 1,
+                _HISTORY_RETRY_ATTEMPTS,
+            )
+    raise YTMAuthError("YouTube Music returned an empty history response — re-authenticate on /listens.") from last_exc
 
 
 def _parse_track_item(item):
@@ -109,11 +228,64 @@ def _parse_track_item(item):
     }
 
 
-def _do_sync(progress=None):
+# Home-feed rows that surface YOUR frequently/previously played tracks (not recommendations).
+# Matched case-insensitively against the localized row title.
+_FREQUENT_HOME_ROW_KEYWORDS = ("listen again", "favourite", "favorite", "forgotten", "your top")
+
+
+def _fetch_frequent_from_home(yt):
+    """Parse song items from the personalized 'listen again / favourites' home rows.
+
+    These are history-derived (things you actually play often), so they respect the
+    "my universe" rule — unlike recommendation rows (Quick Picks / Mixed for you),
+    which are skipped.
+    """
+    try:
+        home = yt.get_home(limit=8)
+    except Exception:
+        logger.warning("Failed to fetch home feed — skipping frequent listens")
+        return []
+
+    if not isinstance(home, list):
+        return []
+
+    parsed_tracks = []
+    for row in home:
+        title = (row.get("title") or "").lower()
+        if not any(keyword in title for keyword in _FREQUENT_HOME_ROW_KEYWORDS):
+            continue
+        for item in row.get("contents", []):
+            if item.get("videoId"):
+                parsed = _parse_track_item(item)
+                if parsed:
+                    parsed_tracks.append(parsed)
+    return parsed_tracks
+
+
+def _rebuild_graph(progress=None):
+    """Rebuild the listening graph from current data. Non-fatal — never raises.
+
+    Slow: it fetches Last.fm similarities for every artist/track (minutes). Callers on the
+    request path must run this off-thread (see `rebuild_listen_graph` Celery task) so they
+    don't blow gunicorn's request timeout.
+    """
+    try:
+        from django.conf import settings
+
+        from ..services import music_graph
+
+        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers(), progress=progress)
+    except Exception:
+        logger.exception("Graph rebuild failed")
+
+
+def _do_sync(progress=None, rebuild_graph=True):
     """Core sync logic shared by the view and Celery task.
 
     `progress` is an optional callable(str) for live status output (e.g. a CLI writer).
-    Returns {"synced_history": int, "synced_liked": int} or raises on auth failure.
+    `rebuild_graph` rebuilds the graph inline when True; the web view passes False and
+    dispatches the rebuild to Celery instead (the Last.fm pass exceeds the request timeout).
+    Returns {"synced_history": int, "synced_liked": int, "synced_frequent": int} or raises on auth failure.
     """
 
     def report(msg):
@@ -124,9 +296,15 @@ def _do_sync(progress=None):
     if err:
         raise RuntimeError(err)
 
+    # Verify the session is actually logged in before doing any work. A stale/expired cookie
+    # still constructs a valid YTMusic client but returns a logged-out (empty/non-JSON) history,
+    # which otherwise surfaces as an opaque 502 and silently syncs nothing.
+    if not _is_logged_in(_load_browser_headers()):
+        raise YTMAuthError("YouTube Music session is logged out — re-authenticate on /listens.")
+
     # --- Sync play history ---
     report("Fetching YouTube Music play history…")
-    history = yt.get_history()
+    history = _get_history_with_retry(yt)
 
     cutoff = timezone.now() - timezone.timedelta(hours=24)
     recent_ids = set(ListenTrack.objects.filter(played_at__gte=cutoff).values_list("video_id", flat=True))
@@ -142,6 +320,7 @@ def _do_sync(progress=None):
             ListenTrack(
                 **parsed,
                 played_at=sync_time - timezone.timedelta(seconds=i),
+                from_sync=True,
             )
         )
 
@@ -170,30 +349,41 @@ def _do_sync(progress=None):
                 **parsed,
                 played_at=timezone.now(),
                 is_liked=True,
+                from_sync=True,
             )
         )
 
     if new_liked:
         ListenTrack.objects.bulk_create(new_liked)
 
-    if new_tracks or new_liked:
+    # --- Frequently-listened tracks (from the personalized home feed) ---
+    report("Fetching frequently-listened songs…")
+    existing_ids = set(ListenTrack.objects.values_list("video_id", flat=True))
+    new_frequent = []
+    for parsed in _fetch_frequent_from_home(yt):
+        if parsed["video_id"] in existing_ids:
+            continue
+        existing_ids.add(parsed["video_id"])  # dedup within this batch too
+        new_frequent.append(ListenTrack(**parsed, played_at=timezone.now(), from_sync=True))
+
+    if new_frequent:
+        ListenTrack.objects.bulk_create(new_frequent)
+
+    if new_tracks or new_liked or new_frequent:
         redis_cache.delete("listen_stats")
         redis_cache.delete("listen_total_count")
 
-    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked; rebuilding graph…")
+    report(f"Synced {len(new_tracks)} plays + {len(new_liked)} liked + {len(new_frequent)} frequent")
 
-    # Rebuild the listening graph from the freshly-synced data. Non-fatal: a graph
-    # failure must not break the sync. Runs for both the view and the Celery task.
-    try:
-        from django.conf import settings
+    if rebuild_graph:
+        report("Rebuilding graph…")
+        _rebuild_graph(progress=progress)
 
-        from ..services import music_graph
-
-        music_graph.build_graph(api_key=settings.LASTFM_API_KEY, ytm_headers=_load_browser_headers(), progress=progress)
-    except Exception:
-        logger.exception("Graph rebuild after sync failed")
-
-    return {"synced_history": len(new_tracks), "synced_liked": len(new_liked)}
+    return {
+        "synced_history": len(new_tracks),
+        "synced_liked": len(new_liked),
+        "synced_frequent": len(new_frequent),
+    }
 
 
 @csrf_exempt
@@ -211,7 +401,15 @@ def listen_sync(request):
         return JsonResponse({"error": f"Rate limited. Try again in {remaining}s"}, status=429)
 
     try:
-        result = _do_sync()
+        # Sync the tracks synchronously (fast), but defer the graph rebuild — its Last.fm pass
+        # takes minutes and would otherwise blow gunicorn's request timeout (a real success then
+        # reported to the user as a 502).
+        result = _do_sync(rebuild_graph=False)
+    except YTMAuthError as e:
+        # 409 (not 401) — the admin token is fine; it's the YTM cookie that's stale. A 401 would
+        # trip the frontend's admin-token-expiry path and bounce the user to /sudo. `auth_expired`
+        # lets the listens page show a "re-authenticate YTM" prompt instead.
+        return JsonResponse({"error": str(e), "auth_expired": True}, status=409)
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
     except Exception:
@@ -220,7 +418,29 @@ def listen_sync(request):
 
     redis_cache.set(_SYNC_KEY, now, SYNC_COOLDOWN + 60)
 
-    return JsonResponse({"synced": result["synced_history"], "synced_liked": result["synced_liked"]})
+    # Rebuild the graph off the request path via Celery. The Last.fm pass takes minutes (well past
+    # gunicorn's 120s worker timeout), so we must NOT run it inline: doing so kills the worker
+    # mid-request and reports a "failure" to the user even though the tracks were already synced —
+    # exactly the confusing timeout that made a working sync look broken. If the broker is
+    # unreachable we skip the rebuild (the tracks are saved; the graph refreshes on the next
+    # successful sync) rather than block the response.
+    graph_rebuilding = True
+    try:
+        from ..tasks import rebuild_listen_graph
+
+        rebuild_listen_graph.delay()
+    except Exception:
+        logger.exception("Could not queue graph rebuild; skipping (tracks are synced)")
+        graph_rebuilding = False
+
+    return JsonResponse(
+        {
+            "synced": result["synced_history"],
+            "synced_liked": result["synced_liked"],
+            "synced_frequent": result["synced_frequent"],
+            "graph_rebuilding": graph_rebuilding,
+        }
+    )
 
 
 def listen_stats(_request):
@@ -400,6 +620,11 @@ def listen_reauth(request):
         key, _, value = line.partition(":")
         parsed[key.strip().lower()] = value.strip()
 
+    # Drop request-instance headers (esp. `accept-encoding: ..., br, zstd`) that break ytmusicapi
+    # when replayed — see _VOLATILE_HEADERS. Do this before validation/probe so we test exactly the
+    # header set we persist.
+    parsed = _sanitize_headers(parsed)
+
     if "cookie" not in parsed:
         return JsonResponse({"error": "No 'cookie' header found in pasted headers"}, status=400)
 
@@ -409,24 +634,33 @@ def listen_reauth(request):
     if "user-agent" not in parsed:
         parsed["user-agent"] = "Mozilla/5.0"
 
-    # Validate by trying to init YTMusic
+    # Derive the SAPISIDHASH authorization from the cookie so ytmusicapi detects BROWSER auth. Not
+    # every pasted POST carries an Authorization header (e.g. /api/stats/playback doesn't), and
+    # without one ytmusicapi misdetects the dict as OAuth and rejects it. Compute it ourselves.
+    parsed = _authorize_headers(parsed)
+
+    # Validate that the headers parse into a usable YTMusic client (catches malformed cookies).
     try:
         from ytmusicapi import YTMusic
-        from ytmusicapi.helpers import get_authorization, sapisid_from_cookie
 
-        if "authorization" not in parsed and "cookie" in parsed:
-            sapisid = sapisid_from_cookie(parsed["cookie"])
-            origin = parsed.get("origin", "https://music.youtube.com")
-            parsed["authorization"] = get_authorization(sapisid + " " + origin)
-
-        YTMusic(parsed)
+        YTMusic(dict(parsed))
     except Exception as e:
         return JsonResponse({"error": f"Headers invalid — YTMusic init failed: {e}"}, status=400)
 
-    # Do NOT persist the computed `authorization` (SAPISIDHASH): it embeds a timestamp and
-    # expires within hours, so a stored value goes stale and later syncs fail. Strip it and
-    # store only the cookie/headers — `_load_browser_headers` recomputes a fresh hash on each
-    # use (matching what `ytmusicapi browser` writes).
+    # Crucially, verify the session is actually *logged in*. YTMusic() construction never hits
+    # the network, so a logged-out cookie passes validation and then silently syncs nothing —
+    # exactly the failure mode this guards against. Probe before persisting.
+    if not _is_logged_in(parsed):
+        return JsonResponse(
+            {
+                "error": "Those headers are not a logged-in session. Copy them from a tab where you're signed into YouTube Music."
+            },
+            status=400,
+        )
+
+    # Never persist a computed `authorization` (SAPISIDHASH): it embeds a timestamp and expires
+    # within hours, so a stored value goes stale and later syncs fail. `_load_browser_headers`
+    # recomputes a fresh hash on each use (matching what `ytmusicapi browser` writes).
     parsed.pop("authorization", None)
 
     auth_path = _get_auth_path()

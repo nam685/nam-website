@@ -12,6 +12,10 @@ class ListenTrack(models.Model):
     duration = models.CharField(max_length=16, blank=True, default="")
     played_at = models.DateTimeField()
     is_liked = models.BooleanField(default=False)
+    # True when created by a YTM sync (history/liked/frequent) with a fabricated played_at,
+    # vs a real-timestamp Google Takeout import. Co-listen edges use only real timestamps —
+    # fabricated ones all land in one window and would form a giant fake "session".
+    from_sync = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-played_at"]

@@ -84,6 +84,16 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localho
 ADMIN_SECRET = env("ADMIN_SECRET")
 LASTFM_API_KEY = env("LASTFM_API_KEY", default="")
 
+AOE2_PROFILE_ID = env.int("AOE2_PROFILE_ID", default=14697894)
+AOE2_IGN = env("AOE2_IGN", default="nom")
+AOE2_RELIC_HOST = env("AOE2_RELIC_HOST", default="https://aoe-api.worldsedgelink.com")
+AOE2_CLAUDE_BIN = env("AOE2_CLAUDE_BIN", default="claude")
+AOE2_COACH_MODEL = env("AOE2_COACH_MODEL", default="haiku")  # volume default; featured (⭐) matches use opus
+# Reasoning effort for the agentic coach. "high" (not "xhigh") — xhigh's per-run thinking-token load
+# makes the Max subscription silently downgrade opus->haiku under rate limits.
+AOE2_COACH_EFFORT = env("AOE2_COACH_EFFORT", default="high")
+AOE2_TZ_OFFSET_HOURS = env.int("AOE2_TZ_OFFSET_HOURS", default=7)  # VN offset (UTC+7)
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 FILE_UPLOAD_PERMISSIONS = 0o644
@@ -113,6 +123,10 @@ CELERY_BEAT_SCHEDULE = {
     "sync-listens-daily": {
         "task": "website.tasks.sync_listens",
         "schedule": crontab(hour=4, minute=0),
+    },
+    "enrich-aoe2-ladder-daily": {
+        "task": "website.tasks.enrich_ladder",
+        "schedule": crontab(hour=5, minute=0),
     },
 }
 

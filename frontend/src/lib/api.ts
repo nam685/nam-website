@@ -1,3 +1,5 @@
+import type { BuildDetail, BuildSummary } from "@/lib/aoe2";
+
 /** API base URL for client-side fetches (empty = relative URL via Caddy proxy) */
 export const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -11,6 +13,7 @@ export interface Thought {
   id: number;
   content: string;
   image: string | null;
+  video: string | null;
   created_at: string;
 }
 
@@ -55,10 +58,60 @@ export interface ListenStats {
   daily: { date: string; count: number }[];
 }
 
+export async function fetchRadioTracks(
+  seed: string,
+  exclude: string[],
+): Promise<ListenTrack[]> {
+  const params = new URLSearchParams({ seed });
+  if (exclude.length) params.set("exclude", exclude.join(","));
+  try {
+    const res = await fetch(`${API}/api/listens/radio/?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.tracks ?? []) as ListenTrack[];
+  } catch {
+    return [];
+  }
+}
+
+/* ── AoE2 build-order library ──────────────────────────── */
+
+/** Fetch the public build-order library list (server-side). Empty on error. */
+export async function fetchAoe2Builds(): Promise<BuildSummary[]> {
+  try {
+    const res = await fetch(`${API_INTERNAL}/api/aoe2/builds/`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.builds ?? []) as BuildSummary[];
+  } catch {
+    return [];
+  }
+}
+
+/** Fetch a single build's full detail (server-side). Null if unknown / error. */
+export async function fetchAoe2Build(id: string): Promise<BuildDetail | null> {
+  try {
+    const res = await fetch(
+      `${API_INTERNAL}/api/aoe2/builds/${encodeURIComponent(id)}/`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as BuildDetail;
+  } catch {
+    return null;
+  }
+}
+
 /* ── Listens graph ─────────────────────────────────────── */
 
 export type GraphNodeType = "artist" | "album" | "track";
-export type GraphEdgeType = "similar_artist" | "similar_track" | "colisten" | "structural";
+export type GraphEdgeType =
+  | "similar_artist"
+  | "similar_track"
+  | "colisten"
+  | "structural";
 
 export interface GraphNode {
   key: string;
@@ -92,6 +145,73 @@ export interface GraphSearchResult {
   title: string;
   subtitle: string;
   thumbnail_url: string;
+}
+
+/* ── Listens graph: full diagnostic (admin-gated) ──────── */
+
+/** Node types in the full graph — includes "tag", which the patch graph omits. */
+export type GraphFullNodeType = "track" | "artist" | "album" | "tag";
+export type GraphFullEdgeType = "structural" | "tag" | "affinity";
+
+export interface GraphFullNode {
+  id: string; // "<node_type>:<key>" — globally unique, use as force-graph id
+  key: string;
+  node_type: GraphFullNodeType;
+  title: string;
+  subtitle: string;
+  video_id: string;
+  play_count: number;
+  is_liked: boolean;
+  is_subscribed: boolean;
+  in_library: boolean;
+  degree: number; // total degree in full graph
+  component: number; // 0 = giant component; 1..N = smaller components (sorted desc by size)
+}
+
+export interface GraphFullEdge {
+  source: string; // node id ("<node_type>:<key>")
+  target: string; // node id
+  edge_type: GraphFullEdgeType;
+  source_kind: string; // "" for structural/tag; "colisten"|"similar_artist"|"similar_track" for affinity
+  weight: number;
+}
+
+export interface GraphSummary {
+  node_count: number;
+  edge_count: number;
+  component_count: number;
+  giant_size: number; // size of component 0
+  component_sizes: number[]; // desc
+  islands: {
+    component: number;
+    size: number;
+    nodes: { id: string; node_type: string; title: string }[];
+  }[]; // comps of size <= 5
+  degree: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    histogram: Record<string, number>; // "deg" -> count
+  };
+  top_hubs: {
+    id: string;
+    node_type: string;
+    title: string;
+    degree: number;
+    play_count: number;
+  }[]; // top 20 by degree
+  edge_type_counts: Record<string, number>;
+  source_kind_counts: Record<string, number>;
+  articulation_points: { id: string; node_type: string; title: string }[]; // within giant component
+  bridges: { source: string; target: string }[]; // within giant component
+  tagless_artists: number;
+}
+
+export interface GraphFull {
+  nodes: GraphFullNode[];
+  edges: GraphFullEdge[];
+  summary: GraphSummary;
 }
 
 export interface WatchVideo {
