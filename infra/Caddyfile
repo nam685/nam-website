@@ -34,6 +34,11 @@ nam685.de {
         file_server
     }
 
+    # chess-discord bot: Lichess OAuth callback (separate repo/deploy)
+    handle /chess-discord/oauth/callback {
+        reverse_proxy localhost:8877
+    }
+
     # Next.js frontend
     handle {
         reverse_proxy localhost:3000
