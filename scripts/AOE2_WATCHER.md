@@ -17,6 +17,23 @@ A top-level supervisor restarts the watch loop after any error (network blip, ex
 login, server down), so the daemon survives anything. Output is written to
 `scripts/aoe2_watcher.log` (size-rotated) and stdout.
 
+**One error is deliberately not retried:** a rejected login. The site allows 15 login
+attempts per IP per 15 minutes, shared with your own `/sudo` logins — so a watcher looping
+on a wrong secret will lock *you* out of the site. On a 401/403 the watcher writes
+`scripts/aoe2_watcher.auth_failed` and exits; that marker also stops the Scheduled Task's
+own restarts from resuming, so it stays stopped until a human intervenes. On a 429 it backs
+off for a full rate-limit window instead of retrying immediately.
+
+If the watcher stops uploading, check the log for `login rejected` — the usual cause is
+`AOE2_ADMIN_SECRET` going stale after the site's `ADMIN_SECRET` was rotated:
+
+```powershell
+# 1. update AOE2_ADMIN_SECRET in scripts\aoe2_watcher.env to the current ADMIN_SECRET
+# 2. clear the marker, then restart
+Remove-Item scripts\aoe2_watcher.auth_failed
+Start-ScheduledTask -TaskName AoE2RecWatcher
+```
+
 ## One-time setup (Windows gaming PC)
 
 1. **Create the config file** `scripts/aoe2_watcher.env` (gitignored — holds the admin secret):

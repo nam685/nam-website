@@ -51,7 +51,13 @@ function SudoForm() {
       });
 
       if (!res.ok) {
-        setError("Don't guess.");
+        // 429 must read differently from 401 — otherwise a rate-limit lockout is
+        // indistinguishable from a wrong secret, and you retry a correct one for hours.
+        setError(
+          res.status === 429
+            ? "Rate limited. Wait, then retry."
+            : "Don't guess.",
+        );
         setPassword("");
         setLoading(false);
         return;
