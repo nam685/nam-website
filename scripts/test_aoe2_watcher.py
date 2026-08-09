@@ -2,6 +2,9 @@ import pytest
 
 import scripts.aoe2_watcher as watcher
 from scripts.aoe2_watcher import (
+    FatalAuthError,
+    RateLimitedError,
+    _login,
     _upload,
     already_uploaded,
     find_recs,
@@ -98,6 +101,68 @@ def test_upload_sends_coach_zero(tmp_path, monkeypatch):
     assert resp.status_code == 201
     assert captured["url"].endswith("/api/aoe2/upload/")
     assert captured["data"] == {"coach": "0"}
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_login_raises_fatal_on_bad_secret(monkeypatch, status):
+    """A wrong secret must not be retryable — retrying it locks the real admin out."""
+
+    class FakeResp:
+        status_code = status
+
+    monkeypatch.setattr(watcher.httpx, "post", lambda *_, **__: FakeResp())
+
+    with pytest.raises(FatalAuthError):
+        _login("https://nam685.de", "stale-secret")
+
+
+def test_login_raises_rate_limited_on_429(monkeypatch):
+    class FakeResp:
+        status_code = 429
+
+    monkeypatch.setattr(watcher.httpx, "post", lambda *_, **__: FakeResp())
+
+    with pytest.raises(RateLimitedError):
+        _login("https://nam685.de", "secret")
+
+
+def test_supervise_backs_off_hard_when_rate_limited():
+    """429 is retryable, but at the rate-limit window's pace — not the usual 30s."""
+    sleeps = []
+
+    def target():
+        raise RateLimitedError("429")
+
+    supervise(target, sleep_fn=sleeps.append, retry_delay=7, iterations=2, backoff=900)
+
+    assert sleeps == [900, 900]
+
+
+def test_breaker_blocks_restart_after_fatal_auth(monkeypatch, tmp_path):
+    """The marker file must survive process exit, or the Scheduled Task just resumes hammering."""
+    block = tmp_path / "aoe2_watcher.auth_failed"
+    monkeypatch.setattr(watcher, "_block_path", lambda: str(block))
+
+    assert watcher._tripped_breaker() is False
+    watcher._trip_breaker("login rejected (401)")
+    assert watcher._tripped_breaker() is True
+    assert "401" in block.read_text()
+
+
+def test_supervise_propagates_fatal_auth():
+    """supervise() swallows everything except FatalAuthError, which must stop the daemon."""
+    calls = {"n": 0}
+    sleeps = []
+
+    def target():
+        calls["n"] += 1
+        raise FatalAuthError("bad secret")
+
+    with pytest.raises(FatalAuthError):
+        supervise(target, sleep_fn=sleeps.append, retry_delay=7, iterations=3)
+
+    assert calls["n"] == 1  # stopped on the first rejection, did not loop
+    assert sleeps == []
 
 
 def test_supervise_catches_and_retries():

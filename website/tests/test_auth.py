@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 from django.core import signing
@@ -70,6 +71,35 @@ class TestLoginRateLimit:
             client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
         resp = client.post("/api/auth/login/", json.dumps({"secret": "test-secret"}), content_type="application/json")
         assert resp.status_code == 429
+
+    def test_window_expires_despite_continuous_attempts(self, client, settings, monkeypatch):
+        """The lockout must expire a fixed window after the FIRST attempt.
+
+        Regression: the window was previously re-set on every attempt, so a client
+        retrying faster than the window (a daemon looping on a stale secret) renewed the
+        lockout forever and permanently locked the real admin out.
+        """
+        from website.views import auth as auth_views
+
+        monkeypatch.setattr(auth_views, "_RATE_LIMIT_WINDOW", 1)
+        settings.ADMIN_SECRET = "test-secret"
+
+        for _ in range(16):
+            client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
+        assert (
+            client.post(
+                "/api/auth/login/", json.dumps({"secret": "test-secret"}), content_type="application/json"
+            ).status_code
+            == 429
+        )
+
+        # Keep hammering across the window boundary — this is what used to renew the TTL.
+        for _ in range(4):
+            time.sleep(0.3)
+            client.post("/api/auth/login/", json.dumps({"secret": "wrong"}), content_type="application/json")
+
+        resp = client.post("/api/auth/login/", json.dumps({"secret": "test-secret"}), content_type="application/json")
+        assert resp.status_code == 200
 
 
 class TestTokenFunctions:

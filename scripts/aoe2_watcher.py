@@ -18,7 +18,12 @@ respects the Claude Max session budget. Without this, the startup backlog catch-
 fire hundreds of inline coach runs and blow the rate limit.
 
 Runs unattended (see scripts/install_aoe2_watcher.ps1): a top-level supervisor restarts
-the watch loop after any error, so a network blip or expired login never kills the daemon.
+the watch loop after any error, so a network blip never kills the daemon. Rejected logins
+are the exception, because retrying them exhausts the site's per-IP login rate limit and
+locks the real admin out of /sudo: a 401/403 (wrong AOE2_ADMIN_SECRET, e.g. stale after a
+rotation) writes an aoe2_watcher.auth_failed marker and exits — the marker stops the
+Scheduled Task's own restarts from resuming the hammering, and must be deleted by hand once
+the secret is fixed. A 429 backs off for the length of the server's rate-limit window.
 Output goes to a size-rotated aoe2_watcher.log next to this script as well as stdout.
 """
 
@@ -33,9 +38,19 @@ import httpx
 
 POLL_SECONDS = 5
 RETRY_DELAY_SECONDS = 30
+RATE_LIMIT_BACKOFF_SECONDS = 900  # matches the server's 15-minute login window
+BLOCK_FILE = "aoe2_watcher.auth_failed"
 REQUIRED_KEYS = ("AOE2_SERVER_URL", "AOE2_ADMIN_SECRET", "AOE2_REC_DIR")
 
 log = logging.getLogger("aoe2_watcher")
+
+
+class FatalAuthError(Exception):
+    """Secret is wrong — no amount of retrying fixes it, and retrying locks the admin out."""
+
+
+class RateLimitedError(Exception):
+    """Server is rate-limiting our logins; back off hard instead of retrying at normal pace."""
 
 
 def hash_file(path):
@@ -91,16 +106,29 @@ def resolve_config(environ, file_values):
     return cfg
 
 
-def supervise(target, sleep_fn=time.sleep, retry_delay=RETRY_DELAY_SECONDS, iterations=None):
-    """Run target() forever; on any exception, log it, sleep, and retry. Never propagates.
+def supervise(
+    target,
+    sleep_fn=time.sleep,
+    retry_delay=RETRY_DELAY_SECONDS,
+    iterations=None,
+    backoff=RATE_LIMIT_BACKOFF_SECONDS,
+):
+    """Run target() forever; on any exception, log it, sleep, and retry.
 
-    iterations bounds the loop (tests only); None means run forever.
+    Only FatalAuthError propagates — retrying a wrong secret can never succeed and locks
+    the real admin out of /sudo. RateLimitedError retries at ``backoff`` instead of
+    ``retry_delay``. iterations bounds the loop (tests only); None means run forever.
     """
     n = 0
     while iterations is None or n < iterations:
         n += 1
         try:
             target()
+        except FatalAuthError:
+            raise  # unfixable by retrying, and retrying locks the real admin out
+        except RateLimitedError as exc:
+            log.error("%s; backing off %ss", exc, backoff)
+            sleep_fn(backoff)
         except Exception as exc:  # noqa: BLE001 — daemon must survive anything
             log.error("watch loop crashed: %s; retrying in %ss", exc, retry_delay)
             sleep_fn(retry_delay)
@@ -108,8 +136,40 @@ def supervise(target, sleep_fn=time.sleep, retry_delay=RETRY_DELAY_SECONDS, iter
 
 def _login(server, secret):
     resp = httpx.post(f"{server}/api/auth/login/", json={"secret": secret}, timeout=30)
+    if resp.status_code in (401, 403):
+        # The configured secret is wrong (typically stale after an ADMIN_SECRET rotation).
+        # Retrying can never succeed, and each attempt burns the site's per-IP login budget
+        # until the real admin is locked out of /sudo too — so stop, loudly.
+        raise FatalAuthError(
+            f"login rejected ({resp.status_code}) — AOE2_ADMIN_SECRET does not match the site's current ADMIN_SECRET"
+        )
+    if resp.status_code == 429:
+        raise RateLimitedError("login rate-limited (429) — too many recent attempts from this IP")
     resp.raise_for_status()
     return resp.json()["token"]
+
+
+def _block_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), BLOCK_FILE)
+
+
+def _tripped_breaker():
+    """True if a previous run hit a fatal auth error and nobody has cleared it yet."""
+    return os.path.exists(_block_path())
+
+
+def _trip_breaker(reason):
+    """Persist the fatal-auth stop so supervisor restarts don't resume hammering.
+
+    The Scheduled Task restarts this process every minute (RestartCount 999), so an
+    in-process guard is not enough — without this file a stale secret still produces a
+    login attempt every 60s indefinitely.
+    """
+    try:
+        with open(_block_path(), "w", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {reason}\n")
+    except OSError:
+        log.error("could not write %s", _block_path())
 
 
 def _upload(server, token, path):
@@ -176,8 +236,22 @@ def setup_logging(log_path):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     setup_logging(os.path.join(here, "aoe2_watcher.log"))
+
+    if _tripped_breaker():
+        log.error(
+            "refusing to start: a previous run had its login rejected (see %s). Fix "
+            "AOE2_ADMIN_SECRET, then delete that file to re-enable the watcher.",
+            _block_path(),
+        )
+        raise SystemExit(1)
+
     cfg = resolve_config(os.environ, load_env_file(os.path.join(here, "aoe2_watcher.env")))
-    supervise(lambda: watch_loop(cfg["AOE2_SERVER_URL"], cfg["AOE2_ADMIN_SECRET"], cfg["AOE2_REC_DIR"]))
+    try:
+        supervise(lambda: watch_loop(cfg["AOE2_SERVER_URL"], cfg["AOE2_ADMIN_SECRET"], cfg["AOE2_REC_DIR"]))
+    except FatalAuthError as exc:
+        log.error("%s — stopping; fix AOE2_ADMIN_SECRET and delete %s to resume", exc, _block_path())
+        _trip_breaker(str(exc))
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
