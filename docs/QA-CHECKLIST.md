@@ -65,6 +65,7 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 ## Codes
 
 - [ ] Project cards render with tags and links
+- [ ] Discord link renders on cards that have one and opens the invite
 - [ ] GitHub contribution graph loads (green squares)
 - [ ] "Refresh" button syncs contributions (admin only)
 - [ ] GitHub OAuth flow works end-to-end
