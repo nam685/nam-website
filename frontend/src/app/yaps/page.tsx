@@ -393,7 +393,13 @@ export default function YapsPage() {
       const res = await fetch(`${API}/api/thoughts/?page=${p}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setThoughts((prev) => (p === 1 ? data.thoughts : [...prev, ...data.thoughts]));
+      setThoughts((prev) => {
+        if (p === 1) return data.thoughts;
+        // Offset-based pagination shifts if a new thought was posted since the last
+        // page load, which can re-return the last-seen thought at the top of this page.
+        const seen = new Set(prev.map((t) => t.id));
+        return [...prev, ...data.thoughts.filter((t: Thought) => !seen.has(t.id))];
+      });
       setHasNext(data.has_next);
       setPage(data.page);
     } catch {
