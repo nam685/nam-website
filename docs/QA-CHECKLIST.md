@@ -54,6 +54,8 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] 18-hour cooldown is enforced — rapid reposts are blocked
 - [ ] Content length limit (2000 chars) is enforced
 - [ ] Image/video attach works via click-to-browse (and image via drag-and-drop / paste)
+- [ ] HEIC/HEIF (iPhone photo) upload is accepted and posts as a viewable JPEG
+- [ ] Attaching an unsupported file type shows an error instead of doing nothing
 - [ ] Large image fills the column width; small image renders at natural size (not stretched)
 - [ ] Clicking an image opens the full-screen lightbox
 - [ ] Lightbox: ← / → navigate only between image posts (text-only posts skipped)

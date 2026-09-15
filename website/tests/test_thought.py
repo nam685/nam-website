@@ -20,6 +20,12 @@ def _png(size=(10, 10)):
     return SimpleUploadedFile("x.png", buf.getvalue(), content_type="image/png")
 
 
+def _heic(size=(10, 10)):
+    buf = io.BytesIO()
+    PILImage.new("RGB", size, (200, 30, 60)).save(buf, "HEIF")
+    return SimpleUploadedFile("x.heic", buf.getvalue(), content_type="image/heic")
+
+
 def _mp4(name="clip.mp4"):
     return SimpleUploadedFile(name, b"\x00\x00\x00\x18ftypmp42fake video bytes", content_type="video/mp4")
 
@@ -84,6 +90,13 @@ class TestThoughtCreate:
         body = resp.json()
         assert body["content"] == "look"
         assert body["image"] is not None
+
+    def test_create_heic_image_transcoded_to_jpg(self, client, auth_headers):
+        resp = client.post("/api/thoughts/create/", {"image": _heic()}, **auth_headers)
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["image"] is not None
+        assert body["image"].endswith(".jpg")
 
     def test_create_video_only(self, client, auth_headers):
         resp = client.post("/api/thoughts/create/", {"video": _mp4()}, **auth_headers)
