@@ -61,7 +61,17 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
   // The [preview] effect above is the single owner of revocation — it revokes the
   // previous URL when preview changes or on unmount, so attach/removeMedia don't.
   function attach(f: File | undefined | null) {
-    if (!f || (!f.type.startsWith("image/") && !f.type.startsWith("video/"))) return;
+    if (!f) return;
+    // Browsers often report an empty MIME type for formats they can't natively
+    // decode (e.g. HEIC/HEIF from iPhones) — fall back to sniffing the extension
+    // so those files aren't silently dropped with no feedback.
+    const isImage = f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name);
+    const isVideo = f.type.startsWith("video/");
+    if (!isImage && !isVideo) {
+      setError("Unsupported file type");
+      setTimeout(() => setError(""), 3000);
+      return;
+    }
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
@@ -290,7 +300,7 @@ function ComposeCard({ onPost }: { onPost: (t: Thought) => void }) {
       <input
         ref={fileRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*,video/*,.heic,.heif"
         onChange={(e) => attach(e.target.files?.[0])}
         style={{ display: "none" }}
       />

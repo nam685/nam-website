@@ -8,12 +8,17 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from PIL import Image as PILImage  # noqa: I001
+from pillow_heif import register_heif_opener
 
 from ..auth import require_admin
 from ..models import Thought
 
+register_heif_opener()  # lets PIL.Image.open() decode HEIC/HEIF (iPhone photos)
+
 COOLDOWN = timedelta(hours=18)
-ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP"}
+ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP", "BMP", "HEIF"}
+# Formats browsers can't render in <img> — always transcoded to JPEG.
+UNDISPLAYABLE_FORMATS = {"BMP", "HEIF"}
 MAX_DIM = 2000
 ALLOWED_VIDEO_EXTS = (".mp4", ".webm")
 MAX_VIDEO_SIZE = 50 * 1024 * 1024
@@ -42,7 +47,12 @@ def _process_image(image_file):
     if max(img.size) > MAX_DIM:
         img.thumbnail((MAX_DIM, MAX_DIM))
 
-    save_fmt = fmt if fmt != "BMP" else "PNG"
+    if fmt in UNDISPLAYABLE_FORMATS:
+        save_fmt = "JPEG"
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+    else:
+        save_fmt = fmt
     buf = io.BytesIO()
     img.save(buf, format=save_fmt)
     ext = save_fmt.lower()
