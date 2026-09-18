@@ -23,6 +23,22 @@ from .audiobook import (
 from .auth import check as auth_check
 from .auth import login as auth_login
 from .auth import nonce as auth_nonce
+from .badminton import (
+    badminton_approve,
+    badminton_delete,
+    badminton_players,
+    badminton_queue,
+    badminton_status,
+    badminton_submission,
+    badminton_submit,
+    badminton_upload_chunk,
+    badminton_upload_complete,
+    badminton_worker_asset,
+    badminton_worker_claim,
+    badminton_worker_fail,
+    badminton_worker_finish,
+    badminton_worker_progress,
+)
 from .bets import (
     bets_backtest,
     bets_create,
@@ -112,6 +128,20 @@ __all__ = [
     "aoe2_stats",
     "aoe2_sync_status",
     "aoe2_upload",
+    "badminton_approve",
+    "badminton_delete",
+    "badminton_players",
+    "badminton_queue",
+    "badminton_status",
+    "badminton_submission",
+    "badminton_submit",
+    "badminton_upload_chunk",
+    "badminton_upload_complete",
+    "badminton_worker_asset",
+    "badminton_worker_claim",
+    "badminton_worker_fail",
+    "badminton_worker_finish",
+    "badminton_worker_progress",
     "audiobook_audio",
     "audiobook_chunk_exists",
     "audiobook_manifest",

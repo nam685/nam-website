@@ -1,5 +1,6 @@
 from .aoe2_match import Aoe2Match
 from .attachment import Attachment
+from .badminton import BadmintonPlayer, BadmintonSubmission
 from .download import Download
 from .feedback import Feedback
 from .github import GitHubContributions
@@ -23,6 +24,8 @@ from .watch import WatchChannel, WatchVideo
 __all__ = [
     "Aoe2Match",
     "Attachment",
+    "BadmintonPlayer",
+    "BadmintonSubmission",
     "Download",
     "Feedback",
     "GitHubContributions",

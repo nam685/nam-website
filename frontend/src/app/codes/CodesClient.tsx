@@ -50,7 +50,17 @@ const PROJECTS: CodeProject[] = [
     tags: ["python", "ai", "claude"],
     status: "wip",
     github_url: "https://github.com/nam685/aoe2coach",
-    live_url: "/plays",
+    live_url: "/plays/aoe2",
+  },
+  {
+    title: "badminton-coach",
+    slug: "badminton-coach",
+    description:
+      "AI badminton coach. Pose, racket and shuttle tracking on phone video, then Claude judges each overhead clear like a coach. Upload yours.",
+    tags: ["python", "computer-vision", "ai", "claude"],
+    status: "wip",
+    github_url: "https://github.com/nam685/badminton-coach",
+    live_url: "/plays/badminton",
   },
   {
     title: "chess-discord",

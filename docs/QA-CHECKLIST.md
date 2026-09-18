@@ -242,6 +242,25 @@ Manual testing checklist for quality audits. Run through this when reviewing the
 - [ ] On the Coach tab, the top build-order guess is a link that navigates to `/plays/aoe2/builds/<build_id>` for the matching learn page.
 - [ ] The build-library pages use the cyan `/plays` accent and the plays page background (no accent flash on uncached load).
 
+## Plays — Badminton tab
+
+- [ ] `/plays/badminton` loads; the chess / AoE 2 / badminton selector highlights "badminton".
+- [ ] With no finished reports, an empty-state line shows; otherwise the left nav tree lists players (only those with at least one finished report), and the newest session of the first player is open with its path expanded; the URL updates to `?player=<slug>&s=<id>[&a=<n>]` and deep links (including `&a=`) restore the selection and expand the tree to it.
+- [ ] Tree: clicking a player expands/collapses their sessions; clicking a session opens its verdict on the right and expands its attempts; chevrons toggle without opening; clicking an attempt opens it; the selected row is highlighted. Long attempt hints truncate with an ellipsis (no horizontal scroll).
+- [ ] Sessions of one player are newest first; two sessions on the same day are ordered by recording time.
+- [ ] Session page shows only the judge content (since last time, what's working, findings with cue/drill, folded evidence + measurement notes).
+- [ ] Attempt page: title "Attempt N / total" with prev/next; the one-line verdict + annotated clip are shown first (muted, "plays at ½ speed" for slow motion); raw clip / key moments / motion signals / measurements / notes are collapsed and each expands on click.
+- [ ] Evidence attempt numbers open that attempt. Measurement rows with no value are hidden; small lengths show in cm.
+- [ ] Mobile (390px): tree stacks above the document; opening a session/attempt scrolls to the document; no horizontal page scroll.
+- [ ] Discoverability: `/sitemap.xml` lists `/plays/badminton`; `/robots.txt` disallows `/sudo`, `/api/`, `/media/badminton/raw/`; the page's HTML has a description + `og:title`/`og:description`/`og:url`; `/codes` shows a badminton-coach card linking to `/plays/badminton`.
+- [ ] Upload (logged out): "+ analyse my clear" opens the form with filming tips + privacy note; pick "someone new…" and type a name (Vietnamese names like "Minh Đức" get slug `minh-duc`); choosing a file defaults the date to the file's date; progress bar fills; the upload appears under "your uploads" as "waiting for Nam to approve". It is NOT visible in the public player list.
+- [ ] Non-video files (renamed to .mp4) are rejected; > 2 GB is refused before uploading; the 6th upload from one IP within 24 h gets a 429 message.
+- [ ] Admin: the queue card shows the upload with a "watch" button (plays the raw video), "approve & run now" and "reject"; the worker dot shows online/last seen.
+- [ ] After approval with `scripts/badminton_worker.py` running (+ `badminton-coach serve` on the GPU PC): the row goes running with a progress bar and step label; the uploader's "your uploads" row shows the same; when done the report appears publicly and the raw upload URL 404s.
+- [ ] A failed job shows its error to the admin only (public status just says "analysis failed"); "retry" re-queues it; a stuck running job can be re-queued.
+- [ ] Admin "delete" on a report removes it and its clips (and the player if it was their only report).
+- [ ] `/api/badminton/queue/`, `/approve/`, `/delete/` and all `/worker/` endpoints return 401 without the admin token.
+
 ## Performance
 
 - [ ] Pages load within 3 seconds on first visit
