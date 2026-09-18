@@ -18,12 +18,15 @@ const LichessGameCreator = dynamic(
   { ssr: false },
 );
 const Aoe2Tab = dynamic(() => import("@/components/Aoe2Tab"), { ssr: false });
+const BadmintonTab = dynamic(() => import("@/components/BadmintonTab"), {
+  ssr: false,
+});
 
 const ACCENT = "var(--accent)";
 
 type Tab = "explorer" | "play" | "empires";
 /** Which game this page is showing — reflected in the URL path (/plays/<section>). */
-export type PlaysSection = "chess" | "aoe2";
+export type PlaysSection = "chess" | "aoe2" | "badminton";
 
 export default function PlaysClient({
   section = "chess",
@@ -118,8 +121,8 @@ export default function PlaysClient({
         zIndex: 1,
       }}
     >
-      {/* Top-level game selector: chess | AoE 2 — spans the full content width,
-          and the active game is reflected in the URL path (/plays/chess|aoe2). */}
+      {/* Top-level game selector: chess | AoE 2 | badminton — spans the full content width,
+          and the active game is reflected in the URL path (/plays/chess|aoe2|badminton). */}
       <div
         style={{
           display: "flex",
@@ -148,6 +151,17 @@ export default function PlaysClient({
           }}
         >
           AoE 2
+        </button>
+        <button
+          onClick={() => router.push("/plays/badminton")}
+          style={{
+            ...tabBtnStyle,
+            flex: 1,
+            borderBottomColor: section === "badminton" ? ACCENT : "transparent",
+            color: section === "badminton" ? ACCENT : "#555",
+          }}
+        >
+          badminton
         </button>
       </div>
 
@@ -206,7 +220,7 @@ export default function PlaysClient({
             )}
           </div>
         )}
-        {section === "aoe2" && <div style={{ marginBottom: "1.5rem" }} />}
+        {section !== "chess" && <div style={{ marginBottom: "1.5rem" }} />}
 
         {/* Explorer tab */}
         {section === "chess" && tab === "explorer" && <OpeningExplorer />}
@@ -214,8 +228,11 @@ export default function PlaysClient({
         {/* Empires tab */}
         {section === "aoe2" && <Aoe2Tab />}
 
+        {/* Badminton tab */}
+        {section === "badminton" && <BadmintonTab />}
+
         {/* Play tab */}
-        {tab === "play" && isAdmin && (
+        {section === "chess" && tab === "play" && isAdmin && (
           <>
             {/* Lichess connection status */}
             <div style={{ marginBottom: "1.5rem" }}>

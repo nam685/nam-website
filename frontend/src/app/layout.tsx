@@ -22,6 +22,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for canonical / Open Graph URLs.
+  metadataBase: new URL("https://nam685.de"),
   title: {
     default: "Nam Le",
     template: "Nam %s",
@@ -37,7 +39,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${spaceGrotesk.variable} ${inter.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script

@@ -105,6 +105,17 @@ GET  /api/slops/attachments/<id>/preview/ auth required, UTF-8 text content (64 
 POST /api/slops/turns/<id>/approve/ auth required, approve turn + queue
 POST /api/slops/turns/<id>/reject/  auth required, reject turn
 GET  /api/slops/stats/              aggregate stats (from turns)
+GET  /api/badminton/players/                    players with finished reports + dated submissions
+GET  /api/badminton/submissions/<id>/           one finished report (report.json submission, asset URLs rewritten)
+GET  /api/badminton/submissions/<id>/status/    public upload status (status/step/stage/queue_position)
+POST /api/badminton/submit/                     start public upload {player|name, height_m?, hand?, lang?, recorded_on, filename, size} → {id, upload_token}; 5/day/IP + 30/day global
+POST /api/badminton/submit/<id>/chunk/          multipart {upload_token, offset, chunk}
+POST /api/badminton/submit/<id>/complete/       multipart {upload_token} → pending (awaits admin)
+GET  /api/badminton/queue/                      auth required, unfinished submissions + worker_seen_at
+POST /api/badminton/submissions/<id>/approve/   auth required, queue for the PC worker (also retries failed)
+POST /api/badminton/submissions/<id>/delete/    auth required, reject upload / delete report + files
+POST /api/badminton/worker/claim/               auth required (PC worker), oldest approved → running; 204 if none
+POST /api/badminton/worker/<id>/progress|fail|asset|finish/   auth required (PC worker)
 GET  /api/audiobooks/<slug>/                  auth required, returns manifest.json
 GET  /api/audiobooks/<slug>/playback-token/   auth required, returns short-lived signed token
 GET  /api/audiobooks/<slug>/audio/<id>/?t=...   signed-token required, streams MP3 with Range
