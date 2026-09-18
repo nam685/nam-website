@@ -71,6 +71,9 @@ export default function UploadPanel({
   const [dateTouched, setDateTouched] = useState(false);
   const [note, setNote] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  // Remounts the <input type="file"> on reset: otherwise it keeps the old selection, and picking the
+  // same video again fires no change event, leaving "upload" disabled.
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 
   const busy = phase.kind === "uploading";
@@ -197,6 +200,7 @@ export default function UploadPanel({
                 style={btn}
                 onClick={() => {
                   setFile(null);
+                  setFileInputKey((k) => k + 1);
                   setPhase({ kind: "idle" });
                 }}
               >
@@ -301,6 +305,7 @@ export default function UploadPanel({
             </Field>
             <Field title="video (up to 2 GB)">
               <input
+                key={fileInputKey}
                 type="file"
                 accept="video/*,.mp4,.mov,.m4v,.webm,.mkv"
                 onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
