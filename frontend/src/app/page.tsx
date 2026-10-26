@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   DOTS,
   angleFromCenter,
@@ -9,20 +9,11 @@ import {
   dotHueCss,
 } from "@/lib/homepageContent";
 import { API } from "@/lib/api";
-import HomeField from "@/components/HomeField";
 
 export default function Home() {
-  // Pick one photo per page load (1..5), stable for the session.
-  // Start null to avoid hydration mismatch; choose client-side in effect.
-  const [photo, setPhoto] = useState<number | null>(null);
   const ambientRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
   const photoRef = useRef<HTMLDivElement>(null);
-
-  // Choose photo index client-side only (after hydration).
-  useEffect(() => {
-    setPhoto(1 + Math.floor(Math.random() * 5));
-  }, []);
 
   useEffect(() => {
     const orbit = orbitRef.current;
@@ -90,9 +81,6 @@ export default function Home() {
         justifyContent: "center",
       }}
     >
-      {/* Animated particle field (decorative, behind everything) */}
-      <HomeField />
-
       {/* Ambient glow */}
       <div
         ref={ambientRef}
@@ -154,24 +142,22 @@ export default function Home() {
             } as React.CSSProperties
           }
         >
-          {photo !== null && (
-            <img
-              src={`${API}/media/profile/profile-${photo}.webp`}
-              alt="Nam"
-              onError={(e) => {
-                // Photos live on the server media root (outside git/CI); if one is
-                // missing, hide the img and let the tinted rim stand on its own.
-                e.currentTarget.style.display = "none";
-              }}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                borderRadius: "50%",
-                display: "block",
-              }}
-            />
-          )}
+          <img
+            src={`${API}/media/profile/profile.webp`}
+            alt="Nam"
+            onError={(e) => {
+              // The photo lives on the server media root (outside git/CI); if it's
+              // missing, hide the img and let the tinted rim stand on its own.
+              e.currentTarget.style.display = "none";
+            }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              borderRadius: "50%",
+              display: "block",
+            }}
+          />
           {/* Edge tint — recolors the photo's outer ring toward the hue */}
           <div
             style={{

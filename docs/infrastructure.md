@@ -388,7 +388,7 @@ Merge settings (repo → Settings → General):
 
 Some media is served from the deploy media root (`/home/nam/nam-website-deploy/media/`, exposed at `/media/*` by Caddy) but is **not** stored in git — it's uploaded out-of-band.
 
-- **Homepage profile photos** (`/media/profile/profile-1..5.webp`): the rotating circular portrait on the landing page. Produced locally from source images with ImageMagick (`-auto-orient -resize 700x -gravity North -crop 700x700+0+220`, webp q82) and uploaded with `scp media/profile/*.webp hetzner:/home/nam/nam-website-deploy/media/profile/`. To change the photos, regenerate and re-scp; the frontend just expects `profile-1..5.webp` to exist.
+- **Homepage profile photo** (`/media/profile/profile.webp`): the circular portrait on the landing page. Source is `20261025_161541.png` (stray hair tufts removed locally with an OpenCV mask + sky-inpaint composite, no generative AI), cropped square with ImageMagick (`-crop 2200x2200+190+760 -resize 700x700`, webp q85) and uploaded with `scp profile.webp hetzner:/home/nam/nam-website-deploy/media/profile/`. To change it, regenerate and re-scp; the frontend just expects `profile.webp` to exist.
 
 ---
 
