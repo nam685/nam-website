@@ -71,16 +71,6 @@ const READS: ReadItem[] = [
     url: "https://home.ufam.edu.br/andersonlfc/MacroI/Livro%20Macro.pdf",
   },
   {
-    title: "Designing Data-Intensive Applications",
-    author: "Martin Kleppmann",
-    type: "book",
-    description:
-      "The deep, surprisingly readable systems book on storage, replication, partitioning, and consensus.",
-    tags: ["systems", "databases", "distributed"],
-    url: "https://0-lucas.github.io/digital-garden/99.-Books/Martin-Kleppmann---Designing-Data-Intensive-Applications_-O%E2%80%99Reilly-Media-(2017).pdf",
-    audiobookSlug: "ddia",
-  },
-  {
     title: "Nexus",
     author: "Yuval Noah Harari",
     type: "book",
@@ -113,6 +103,16 @@ const ONGOING_READS: ReadItem[] = [
 ];
 
 const FUTURE_READS: ReadItem[] = [
+  {
+    title: "Designing Data-Intensive Applications",
+    author: "Martin Kleppmann",
+    type: "book",
+    description:
+      "The deep, surprisingly readable systems book on storage, replication, partitioning, and consensus.",
+    tags: ["systems", "databases", "distributed"],
+    url: "https://0-lucas.github.io/digital-garden/99.-Books/Martin-Kleppmann---Designing-Data-Intensive-Applications_-O%E2%80%99Reilly-Media-(2017).pdf",
+    audiobookSlug: "ddia",
+  },
   {
     title: "AI Engineering",
     author: "Chip Huyen",
