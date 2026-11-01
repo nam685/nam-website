@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     default: "Nam Le",
     template: "Nam %s",
   },
-  description: "Personal website",
+  description: "Nice to meet you!",
   icons: { icon: "/favicon.svg" },
   alternates: { types: { "application/rss+xml": "/feed.xml" } },
 };
