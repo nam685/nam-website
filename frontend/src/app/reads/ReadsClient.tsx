@@ -122,6 +122,15 @@ const FUTURE_READS: ReadItem[] = [
     tags: ["AI", "engineering", "LLMs"],
     url: "https://github.com/chiphuyen/aie-book",
   },
+  {
+    title: "Introduction to Classical Mechanics",
+    author: "David Morin",
+    type: "book",
+    description:
+      "Harvard's physics textbook built around hundreds of hard, beautifully solved problems.",
+    tags: ["physics", "mechanics", "textbook"],
+    url: "https://pimosbat.ir/wp-content/uploads/2022/05/Morin_Introduction_to_Classical_Mechanics.pdf",
+  },
 ];
 
 const ACCENT = "#94a3b8";
